@@ -66,7 +66,7 @@ artificer/
 
 1. **Clone the repository:**
 ```bash
-git clone https://github.com/yourusername/artificer.git
+git clone https://github.com/dbanksdesign/artificer.git
 cd artificer
 ```
 
