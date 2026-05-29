@@ -321,7 +321,9 @@ export class Store {
     };
     await writeJson(this.layout.memoryFile(memory.id, memory.createdAt), memory);
     const index = await this.readMemoryIndex();
-    index.push(this.toIndexEntry(memory));
+    if (!index.some((e) => e.id === memory.id)) {
+      index.push(this.toIndexEntry(memory));
+    }
     await writeJson(this.layout.memoryIndexFile(), index);
     return memory;
   }
@@ -358,7 +360,7 @@ export class Store {
   ): Promise<Memory[]> {
     const limit = Math.max(1, Math.min(opts.limit ?? 5, 50));
     const charBudget = 4000;
-    let entries = await this.readMemoryIndex();
+    let entries = await this.readReconciledIndex();
     if (opts.tags && opts.tags.length > 0) {
       const want = new Set(opts.tags.map((t) => t.toLowerCase()));
       entries = entries.filter((e) =>
@@ -382,7 +384,7 @@ export class Store {
 
   /** Compact "you know things" hint for context (count + top tags); no content. */
   async memorySignpost(): Promise<string | null> {
-    const entries = await this.readMemoryIndex();
+    const entries = await this.readReconciledIndex();
     if (entries.length === 0) return null;
     const counts = new Map<string, number>();
     for (const e of entries) {
@@ -425,6 +427,36 @@ export class Store {
     }
     const rebuilt = (await this.listMemories()).map((m) => this.toIndexEntry(m));
     await writeJson(file, rebuilt);
+    return rebuilt;
+  }
+
+  /** Number of per-memory files on disk (excludes index.json). */
+  private async countMemoryFiles(): Promise<number> {
+    try {
+      const names = await fs.readdir(this.layout.memoriesDir);
+      return names.filter((f) => f.endsWith('.json') && f !== 'index.json')
+        .length;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return 0;
+      throw err;
+    }
+  }
+
+  /**
+   * Like readMemoryIndex, but also self-heals a STALE index: if the entry
+   * count drifts from the number of memory files on disk, or the index
+   * contains duplicate ids, rebuild it from the per-memory source of truth.
+   */
+  private async readReconciledIndex(): Promise<MemoryIndexEntry[]> {
+    const index = await this.readMemoryIndex();
+    const fileCount = await this.countMemoryFiles();
+    const uniqueIds = new Set(index.map((e) => e.id));
+    const drift = index.length !== fileCount || uniqueIds.size !== index.length;
+    if (!drift) return index;
+    const rebuilt = (await this.listMemories()).map((m) =>
+      this.toIndexEntry(m),
+    );
+    await writeJson(this.layout.memoryIndexFile(), rebuilt);
     return rebuilt;
   }
 
