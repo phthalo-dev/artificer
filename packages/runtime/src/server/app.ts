@@ -74,7 +74,7 @@ export function createApp(engine: Engine): Hono {
   // --- Memories ---
 
   app.get('/memories', async (c) => {
-    const q = c.req.query('q');
+    const q = c.req.query('q')?.trim();
     if (q) {
       const memories = await engine.store.queryMemories(q, { limit: 20 });
       return c.json({ memories });
