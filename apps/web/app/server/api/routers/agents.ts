@@ -2,9 +2,10 @@ import { z } from 'zod';
 import { TRPCError } from '@trpc/server';
 import { createTRPCRouter, protectedProcedure } from '../trpc';
 import { CreateAgentSchema, UpdateAgentSchema } from '@artificer/shared';
-import { encrypt } from '@artificer/shared';
+import { encrypt, decrypt } from '@artificer/shared';
 import { env } from '../../env';
 import { Orchestrator } from '@artificer/orchestrator';
+import { AgentGateway } from '@artificer/agent-gateway';
 
 let orchestrator: Orchestrator | null = null;
 
@@ -26,6 +27,8 @@ function getOrchestrator(): Orchestrator {
       defaultSecurityGroupIds: [env.EC2_SECURITY_GROUP_ID],
       defaultKeyName: env.EC2_KEY_NAME,
       defaultInstanceType: env.EC2_INSTANCE_TYPE,
+      defaultImageId: env.EC2_AMI_ID,
+      iamInstanceProfile: env.EC2_IAM_INSTANCE_PROFILE,
     });
   }
   return orchestrator;
@@ -158,12 +161,24 @@ placeholder-key-generation-required
 
       try {
         const orch = getOrchestrator();
+        const opencodePassword = orch.generateOpenCodePassword();
+
+        await ctx.db.agent.update({
+          where: { id: agent.id },
+          data: {
+            opencodePassword: encrypt(opencodePassword, env.ENCRYPTION_KEY),
+          },
+        });
 
         const credentials = orch.buildAgentCredentials(
           input.anthropicApiKey,
           input.githubToken,
           sshKeyPair,
+          input.githubEmail,
+          input.githubUsername,
         );
+
+        credentials.opencodePassword = opencodePassword;
 
         const instance = await orch.provisionAgent(agent.id, credentials);
 
@@ -464,12 +479,14 @@ placeholder-key-generation-required
         });
       }
 
+      const decryptedToken = decrypt(agent.githubToken, env.ENCRYPTION_KEY);
+
       const response = await fetch(
         `https://api.github.com/repos/${owner}/${repo}/hooks`,
         {
           method: 'POST',
           headers: {
-            Authorization: `Bearer ${agent.githubToken}`,
+            Authorization: `Bearer ${decryptedToken}`,
             Accept: 'application/vnd.github+json',
             'X-GitHub-Api-Version': '2022-11-28',
           },
@@ -479,7 +496,14 @@ placeholder-key-generation-required
               content_type: 'json',
               secret: process.env.GITHUB_WEBHOOK_SECRET,
             },
-            events: ['issue_comment', 'pull_request', 'push'],
+            events: [
+              'issues',
+              'issue_comment',
+              'pull_request',
+              'pull_request_review',
+              'pull_request_review_comment',
+              'push',
+            ],
             active: true,
           }),
         },
@@ -553,12 +577,14 @@ placeholder-key-generation-required
         });
       }
 
+      const decryptedToken = decrypt(agent.githubToken, env.ENCRYPTION_KEY);
+
       const response = await fetch(
         `https://api.github.com/repos/${owner}/${repo}/hooks/${agent.githubWebhookId}`,
         {
           method: 'DELETE',
           headers: {
-            Authorization: `Bearer ${agent.githubToken}`,
+            Authorization: `Bearer ${decryptedToken}`,
             Accept: 'application/vnd.github+json',
             'X-GitHub-Api-Version': '2022-11-28',
           },
@@ -582,4 +608,324 @@ placeholder-key-generation-required
 
       return { success: true };
     }),
+
+  checkHealth: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const agent = await ctx.db.agent.findFirst({
+        where: {
+          id: input.id,
+          userId: ctx.session.user.id,
+        },
+      });
+
+      if (!agent) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Agent not found',
+        });
+      }
+
+      if (agent.status !== 'RUNNING' || !agent.ec2PublicIp) {
+        return { isHealthy: false, error: 'Agent is not running' };
+      }
+
+      const fullAgent = await ctx.db.agent.findFirst({
+        where: { id: agent.id },
+        select: { opencodePassword: true },
+      });
+
+      try {
+        const gateway = new AgentGateway({
+          id: agent.id,
+          name: agent.name,
+          ec2PublicIp: agent.ec2PublicIp,
+          ec2PrivateIp: agent.ec2PrivateIp,
+          opencodePassword: decrypt(
+            fullAgent?.opencodePassword || '',
+            env.ENCRYPTION_KEY,
+          ),
+        });
+
+        return await gateway.checkHealth();
+      } catch (error) {
+        return {
+          isHealthy: false,
+          error: error instanceof Error ? error.message : 'Unknown error',
+        };
+      }
+    }),
+
+  createSession: protectedProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        title: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const agent = await ctx.db.agent.findFirst({
+        where: {
+          id: input.id,
+          userId: ctx.session.user.id,
+        },
+        select: {
+          id: true,
+          name: true,
+          status: true,
+          ec2PublicIp: true,
+          ec2PrivateIp: true,
+          opencodePassword: true,
+        },
+      });
+
+      if (!agent) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Agent not found',
+        });
+      }
+
+      if (agent.status !== 'RUNNING' || !agent.ec2PublicIp) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Agent is not running',
+        });
+      }
+
+      const gateway = new AgentGateway({
+        id: agent.id,
+        name: agent.name,
+        ec2PublicIp: agent.ec2PublicIp,
+        ec2PrivateIp: agent.ec2PrivateIp,
+        opencodePassword: decrypt(
+          agent.opencodePassword || '',
+          env.ENCRYPTION_KEY,
+        ),
+      });
+
+      const session = await gateway.createSession(input.title);
+
+      await ctx.db.agentSession.create({
+        data: {
+          agentId: agent.id,
+          remoteId: session.id,
+          title: session.title,
+          source: 'WEB',
+        },
+      });
+
+      return session;
+    }),
+
+  sendPrompt: protectedProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        sessionId: z.string(),
+        prompt: z.string(),
+        model: z.string().optional(),
+        system: z.string().optional(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      console.log(
+        '[sendPrompt] agent=%s session=%s prompt=%s',
+        input.id,
+        input.sessionId,
+        input.prompt.slice(0, 80),
+      );
+      const agent = await ctx.db.agent.findFirst({
+        where: {
+          id: input.id,
+          userId: ctx.session.user.id,
+        },
+      });
+
+      if (!agent) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Agent not found',
+        });
+      }
+
+      if (agent.status !== 'RUNNING' || !agent.ec2PublicIp) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Agent is not running',
+        });
+      }
+
+      console.log(
+        '[sendPrompt] calling OpenCode at %s (password set: %s)',
+        agent.ec2PublicIp,
+        !!agent.opencodePassword,
+      );
+
+      const gateway = new AgentGateway({
+        id: agent.id,
+        name: agent.name,
+        ec2PublicIp: agent.ec2PublicIp,
+        ec2PrivateIp: agent.ec2PrivateIp,
+        opencodePassword: decrypt(
+          agent.opencodePassword || '',
+          env.ENCRYPTION_KEY,
+        ),
+      });
+
+      console.log('[sendPrompt] gateway created, sending prompt...');
+      const response = await gateway.sendPrompt(input.sessionId, input.prompt, {
+        model: input.model,
+        system: input.system,
+      });
+      console.log(
+        '[sendPrompt] got response, role=%s content-length=%d',
+        response.role,
+        response.content.length,
+      );
+
+      // input.sessionId is the OpenCode remote ID — look up the DB record by remoteId
+      const dbSession = await ctx.db.agentSession.findFirst({
+        where: { agentId: agent.id, remoteId: input.sessionId },
+        select: { id: true },
+      });
+      const dbSessionId = dbSession?.id;
+
+      if (dbSessionId) {
+        if (response.tokenUsage) {
+          await ctx.db.tokenUsage.create({
+            data: {
+              agentId: agent.id,
+              sessionId: dbSessionId,
+              model: response.tokenUsage.model,
+              inputTokens: response.tokenUsage.inputTokens,
+              outputTokens: response.tokenUsage.outputTokens,
+              costUSD: calculateCost(
+                response.tokenUsage.model,
+                response.tokenUsage.inputTokens,
+                response.tokenUsage.outputTokens,
+              ),
+            },
+          });
+        }
+
+        await ctx.db.message.create({
+          data: { sessionId: dbSessionId, role: 'USER', content: input.prompt },
+        });
+
+        await ctx.db.message.create({
+          data: {
+            sessionId: dbSessionId,
+            role: 'ASSISTANT',
+            content: response.content,
+            model: response.tokenUsage?.model,
+          },
+        });
+      }
+
+      return response;
+    }),
+
+  listSessions: protectedProcedure
+    .input(z.object({ id: z.string() }))
+    .query(async ({ ctx, input }) => {
+      const agent = await ctx.db.agent.findFirst({
+        where: {
+          id: input.id,
+          userId: ctx.session.user.id,
+        },
+      });
+
+      if (!agent) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Agent not found',
+        });
+      }
+
+      if (agent.status !== 'RUNNING' || !agent.ec2PublicIp) {
+        return [];
+      }
+
+      try {
+        const gateway = new AgentGateway({
+          id: agent.id,
+          name: agent.name,
+          ec2PublicIp: agent.ec2PublicIp,
+          ec2PrivateIp: agent.ec2PrivateIp,
+          opencodePassword: decrypt(
+            agent.opencodePassword || '',
+            env.ENCRYPTION_KEY,
+          ),
+        });
+
+        return await gateway.listSessions();
+      } catch (error) {
+        console.error('Failed to list sessions:', error);
+        return [];
+      }
+    }),
+
+  abortSession: protectedProcedure
+    .input(
+      z.object({
+        id: z.string(),
+        sessionId: z.string(),
+      }),
+    )
+    .mutation(async ({ ctx, input }) => {
+      const agent = await ctx.db.agent.findFirst({
+        where: {
+          id: input.id,
+          userId: ctx.session.user.id,
+        },
+      });
+
+      if (!agent) {
+        throw new TRPCError({
+          code: 'NOT_FOUND',
+          message: 'Agent not found',
+        });
+      }
+
+      if (agent.status !== 'RUNNING' || !agent.ec2PublicIp) {
+        throw new TRPCError({
+          code: 'BAD_REQUEST',
+          message: 'Agent is not running',
+        });
+      }
+
+      const gateway = new AgentGateway({
+        id: agent.id,
+        name: agent.name,
+        ec2PublicIp: agent.ec2PublicIp,
+        ec2PrivateIp: agent.ec2PrivateIp,
+        opencodePassword: decrypt(
+          agent.opencodePassword || '',
+          env.ENCRYPTION_KEY,
+        ),
+      });
+
+      return await gateway.abortSession(input.sessionId);
+    }),
 });
+
+const MODEL_PRICING: Record<string, { input: number; output: number }> = {
+  'claude-sonnet-4-20250514': { input: 3, output: 15 },
+  'claude-opus-4-20250514': { input: 15, output: 75 },
+  'claude-haiku-3-20250514': { input: 0.8, output: 4 },
+  'gpt-4o': { input: 5, output: 15 },
+  'gpt-4o-mini': { input: 0.15, output: 0.6 },
+};
+
+function calculateCost(
+  model: string,
+  inputTokens: number,
+  outputTokens: number,
+): number {
+  const pricing =
+    MODEL_PRICING[model] || MODEL_PRICING['claude-sonnet-4-20250514'];
+  const inputCost = (inputTokens / 1_000_000) * pricing.input;
+  const outputCost = (outputTokens / 1_000_000) * pricing.output;
+  return inputCost + outputCost;
+}

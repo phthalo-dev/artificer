@@ -83,14 +83,25 @@ export class OpenCodeClient {
     path: string,
     body?: unknown,
   ): Promise<T> {
-    const response = await fetch(`${this.baseUrl}${path}`, {
-      method,
-      headers: {
-        Authorization: `Basic ${this.auth}`,
-        'Content-Type': 'application/json',
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    const url = `${this.baseUrl}${path}`;
+    console.log(`[OpenCodeClient] → ${method} ${url}`);
+    let response: Response;
+    try {
+      response = await fetch(url, {
+        method,
+        headers: {
+          Authorization: `Basic ${this.auth}`,
+          'Content-Type': 'application/json',
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: AbortSignal.timeout(300000), // 5 minutes — agent responses can be slow
+      });
+    } catch (err: any) {
+      const cause = err?.cause?.code ?? err?.code ?? err?.message ?? String(err);
+      console.log(`[OpenCodeClient] ✗ ${method} ${url} — ${cause}`);
+      throw new Error(`Cannot reach OpenCode at ${this.baseUrl} (${cause})`);
+    }
+    console.log(`[OpenCodeClient] ← ${method} ${url} ${response.status}`);
 
     if (!response.ok) {
       const error = await response.text();
@@ -142,7 +153,7 @@ export class OpenCodeClient {
       'POST',
       `/session/${sessionId}/message`,
       {
-        parts: [{ type: 'text', content: message }],
+        parts: [{ type: 'text', text: message }],
         ...options,
       },
     );
@@ -171,7 +182,7 @@ export class OpenCodeClient {
     },
   ): Promise<void> {
     await this.request('POST', `/session/${sessionId}/prompt_async`, {
-      parts: [{ type: 'text', content: message }],
+      parts: [{ type: 'text', text: message }],
       ...options,
     });
   }

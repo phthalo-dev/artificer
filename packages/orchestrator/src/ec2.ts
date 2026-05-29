@@ -6,16 +6,34 @@ import {
   TerminateInstancesCommand,
   DescribeInstancesCommand,
 } from '@aws-sdk/client-ec2';
+import { SSMClient, GetParameterCommand } from '@aws-sdk/client-ssm';
 import type { ProvisionInstanceInput, InstanceInfo } from './types';
 import { InstanceState } from './types';
 
+// Ubuntu 22.04 LTS — latest AMI resolved per-region via SSM
+const UBUNTU_2204_SSM_PATH =
+  '/aws/service/canonical/ubuntu/server/22.04/stable/current/amd64/hvm/ebs-gp2/ami-id';
+
 export class EC2Service {
   private client: EC2Client;
-  private readonly defaultImageId = 'ami-0c55b159cbfafe1f0';
+  private ssm: SSMClient;
+  private configuredImageId: string | undefined;
   private readonly defaultPort = 4096;
 
-  constructor(region: string = 'us-east-1') {
+  constructor(region: string = 'us-east-1', imageId?: string) {
     this.client = new EC2Client({ region });
+    this.ssm = new SSMClient({ region });
+    this.configuredImageId = imageId;
+  }
+
+  private async resolveImageId(): Promise<string> {
+    if (this.configuredImageId) return this.configuredImageId;
+    const result = await this.ssm.send(
+      new GetParameterCommand({ Name: UBUNTU_2204_SSM_PATH }),
+    );
+    const ami = result.Parameter?.Value;
+    if (!ami) throw new Error('Could not resolve Ubuntu 22.04 AMI from SSM');
+    return ami;
   }
 
   async provisionInstance(
@@ -23,16 +41,24 @@ export class EC2Service {
     instanceName: string,
     userData: string,
   ): Promise<InstanceInfo> {
+    const imageId = await this.resolveImageId();
     const command = new RunInstancesCommand({
       InstanceType: input.instanceType as never,
-      ImageId: input.iamInstanceProfile
-        ? 'ami-0c55b159cbfafe1f0'
-        : this.defaultImageId,
+      ImageId: imageId,
       KeyName: input.keyName,
-      SecurityGroupIds: input.securityGroupIds,
-      SubnetId: input.subnetId,
+      // Use NetworkInterfaces to explicitly assign a public IP.
+      // Note: SecurityGroupIds and SubnetId must not be set at the top level
+      // when NetworkInterfaces is used — they go inside the interface.
+      NetworkInterfaces: [
+        {
+          DeviceIndex: 0,
+          SubnetId: input.subnetId,
+          Groups: input.securityGroupIds,
+          AssociatePublicIpAddress: true,
+        },
+      ],
       IamInstanceProfile: input.iamInstanceProfile
-        ? { Arn: input.iamInstanceProfile }
+        ? { Name: input.iamInstanceProfile }
         : undefined,
       UserData: Buffer.from(userData).toString('base64'),
       MinCount: 1,
@@ -127,14 +153,23 @@ export class EC2Service {
       InstanceIds: [instanceId],
     });
 
-    const result = await this.client.send(command);
-    const instance = result.Reservations?.[0]?.Instances?.[0];
+    try {
+      const result = await this.client.send(command);
+      const instance = result.Reservations?.[0]?.Instances?.[0];
 
-    if (!instance) {
-      throw new Error('Instance not found');
+      if (!instance) {
+        // Instance not yet visible — treat as pending
+        return InstanceState.PENDING;
+      }
+
+      return (instance.State?.Name || 'unknown') as InstanceState;
+    } catch (err: any) {
+      // AWS propagation delay: instance exists but isn't queryable yet
+      if (err?.Code === 'InvalidInstanceID.NotFound') {
+        return InstanceState.PENDING;
+      }
+      throw err;
     }
-
-    return (instance.State?.Name || 'unknown') as InstanceState;
   }
 
   async waitForInstanceState(

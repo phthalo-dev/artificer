@@ -1,5 +1,5 @@
 import { createFileRoute, useNavigate } from '@tanstack/react-router';
-import { useState } from 'react';
+import { useState, useRef, useEffect } from 'react';
 import { trpc } from '~/lib/trpc';
 import {
   Card,
@@ -18,6 +18,147 @@ import { AgentConfigModal } from '~/components/agent-config-modal';
 export const Route = createFileRoute('/dashboard/agents/$id')({
   component: AgentDetailPage,
 });
+
+interface ChatMessage {
+  role: 'user' | 'assistant';
+  content: string;
+}
+
+function ChatPanel({ agentId }: { agentId: string }) {
+  const [sessionId, setSessionId] = useState<string | null>(null);
+  const [messages, setMessages] = useState<ChatMessage[]>([]);
+  const [prompt, setPrompt] = useState('');
+  const [isSending, setIsSending] = useState(false);
+  const [error, setError] = useState('');
+  const bottomRef = useRef<HTMLDivElement>(null);
+
+  const createSessionMutation = trpc.agents.createSession.useMutation();
+  const sendPromptMutation = trpc.agents.sendPrompt.useMutation();
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages, isSending]);
+
+  const handleSend = async () => {
+    const text = prompt.trim();
+    if (!text || isSending) return;
+
+    setPrompt('');
+    setError('');
+    setIsSending(true);
+    setMessages((prev) => [...prev, { role: 'user', content: text }]);
+
+    try {
+      let sid = sessionId;
+      if (!sid) {
+        const session = await createSessionMutation.mutateAsync({ id: agentId });
+        sid = session.id;
+        setSessionId(sid);
+      }
+
+      const response = await sendPromptMutation.mutateAsync({
+        id: agentId,
+        sessionId: sid,
+        prompt: text,
+      });
+
+      setMessages((prev) => [
+        ...prev,
+        { role: 'assistant', content: response.content || '(no response)' },
+      ]);
+    } catch (err: any) {
+      setError(err.message || 'Failed to send message');
+      // Remove the optimistically-added user message on error
+      setMessages((prev) => prev.slice(0, -1));
+      setPrompt(text);
+    } finally {
+      setIsSending(false);
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Chat</CardTitle>
+        <CardDescription>
+          Send a task to the agent — it will run OpenCode on the EC2 instance
+          {sessionId && (
+            <span className="ml-2 font-mono text-xs text-muted-foreground/60">
+              session: {sessionId.slice(0, 8)}…
+            </span>
+          )}
+        </CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-4">
+        {/* Message history */}
+        <div className="flex h-80 flex-col gap-3 overflow-y-auto rounded-lg border bg-muted/30 p-4">
+          {messages.length === 0 && !isSending && (
+            <p className="m-auto text-sm text-muted-foreground">
+              No messages yet. Send a task to get started.
+            </p>
+          )}
+          {messages.map((msg, i) => (
+            <div
+              key={i}
+              className={`flex ${msg.role === 'user' ? 'justify-end' : 'justify-start'}`}
+            >
+              <div
+                className={`max-w-[80%] rounded-lg px-4 py-2 text-sm whitespace-pre-wrap ${
+                  msg.role === 'user'
+                    ? 'bg-primary text-primary-foreground'
+                    : 'bg-background border'
+                }`}
+              >
+                {msg.content}
+              </div>
+            </div>
+          ))}
+          {isSending && (
+            <div className="flex justify-start">
+              <div className="flex items-center gap-2 rounded-lg border bg-background px-4 py-2 text-sm text-muted-foreground">
+                <svg className="h-3 w-3 animate-spin" viewBox="0 0 24 24" fill="none">
+                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
+                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v8z" />
+                </svg>
+                Agent is working… (may take a minute)
+              </div>
+            </div>
+          )}
+          <div ref={bottomRef} />
+        </div>
+
+        {error && (
+          <div className="rounded-md bg-destructive/15 px-3 py-2 text-sm text-destructive">
+            {error}
+          </div>
+        )}
+
+        {/* Input */}
+        <div className="flex gap-2">
+          <textarea
+            className="flex-1 resize-none rounded-md border bg-background px-3 py-2 text-sm placeholder:text-muted-foreground focus:outline-none focus:ring-2 focus:ring-ring"
+            rows={3}
+            placeholder="e.g. Fix the bug in src/auth.ts where tokens expire too early"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) handleSend();
+            }}
+            disabled={isSending}
+          />
+          <Button
+            onPress={handleSend}
+            isDisabled={!prompt.trim() || isSending}
+            className="self-end"
+          >
+            Send
+          </Button>
+        </div>
+        <p className="text-xs text-muted-foreground">⌘↵ to send</p>
+      </CardContent>
+    </Card>
+  );
+}
 
 function AgentDetailPage() {
   const { id } = Route.useParams();
@@ -54,6 +195,21 @@ function AgentDetailPage() {
   const updateReposMutation = trpc.agents.updateRepositories.useMutation();
   const setupWebhookMutation = trpc.agents.setupWebhook.useMutation();
   const removeWebhookMutation = trpc.agents.removeWebhook.useMutation();
+
+  const [healthResult, setHealthResult] = useState<{ isHealthy: boolean; version?: string; error?: string } | null>(null);
+  const [isCheckingHealth, setIsCheckingHealth] = useState(false);
+  const healthQuery = trpc.agents.checkHealth.useQuery({ id }, { enabled: false });
+
+  const handleCheckHealth = async () => {
+    setIsCheckingHealth(true);
+    setHealthResult(null);
+    try {
+      const result = await healthQuery.refetch();
+      setHealthResult(result.data ?? null);
+    } finally {
+      setIsCheckingHealth(false);
+    }
+  };
 
   const handleStart = async () => {
     try {
@@ -388,6 +544,42 @@ function AgentDetailPage() {
               </Button>
             )}
 
+            {agent.status === 'RUNNING' && (
+              <div className="space-y-2">
+                <Button
+                  className="w-full"
+                  variant="outline"
+                  onPress={handleCheckHealth}
+                  isDisabled={isCheckingHealth}
+                >
+                  {isCheckingHealth ? 'Checking…' : 'Check OpenCode Health'}
+                </Button>
+                {healthResult && (
+                  <div className={`rounded-md px-3 py-2 text-sm space-y-1 ${healthResult.isHealthy ? 'bg-green-50 text-green-800' : 'bg-yellow-50 text-yellow-900'}`}>
+                    {healthResult.isHealthy ? (
+                      <p>OpenCode reachable — v{healthResult.version}</p>
+                    ) : (
+                      <>
+                        <p className="font-medium">{healthResult.error}</p>
+                        {healthResult.error?.includes('ECONNREFUSED') && (
+                          <p className="text-xs">Port 4096 is reachable but nothing is listening — OpenCode may still be installing. Wait a few minutes and try again.</p>
+                        )}
+                        {healthResult.error?.includes('ETIMEDOUT') && (
+                          <p className="text-xs">Connection timed out — check that your security group allows inbound TCP on port 4096.</p>
+                        )}
+                        {(healthResult.error?.includes('ENOTFOUND') || healthResult.error?.includes('ENETUNREACH')) && (
+                          <p className="text-xs">Can't reach the host — the instance may be in a private subnet with no public IP route.</p>
+                        )}
+                        {!healthResult.error?.match(/ECONN|ETIMEDOUT|ENOTFOUND|ENETUNREACH/) && (
+                          <p className="text-xs">The instance just reached running state — the setup script (Node.js + OpenCode install) takes 5–10 more minutes to complete.</p>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </div>
+            )}
+
             <Button
               className="w-full"
               variant="destructive"
@@ -586,6 +778,8 @@ function AgentDetailPage() {
           )}
         </CardContent>
       </Card>
+
+      {agent.status === 'RUNNING' && <ChatPanel agentId={id} />}
 
       <AgentConfigModal
         isOpen={isConfigOpen}

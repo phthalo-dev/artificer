@@ -1,0 +1,19 @@
+services:
+  agent:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - '4096:4096'
+    env_file:
+      - .env.local
+    environment:
+      - WORKDIR=/workspace
+      - HOME=/root
+    volumes:
+      - agent-workspace:/workspace
+    stdin_open: true
+    tty: true
+
+volumes:
+  agent-workspace:

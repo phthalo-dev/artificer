@@ -49,3 +49,6 @@ prisma/migrations
 # Database
 *.db
 *.db-journal
+
+
+cdk.out

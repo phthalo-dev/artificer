@@ -17,6 +17,8 @@ export const InstanceCredentialsSchema = z.object({
   anthropicApiKey: z.string(),
   githubToken: z.string(),
   githubSshKey: z.string(),
+  githubEmail: z.string().optional(),
+  githubUsername: z.string().optional(),
   workDirectory: z.string().default('/home/ubuntu/workspace'),
 });
 

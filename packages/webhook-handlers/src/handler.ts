@@ -1,23 +1,34 @@
-import { createHmac } from 'crypto';
-import {
-  OpenCodeClient,
-  createOpenCodeClient,
-} from '@artificer/opencode-client';
+import { createOpenCodeClient } from '@artificer/opencode-client';
 import {
   verifyGitHubSignature,
   parseGitHubEvent,
+  shouldHandleIssueComment,
+  shouldHandleIssue,
+  shouldHandlePullRequest,
+  shouldHandlePRReview,
+  shouldHandlePRReviewComment,
   formatIssueCommentAsPrompt,
+  formatIssueAsPrompt,
   formatPullRequestAsPrompt,
+  formatPRReviewAsPrompt,
+  formatPRReviewCommentAsPrompt,
   formatPushAsPrompt,
-  type GitHubEventType,
+  postGitHubComment,
+  postGitHubPRComment,
   type IssueCommentPayload,
+  type IssuePayload,
   type PullRequestPayload,
+  type PullRequestReviewPayload,
+  type PullRequestReviewCommentPayload,
   type PushEvent,
 } from './github';
 
 export interface AgentInfo {
   id: string;
+  /** The agent's GitHub username — used to detect @mentions and avoid self-replies */
   githubUsername: string;
+  /** Decrypted GitHub token — used to post comments back to GitHub */
+  githubToken: string;
   ec2PublicIp: string;
   opencodePassword: string;
 }
@@ -25,7 +36,11 @@ export interface AgentInfo {
 export interface GitHubWebhookHandlerConfig {
   webhookSecret: string;
   getAgentByRepository: (repoFullName: string) => Promise<AgentInfo | null>;
-  onSessionCreated?: (sessionId: string, agentId: string) => Promise<void>;
+  onSessionCreated?: (
+    sessionId: string,
+    agentId: string,
+    source: 'GITHUB',
+  ) => Promise<void>;
   onTokenUsage?: (
     agentId: string,
     usage: {
@@ -35,6 +50,12 @@ export interface GitHubWebhookHandlerConfig {
       costUSD: number;
     },
   ) => Promise<void>;
+  onActivity?: (
+    agentId: string,
+    type: string,
+    description: string,
+    metadata?: Record<string, unknown>,
+  ) => Promise<void>;
 }
 
 export interface WebhookResult {
@@ -43,6 +64,29 @@ export interface WebhookResult {
   sessionId?: string;
   response?: string;
 }
+
+// ---------------------------------------------------------------------------
+// System prompt
+// ---------------------------------------------------------------------------
+
+const AGENT_SYSTEM_PROMPT = `You are an autonomous AI coding agent working on GitHub. You have shell access to a Linux environment where you can run git, gh (GitHub CLI), and other tools.
+
+Your responsibilities:
+- Implement features and bug fixes from GitHub issues
+- Address pull request review feedback
+- Write clean, well-tested code
+- Follow existing project conventions
+
+When you finish your work, provide a concise summary of:
+1. What you changed and why
+2. Any commands you ran (e.g. branch created, PR opened)
+3. Any important decisions or tradeoffs
+
+This summary will be posted back to GitHub as a comment.`;
+
+// ---------------------------------------------------------------------------
+// Handler class
+// ---------------------------------------------------------------------------
 
 export class GitHubWebhookHandler {
   private config: GitHubWebhookHandlerConfig;
@@ -56,6 +100,7 @@ export class GitHubWebhookHandler {
     payloadString: string,
     signature: string | undefined,
   ): Promise<WebhookResult> {
+    // 1. Verify signature
     if (
       !verifyGitHubSignature(
         payloadString,
@@ -63,68 +108,35 @@ export class GitHubWebhookHandler {
         this.config.webhookSecret,
       )
     ) {
-      return {
-        success: false,
-        message: 'Invalid signature',
-      };
+      return { success: false, message: 'Invalid signature' };
     }
 
+    // 2. Parse payload
     const payload = JSON.parse(payloadString);
-    const { event, data } = parseGitHubEvent(eventType, payload);
+    const parsed = parseGitHubEvent(eventType, payload);
 
-    if (!data) {
+    if (!parsed.data) {
       return {
         success: false,
-        message: 'Unable to parse webhook payload',
+        message: `Unable to parse webhook payload for event: ${eventType}`,
       };
     }
 
-    let prompt: string;
-    let repoFullName: string;
+    // 3. Route the event
+    return this.routeEvent(parsed);
+  }
 
-    switch (event) {
-      case 'issue_comment': {
-        const issueData = data as IssueCommentPayload;
-        if (issueData.action !== 'created') {
-          return {
-            success: true,
-            message: 'Ignoring non-created comment action',
-          };
-        }
-        prompt = formatIssueCommentAsPrompt(issueData);
-        repoFullName = issueData.repository.full_name;
-        break;
-      }
-      case 'pull_request':
-      case 'pull_request_review':
-      case 'pull_request_review_comment': {
-        const prData = data as PullRequestPayload;
-        const allowedActions = ['opened', 'synchronize', 'reopened'];
-        if (!allowedActions.includes(prData.action)) {
-          return {
-            success: true,
-            message: `Ignoring ${prData.action} action`,
-          };
-        }
-        prompt = formatPullRequestAsPrompt(prData);
-        repoFullName = prData.repository.full_name;
-        break;
-      }
-      case 'push': {
-        const pushData = data as PushEvent;
-        prompt = formatPushAsPrompt(pushData);
-        repoFullName = pushData.repository.full_name;
-        break;
-      }
-      default:
-        return {
-          success: false,
-          message: `Unsupported event type: ${event}`,
-        };
+  private async routeEvent(
+    parsed: ReturnType<typeof parseGitHubEvent>,
+  ): Promise<WebhookResult> {
+    if (!parsed.data) {
+      return { success: false, message: 'No parsed data' };
     }
+
+    // Determine the repository full name from whichever payload shape we have
+    const repoFullName = this.extractRepoFullName(parsed.data);
 
     const agent = await this.config.getAgentByRepository(repoFullName);
-
     if (!agent) {
       return {
         success: false,
@@ -132,6 +144,230 @@ export class GitHubWebhookHandler {
       };
     }
 
+    const { event } = parsed;
+
+    switch (event) {
+      case 'issue_comment': {
+        const data = parsed.data as IssueCommentPayload;
+        if (!shouldHandleIssueComment(data, agent.githubUsername)) {
+          return {
+            success: true,
+            message: `Ignoring issue_comment: action=${data.action}, no mention of @${agent.githubUsername}`,
+          };
+        }
+        const prompt = formatIssueCommentAsPrompt(data, agent.githubUsername);
+        const sessionTitle = `issue_comment: ${data.issue.title} (#${data.issue.number})`;
+        const commentTargetNumber = data.issue.number;
+        return this.dispatchToAgent(
+          agent,
+          prompt,
+          sessionTitle,
+          async (_placeholder) => {
+            await postGitHubComment({
+              token: agent.githubToken,
+              repoFullName,
+              issueOrPrNumber: commentTargetNumber,
+              body: this.formatStartComment(agent.githubUsername),
+            });
+          },
+          async (response) => {
+            if (response) {
+              await postGitHubComment({
+                token: agent.githubToken,
+                repoFullName,
+                issueOrPrNumber: commentTargetNumber,
+                body: this.formatCompletionComment(
+                  response,
+                  agent.githubUsername,
+                ),
+              });
+            }
+          },
+        );
+      }
+
+      case 'issues': {
+        const data = parsed.data as IssuePayload;
+        if (!shouldHandleIssue(data, agent.githubUsername)) {
+          return {
+            success: true,
+            message: `Ignoring issues event: action=${data.action}, not targeting @${agent.githubUsername}`,
+          };
+        }
+        const prompt = formatIssueAsPrompt(data, agent.githubUsername);
+        const sessionTitle = `issue: ${data.issue.title} (#${data.issue.number})`;
+        return this.dispatchToAgent(
+          agent,
+          prompt,
+          sessionTitle,
+          async (_response) => {
+            await postGitHubComment({
+              token: agent.githubToken,
+              repoFullName,
+              issueOrPrNumber: data.issue.number,
+              body: this.formatStartComment(agent.githubUsername),
+            });
+          },
+          async (response) => {
+            if (response) {
+              await postGitHubComment({
+                token: agent.githubToken,
+                repoFullName,
+                issueOrPrNumber: data.issue.number,
+                body: this.formatCompletionComment(
+                  response,
+                  agent.githubUsername,
+                ),
+              });
+            }
+          },
+        );
+      }
+
+      case 'pull_request': {
+        const data = parsed.data as PullRequestPayload;
+        if (!shouldHandlePullRequest(data, agent.githubUsername)) {
+          return {
+            success: true,
+            message: `Ignoring pull_request event: action=${data.action}, not targeting @${agent.githubUsername}`,
+          };
+        }
+        const prompt = formatPullRequestAsPrompt(data, agent.githubUsername);
+        const sessionTitle = `pull_request: ${data.pull_request.title} (#${data.pull_request.number})`;
+        return this.dispatchToAgent(
+          agent,
+          prompt,
+          sessionTitle,
+          async (_response) => {
+            await postGitHubPRComment({
+              token: agent.githubToken,
+              repoFullName,
+              prNumber: data.pull_request.number,
+              body: this.formatStartComment(agent.githubUsername),
+            });
+          },
+          async (response) => {
+            if (response) {
+              await postGitHubPRComment({
+                token: agent.githubToken,
+                repoFullName,
+                prNumber: data.pull_request.number,
+                body: this.formatCompletionComment(
+                  response,
+                  agent.githubUsername,
+                ),
+              });
+            }
+          },
+        );
+      }
+
+      case 'pull_request_review': {
+        const data = parsed.data as PullRequestReviewPayload;
+        if (!shouldHandlePRReview(data, agent.githubUsername)) {
+          return {
+            success: true,
+            message: `Ignoring pull_request_review: action=${data.action}, state=${data.review.state}`,
+          };
+        }
+        const prompt = formatPRReviewAsPrompt(data, agent.githubUsername);
+        const sessionTitle = `pr_review: ${data.pull_request.title} (#${data.pull_request.number})`;
+        return this.dispatchToAgent(
+          agent,
+          prompt,
+          sessionTitle,
+          async (_response) => {
+            await postGitHubPRComment({
+              token: agent.githubToken,
+              repoFullName,
+              prNumber: data.pull_request.number,
+              body: this.formatStartComment(agent.githubUsername),
+            });
+          },
+          async (response) => {
+            if (response) {
+              await postGitHubPRComment({
+                token: agent.githubToken,
+                repoFullName,
+                prNumber: data.pull_request.number,
+                body: this.formatCompletionComment(
+                  response,
+                  agent.githubUsername,
+                ),
+              });
+            }
+          },
+        );
+      }
+
+      case 'pull_request_review_comment': {
+        const data = parsed.data as PullRequestReviewCommentPayload;
+        if (!shouldHandlePRReviewComment(data, agent.githubUsername)) {
+          return {
+            success: true,
+            message: `Ignoring pull_request_review_comment: no mention of @${agent.githubUsername}`,
+          };
+        }
+        const prompt = formatPRReviewCommentAsPrompt(
+          data,
+          agent.githubUsername,
+        );
+        const sessionTitle = `pr_review_comment: ${data.pull_request.title} (#${data.pull_request.number})`;
+        return this.dispatchToAgent(
+          agent,
+          prompt,
+          sessionTitle,
+          async (_response) => {
+            await postGitHubPRComment({
+              token: agent.githubToken,
+              repoFullName,
+              prNumber: data.pull_request.number,
+              body: this.formatStartComment(agent.githubUsername),
+            });
+          },
+          async (response) => {
+            if (response) {
+              await postGitHubPRComment({
+                token: agent.githubToken,
+                repoFullName,
+                prNumber: data.pull_request.number,
+                body: this.formatCompletionComment(
+                  response,
+                  agent.githubUsername,
+                ),
+              });
+            }
+          },
+        );
+      }
+
+      case 'push': {
+        const data = parsed.data as PushEvent;
+        const prompt = formatPushAsPrompt(data);
+        const branch = data.ref.replace('refs/heads/', '');
+        const sessionTitle = `push: ${repoFullName} (${branch})`;
+        return this.dispatchToAgent(agent, prompt, sessionTitle);
+      }
+
+      default:
+        return {
+          success: false,
+          message: `Unsupported event type: ${event}`,
+        };
+    }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Core dispatch: create session, post start comment, send prompt, post result
+  // ---------------------------------------------------------------------------
+
+  private async dispatchToAgent(
+    agent: AgentInfo,
+    prompt: string,
+    sessionTitle: string,
+    onBeforeSend?: (placeholder: null) => Promise<void>,
+    onAfterSend?: (response: string | null) => Promise<void>,
+  ): Promise<WebhookResult> {
     try {
       const client = createOpenCodeClient({
         hostname: agent.ec2PublicIp,
@@ -142,22 +378,24 @@ export class GitHubWebhookHandler {
 
       const health = await client.healthCheck();
       if (!health.healthy) {
-        return {
-          success: false,
-          message: 'Agent is not healthy',
-        };
+        return { success: false, message: 'Agent is not healthy' };
       }
 
-      const session = await client.createSession({
-        title: `${event}: ${repoFullName}`,
-      });
+      const session = await client.createSession({ title: sessionTitle });
 
       if (this.config.onSessionCreated) {
-        await this.config.onSessionCreated(session.id, agent.id);
+        await this.config.onSessionCreated(session.id, agent.id, 'GITHUB');
+      }
+
+      // Post "starting work" comment before we send the prompt (fire-and-forget)
+      if (onBeforeSend) {
+        await onBeforeSend(null).catch((err) =>
+          console.error('Failed to post start comment:', err),
+        );
       }
 
       const response = await client.sendMessage(session.id, prompt, {
-        system: `You are an AI coding assistant working on GitHub. Your role is to help with code reviews, address issues, and implement features. You have access to the repository and can make commits and pull requests using your GitHub identity. Be helpful, professional, and thorough in your responses.`,
+        system: AGENT_SYSTEM_PROMPT,
       });
 
       if (response.tokenUsage && this.config.onTokenUsage) {
@@ -175,6 +413,23 @@ export class GitHubWebhookHandler {
 
       const responseText = this.extractTextFromParts(response.parts);
 
+      if (onAfterSend) {
+        await onAfterSend(responseText || null).catch((err) =>
+          console.error('Failed to post completion comment:', err),
+        );
+      }
+
+      if (this.config.onActivity) {
+        await this.config
+          .onActivity(
+            agent.id,
+            'CODE_CHANGE',
+            `Processed GitHub event: ${sessionTitle}`,
+            { sessionId: session.id },
+          )
+          .catch((err) => console.error('Failed to log activity:', err));
+      }
+
       return {
         success: true,
         message: 'Webhook processed successfully',
@@ -187,6 +442,42 @@ export class GitHubWebhookHandler {
         message: `Error processing webhook: ${error instanceof Error ? error.message : 'Unknown error'}`,
       };
     }
+  }
+
+  // ---------------------------------------------------------------------------
+  // Comment body templates
+  // ---------------------------------------------------------------------------
+
+  private formatStartComment(username: string): string {
+    return `> [!NOTE]\n> **@${username}** is on it — picking up this task now. I'll update this thread when I'm done.`;
+  }
+
+  private formatCompletionComment(response: string, username: string): string {
+    const summary =
+      response.length > 3000
+        ? response.slice(0, 3000) +
+          '\n\n_...truncated. See the full session in Artificer._'
+        : response;
+
+    return `> [!NOTE]\n> **@${username}** finished working on this.\n\n${summary}`;
+  }
+
+  // ---------------------------------------------------------------------------
+  // Helpers
+  // ---------------------------------------------------------------------------
+
+  private extractRepoFullName(data: unknown): string {
+    if (
+      data &&
+      typeof data === 'object' &&
+      'repository' in data &&
+      data.repository &&
+      typeof data.repository === 'object' &&
+      'full_name' in data.repository
+    ) {
+      return (data.repository as { full_name: string }).full_name;
+    }
+    return 'unknown/unknown';
   }
 
   private calculateCost(

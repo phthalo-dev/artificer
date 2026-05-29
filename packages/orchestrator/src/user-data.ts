@@ -1,4 +1,23 @@
+import { readFileSync } from 'fs';
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
 import type { InstanceCredentials } from './types';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+
+function getSetupScript(): string {
+  return readFileSync(join(__dirname, '..', 'scripts', 'setup-agent.sh'), 'utf-8');
+}
+
+/**
+ * Escape a value for use inside a single-quoted bash string.
+ * Single-quoted strings prevent all shell interpretation, so the only
+ * character that needs escaping is the single quote itself.
+ */
+function sq(value: string): string {
+  return value.replace(/'/g, "'\\''");
+}
 
 export function generateUserData(credentials: InstanceCredentials): string {
   const {
@@ -6,116 +25,31 @@ export function generateUserData(credentials: InstanceCredentials): string {
     anthropicApiKey,
     githubToken,
     githubSshKey,
-    workDirectory,
+    githubEmail,
+    githubUsername,
+    workDirectory = '/home/ubuntu/workspace',
   } = credentials;
 
-  return `#!/bin/bash
-set -e
+  // Prepend exports so the setup script can use $VAR / ${VAR} / ${VAR:-default}
+  // normally without any text-substitution hacks.  Single-quoting the values
+  // means no shell interpretation happens — safe for keys, tokens, etc.
+  const envBlock = [
+    '#!/bin/bash',
+    `export GITHUB_TOKEN='${sq(githubToken || '')}'`,
+    `export GITHUB_SSH_KEY='${sq(githubSshKey || '')}'`,
+    `export GITHUB_EMAIL='${sq(githubEmail || '')}'`,
+    `export GITHUB_USERNAME='${sq(githubUsername || '')}'`,
+    `export ANTHROPIC_API_KEY='${sq(anthropicApiKey || '')}'`,
+    `export OPENCODE_SERVER_PASSWORD='${sq(opencodePassword || '')}'`,
+    `export WORKDIR='${sq(workDirectory)}'`,
+    '',
+  ].join('\n');
 
-echo "=== Starting Artificer Agent Setup ==="
-
-# Update system
-export DEBIAN_FRONTEND=noninteractive
-apt-get update -y
-apt-get upgrade -y
-
-# Install dependencies
-apt-get install -y curl git unzip build-essential
-
-# Install Node.js 22
-if ! command -v node &> /dev/null || [[ "$(node -v | cut -d'.' -f1 | tr -d 'v')" != "22" ]]; then
-    curl -fsSL https://deb.nodesource.com/setup_22.x | bash -
-    apt-get install -y nodejs
-fi
-
-# Install OpenCode
-npm install -g opencode-ai
-
-# Create workspace directory
-mkdir -p ${workDirectory}
-cd ${workDirectory}
-
-# Configure Git
-git config --global user.email "agent@artificer.io"
-git config --global user.name "Artificer Agent"
-git config --global init.defaultBranch main
-git config --global pull.rebase false
-
-# Setup SSH for GitHub
-mkdir -p ~/.ssh
-cat > ~/.ssh/id_ed25519 << 'SSHKEY'
-${githubSshKey}
-SSHKEY
-chmod 600 ~/.ssh/id_ed25519
-
-cat > ~/.ssh/known_hosts << 'KNOWNHOSTS'
-github.com ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIOMqqnkVzrm0SdG6UOoqKLsabgH5C9okWi0dh2l9GKJl
-KNOWNHOSTS
-
-# Configure GitHub token
-git config --global credential.helper store
-echo "https://x-access-token:${githubToken}@github.com" > ~/.git-credentials
-
-# Configure OpenCode
-mkdir -p ~/.config/opencode
-cat > ~/.config/opencode/opencode.json << 'OPENCODE'
-{
-  "$schema": "https://opencode.ai/config.json",
-  "permission": {
-    "bash": "allow",
-    "edit": "allow"
+  // Strip the shebang from the setup script — we provide our own above.
+  let script = getSetupScript();
+  if (script.startsWith('#!/bin/bash')) {
+    script = script.slice(script.indexOf('\n') + 1);
   }
-}
-OPENCODE
 
-# Set environment variables for OpenCode server
-cat > /etc/environment << 'ENV'
-ANTHROPIC_API_KEY=${anthropicApiKey}
-OPENCODE_SERVER_PASSWORD=${opencodePassword}
-ENV
-
-export ANTHROPIC_API_KEY=${anthropicApiKey}
-export OPENCODE_SERVER_PASSWORD=${opencodePassword}
-
-# Create OpenCode server startup script
-cat > /usr/local/bin/opencode-server.sh << 'SCRIPT'
-#!/bin/bash
-cd ${workDirectory}
-export ANTHROPIC_API_KEY=${anthropicApiKey}
-export OPENCODE_SERVER_PASSWORD=${opencodePassword}
-opencode serve --port 4096 --hostname 0.0.0.0 --cors "*"
-SCRIPT
-chmod +x /usr/local/bin/opencode-server.sh
-
-# Enable passwordless sudo for ubuntu user (required for some dev tools)
-echo 'ubuntu ALL=(ALL) NOPASSWD:ALL' >> /etc/sudoers
-
-# Install additional tools
-npm install -g npm
-
-# Setup log rotation
-cat > /etc/logrotate.d/artificer-agent {
-    daily
-    missingok
-    rotate 7
-    compress
-    delaycompress
-    notifempty
-    create 0640 root root
-    /var/log/artificer-agent.log
-}
-
-# Create log file
-mkdir -p /var/log
-touch /var/log/artificer-agent.log
-
-# Start OpenCode server
-cd ${workDirectory}
-export ANTHROPIC_API_KEY=${anthropicApiKey}
-export OPENCODE_SERVER_PASSWORD=${opencodePassword}
-nohup opencode serve --port 4096 --hostname 0.0.0.0 --cors "*" > /var/log/artificer-agent.log 2>&1 &
-
-echo "=== Artificer Agent Setup Complete ==="
-echo "OpenCode server running on port 4096"
-`;
+  return envBlock + script;
 }

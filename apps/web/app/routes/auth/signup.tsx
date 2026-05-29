@@ -40,6 +40,7 @@ function SignUpPage() {
       });
 
       if (result.token) {
+        console.log('Signup successful, token received:', result.token);
         setToken(result.token);
         navigate({ to: '/dashboard' });
       } else {
@@ -82,7 +83,7 @@ function SignUpPage() {
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                isRequired
+                required
               />
             </TextField>
 
@@ -93,7 +94,7 @@ function SignUpPage() {
                 placeholder="At least 8 characters"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                isRequired
+                required
                 minLength={8}
               />
             </TextField>

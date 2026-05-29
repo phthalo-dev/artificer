@@ -11,6 +11,8 @@ const envSchema = z.object({
   EC2_SECURITY_GROUP_ID: z.string().optional(),
   EC2_SUBNET_ID: z.string().optional(),
   EC2_INSTANCE_TYPE: z.string().default('t3.medium'),
+  EC2_AMI_ID: z.string().optional(),
+  EC2_IAM_INSTANCE_PROFILE: z.string().optional(),
   ANTHROPIC_API_KEY: z.string().optional(),
   SLACK_BOT_TOKEN: z.string().optional(),
   SLACK_SIGNING_SECRET: z.string().optional(),

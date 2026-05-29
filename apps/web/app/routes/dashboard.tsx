@@ -1,11 +1,23 @@
 import { createFileRoute, Outlet, Link } from '@tanstack/react-router';
 import { Button } from '~/components/ui/button';
+import { useAuth } from './__root';
 
 export const Route = createFileRoute('/dashboard')({
   component: DashboardLayout,
 });
 
 function DashboardLayout() {
+  const { token, isLoading } = useAuth();
+
+  if (isLoading) {
+    return null;
+  }
+
+  if (!token) {
+    window.location.href = '/auth/signin';
+    return null;
+  }
+
   // TODO: Add auth check here
   // const session = Route.useLoaderData();
 

@@ -106,6 +106,7 @@ model Agent {
   
   // OpenCode configuration
   opencodeConfig Json         @default("{}")
+  opencodePassword String?    // Encrypted password for OpenCode on EC2
   anthropicApiKey String      @db.Text
 
   // Relationships

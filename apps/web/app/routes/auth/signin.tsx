@@ -33,6 +33,7 @@ function SignInPage() {
 
     try {
       const result = await loginMutation.mutateAsync({ email, password });
+      console.log('Login successful, token received:', result.token);
       setToken(result.token);
       navigate({ to: '/dashboard' });
     } catch (err: any) {
@@ -62,7 +63,7 @@ function SignInPage() {
                 placeholder="you@example.com"
                 value={email}
                 onChange={(e) => setEmail(e.target.value)}
-                isRequired
+                required
               />
             </TextField>
 
@@ -72,7 +73,7 @@ function SignInPage() {
                 type="password"
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
-                isRequired
+                required
               />
             </TextField>
 

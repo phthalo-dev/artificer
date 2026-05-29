@@ -1,0 +1,25 @@
+{
+  "name": "artificer-infrastructure",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "build": "tsc",
+    "watch": "tsc -w",
+    "cdk": "cdk",
+    "cdk:bootstrap": "cdk bootstrap",
+    "cdk:deploy": "cdk deploy --all",
+    "cdk:destroy": "cdk destroy --all",
+    "cdk:diff": "cdk diff --all",
+    "cdk:synth": "cdk synth --all"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.5",
+    "aws-cdk": "^2.150.0",
+    "tsx": "^4.7.0",
+    "typescript": "^5.3.3"
+  },
+  "dependencies": {
+    "aws-cdk-lib": "^2.150.0",
+    "constructs": "^10.3.0"
+  }
+}

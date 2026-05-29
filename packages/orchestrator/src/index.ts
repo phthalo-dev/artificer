@@ -21,6 +21,7 @@ export interface OrchestratorConfig {
   defaultSecurityGroupIds: string[];
   defaultKeyName?: string;
   defaultInstanceType?: string;
+  defaultImageId?: string;
   iamInstanceProfile?: string;
 }
 
@@ -29,7 +30,7 @@ export class Orchestrator {
   private config: OrchestratorConfig;
 
   constructor(config: OrchestratorConfig) {
-    this.ec2 = new EC2Service(config.awsRegion);
+    this.ec2 = new EC2Service(config.awsRegion, config.defaultImageId);
     this.config = config;
   }
 
@@ -86,6 +87,8 @@ export class Orchestrator {
     anthropicApiKey: string,
     githubToken: string,
     githubSshKey: string,
+    githubEmail?: string,
+    githubUsername?: string,
     workDirectory: string = '/home/ubuntu/workspace',
   ): InstanceCredentials {
     return {
@@ -93,6 +96,8 @@ export class Orchestrator {
       anthropicApiKey,
       githubToken,
       githubSshKey,
+      githubEmail,
+      githubUsername,
       workDirectory,
     };
   }

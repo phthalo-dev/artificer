@@ -9,7 +9,11 @@
     ".": "./src/index.ts"
   },
   "scripts": {
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "docker:build": "docker build --no-cache -t artificer-agent:test .",
+    "docker:run": "docker compose up",
+    "docker:test": "docker build -t artificer-agent:test . && docker run --rm -it artificer-agent:test /bin/bash",
+    "docker:clean": "docker compose down -v"
   },
   "dependencies": {
     "@artificer/shared": "workspace:*",

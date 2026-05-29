@@ -1,0 +1,7 @@
+{
+  "app": "tsx bin/artificer.ts",
+  "context": {
+    "@aws-cdk/core:bootstrapQualifier": "artificer",
+    "@aws-cdk/aws-ec2:uniqueJsonTag规范": true
+  }
+}
