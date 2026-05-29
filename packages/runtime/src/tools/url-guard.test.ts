@@ -48,3 +48,13 @@ test('assertPublicUrl accepts a public literal IP', async () => {
   const u = await assertPublicUrl('https://8.8.8.8/');
   assert.equal(u.hostname, '8.8.8.8');
 });
+
+test('isBlockedAddress flags hex IPv4-mapped loopback', () => {
+  assert.equal(isBlockedAddress('::ffff:7f00:1'), true);
+});
+
+test('assertPublicUrl handles bracketed IPv6 literals', async () => {
+  await assert.rejects(() => assertPublicUrl('http://[::1]/'), /non-public/);
+  const u = await assertPublicUrl('http://[2001:4860:4860::8888]/');
+  assert.equal(u.hostname, '[2001:4860:4860::8888]');
+});

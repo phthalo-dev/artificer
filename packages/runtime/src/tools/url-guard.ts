@@ -59,9 +59,16 @@ function isBlockedV6(ip: string): boolean {
     return true;
   }
   if (a.startsWith('fc') || a.startsWith('fd')) return true;
-  // IPv4-mapped ::ffff:a.b.c.d
-  const mapped = a.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
-  if (mapped) return isBlockedV4(mapped[1]);
+  // IPv4-mapped: dotted (::ffff:127.0.0.1) or hex (::ffff:7f00:1)
+  const dotted = a.match(/::ffff:(\d+\.\d+\.\d+\.\d+)$/);
+  if (dotted) return isBlockedV4(dotted[1]);
+  const hex = a.match(/::ffff:([0-9a-f]{1,4}):([0-9a-f]{1,4})$/);
+  if (hex) {
+    const hi = parseInt(hex[1], 16);
+    const lo = parseInt(hex[2], 16);
+    const v4 = `${(hi >> 8) & 0xff}.${hi & 0xff}.${(lo >> 8) & 0xff}.${lo & 0xff}`;
+    return isBlockedV4(v4);
+  }
   return false;
 }
 
@@ -100,7 +107,7 @@ export async function assertPublicUrl(rawUrl: string): Promise<URL> {
   if (u.protocol !== 'http:' && u.protocol !== 'https:') {
     throw new Error(`only http(s) URLs are supported (got "${u.protocol}")`);
   }
-  const host = u.hostname;
+  const host = u.hostname.replace(/^\[|\]$/g, '');
   if (isBlockedHostname(host)) {
     throw new Error(`refusing to fetch internal host "${host}"`);
   }
