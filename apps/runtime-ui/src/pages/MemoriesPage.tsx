@@ -46,7 +46,12 @@ function MemoryCard({ memory }: { memory: Memory }) {
           </Badge>
         ))}
         {isUrl(memory.source) ? (
-          <Anchor href={memory.source} target="_blank" size="xs">
+          <Anchor
+            href={memory.source}
+            target="_blank"
+            rel="noopener noreferrer"
+            size="xs"
+          >
             source
           </Anchor>
         ) : memory.source ? (
@@ -68,6 +73,7 @@ export function MemoriesPage() {
     <Stack gap="lg">
       <Title order={3}>Memories</Title>
       <TextInput
+        aria-label="Search memories"
         leftSection={<IconSearch size={16} />}
         placeholder="Search memories…"
         value={query}
