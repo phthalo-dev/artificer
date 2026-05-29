@@ -41,6 +41,8 @@ export function rankMemories(
   entries: MemoryIndexEntry[],
 ): RankedEntry[] {
   const qTokens = tokenize(query);
+  // A query that is non-empty but consists entirely of stopwords/1-char tokens
+  // tokenizes to [] and intentionally falls back to the recency-ordered branch.
   if (qTokens.length === 0) {
     return [...entries]
       .sort((a, b) => b.createdAt.localeCompare(a.createdAt))
@@ -51,7 +53,7 @@ export function rankMemories(
     for (const tok of tokenize(entryText(entry))) {
       counts.set(tok, (counts.get(tok) ?? 0) + 1);
     }
-    const tagTokens = new Set(entry.tags.map((t) => t.toLowerCase()));
+    const tagTokens = new Set(entry.tags.flatMap((t) => tokenize(t)));
     let score = 0;
     for (const q of qTokens) {
       score += counts.get(q) ?? 0;

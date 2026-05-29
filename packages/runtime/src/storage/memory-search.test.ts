@@ -18,6 +18,14 @@ test('ranks tag matches above text-only matches', () => {
   assert.ok(ranked[0].score >= 3);
 });
 
+test('a tag match outranks a text-only match for the same term', () => {
+  const e: MemoryIndexEntry[] = [
+    { id: 'tagged', title: 'x', summary: 'x', tags: ['deploy'], createdAt: '2026-01-01T00:00:00.000Z' },
+    { id: 'texty', title: 'deploy deploy deploy', summary: '', tags: ['other'], createdAt: '2026-01-02T00:00:00.000Z' },
+  ];
+  assert.equal(rankMemories('deploy', e)[0].entry.id, 'tagged');
+});
+
 test('returns only matching entries for a non-empty query', () => {
   const ranked = rankMemories('python', entries);
   assert.deepEqual(ranked.map((r) => r.entry.id), ['b']);
@@ -25,5 +33,10 @@ test('returns only matching entries for a non-empty query', () => {
 
 test('empty query returns all entries in recency order', () => {
   const ranked = rankMemories('', entries);
+  assert.deepEqual(ranked.map((r) => r.entry.id), ['c', 'b', 'a']);
+});
+
+test('a query of only stopwords falls back to recency order', () => {
+  const ranked = rankMemories('the it is', entries);
   assert.deepEqual(ranked.map((r) => r.entry.id), ['c', 'b', 'a']);
 });
