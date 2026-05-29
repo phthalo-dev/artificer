@@ -356,10 +356,10 @@ export class Store {
    */
   async queryMemories(
     query: string,
-    opts: { tags?: string[]; limit?: number } = {},
+    opts: { tags?: string[]; limit?: number; charBudget?: number } = {},
   ): Promise<Memory[]> {
     const limit = Math.max(1, Math.min(opts.limit ?? 5, 50));
-    const charBudget = 4000;
+    const charBudget = opts.charBudget ?? 4000;
     let entries = await this.readReconciledIndex();
     if (opts.tags && opts.tags.length > 0) {
       const want = new Set(opts.tags.map((t) => t.toLowerCase()));
