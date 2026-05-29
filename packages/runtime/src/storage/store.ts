@@ -338,7 +338,8 @@ export class Store {
     }
     const files = names
       .filter((f) => f.endsWith('.json') && f !== 'index.json')
-      .sort();
+      .sort()
+      .reverse();
     const out: Memory[] = [];
     for (const f of files) {
       const m = await readJson<Memory>(path.join(dir, f));
@@ -355,7 +356,7 @@ export class Store {
     query: string,
     opts: { tags?: string[]; limit?: number } = {},
   ): Promise<Memory[]> {
-    const limit = opts.limit ?? 5;
+    const limit = Math.max(1, Math.min(opts.limit ?? 5, 50));
     const charBudget = 4000;
     let entries = await this.readMemoryIndex();
     if (opts.tags && opts.tags.length > 0) {
@@ -408,12 +409,22 @@ export class Store {
 
   /** Read index.json; rebuild it from per-memory files if missing/unreadable. */
   private async readMemoryIndex(): Promise<MemoryIndexEntry[]> {
-    const existing = await readJson<MemoryIndexEntry[]>(
-      this.layout.memoryIndexFile(),
-    );
-    if (existing) return existing;
+    const file = this.layout.memoryIndexFile();
+    let raw: string | null = null;
+    try {
+      raw = await fs.readFile(file, 'utf8');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    }
+    if (raw !== null) {
+      try {
+        return JSON.parse(raw) as MemoryIndexEntry[];
+      } catch {
+        // Corrupt index.json — fall through and rebuild from the per-memory files.
+      }
+    }
     const rebuilt = (await this.listMemories()).map((m) => this.toIndexEntry(m));
-    await writeJson(this.layout.memoryIndexFile(), rebuilt);
+    await writeJson(file, rebuilt);
     return rebuilt;
   }
 

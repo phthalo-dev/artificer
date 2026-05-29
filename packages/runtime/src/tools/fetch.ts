@@ -32,6 +32,10 @@ export function createFetchTools(_ctx: ToolContext): ToolDef[] {
           if (!res.ok) {
             return `Error: fetch failed with HTTP ${res.status} ${res.statusText}.`;
           }
+          const lengthHeader = res.headers.get('content-length');
+          if (lengthHeader && Number(lengthHeader) > 10_000_000) {
+            return `Error: response too large (${lengthHeader} bytes).`;
+          }
           const contentType = res.headers.get('content-type') ?? '';
           const raw = await res.text();
           const isHtml = contentType.includes('html') || /<html[\s>]/i.test(raw);
