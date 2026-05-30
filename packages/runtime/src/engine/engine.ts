@@ -1,11 +1,11 @@
-import Anthropic from '@anthropic-ai/sdk';
 import { EventEmitter } from 'node:events';
 import type { RuntimeConfig } from '../config.js';
 import type { EngineApi, RuntimeEvent, SpawnCallInput } from '../context.js';
+import { resolveLanguageModel } from '../llm/provider.js';
 import { Store } from '../storage/store.js';
 import type { Message, RunRecord, Workstream } from '../storage/types.js';
 import { executeCall } from './call.js';
-import { type ModelTier, pickModel } from './models.js';
+import { type ModelTier, type ModelTiers, pickModel } from './models.js';
 import { Scheduler } from './scheduler.js';
 
 interface ActiveRun {
@@ -35,7 +35,6 @@ const RUN_ROLES_THAT_REINVOKE = ['planner', 'reviewer', 'worker'] as const;
 export class Engine implements EngineApi {
   readonly store: Store;
   readonly config: RuntimeConfig;
-  private readonly client: Anthropic;
   private readonly scheduler: Scheduler;
   private readonly events = new EventEmitter();
   private readonly active = new Map<string, ActiveRun>();
@@ -43,11 +42,17 @@ export class Engine implements EngineApi {
   constructor(config: RuntimeConfig, store: Store) {
     this.config = config;
     this.store = store;
-    this.client = new Anthropic({ apiKey: config.anthropicApiKey });
     this.scheduler = new Scheduler(config.concurrency, (runId) =>
       this.runOne(runId),
     );
   }
+
+  /** Resolve a model id to an AI SDK model using the configured gateway. */
+  private resolveModel = (modelId: string) =>
+    resolveLanguageModel(modelId, {
+      apiKey: this.config.apiKey,
+      baseURL: this.config.baseURL,
+    });
 
   /**
    * Marks any runs left in `queued`/`running` state as failed. The run queue is
@@ -198,6 +203,21 @@ export class Engine implements EngineApi {
     this.emit({ kind: 'message', at: message.createdAt, data: message });
   }
 
+  /** Current model id for each complexity tier. */
+  getModelTiers(): ModelTiers {
+    return { ...this.config.models };
+  }
+
+  /**
+   * Update one or more tier model ids. Takes effect for every run spawned
+   * afterwards (the model id is resolved per run at spawn time).
+   */
+  setModelTiers(update: Partial<ModelTiers>): ModelTiers {
+    this.config.models = { ...this.config.models, ...update };
+    this.config.model = this.config.models.medium;
+    return this.getModelTiers();
+  }
+
   /** Resolve the model id for a role, honoring an optional complexity override. */
   private modelFor(role: RunRecord['role'], complexity?: ModelTier): string {
     return pickModel(
@@ -234,7 +254,7 @@ export class Engine implements EngineApi {
 
     try {
       const finished = await executeCall(run, {
-        client: this.client,
+        resolveModel: this.resolveModel,
         config: this.config,
         store: this.store,
         engine: this,

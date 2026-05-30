@@ -3,6 +3,7 @@ import {
   IconActivity,
   IconBook,
   IconCoin,
+  IconCpu,
   IconLayoutDashboard,
 } from '@tabler/icons-react';
 import {
@@ -15,6 +16,7 @@ import { useRuntimeState } from './api/hooks';
 import { DashboardPage } from './pages/DashboardPage';
 import { MemoriesPage } from './pages/MemoriesPage';
 import { MessageCostPage } from './pages/MessageCostPage';
+import { ModelsPage } from './pages/ModelsPage';
 import { UsagePage } from './pages/UsagePage';
 import { WorkstreamDetailPage } from './pages/WorkstreamDetailPage';
 import { WorkstreamsPage } from './pages/WorkstreamsPage';
@@ -24,6 +26,7 @@ const NAV = [
   { to: '/workstreams', label: 'Workstreams', icon: IconActivity },
   { to: '/memories', label: 'Memories', icon: IconBook },
   { to: '/usage', label: 'Usage', icon: IconCoin },
+  { to: '/models', label: 'Models', icon: IconCpu },
 ];
 
 export function App() {
@@ -82,6 +85,7 @@ export function App() {
           <Route path="/workstreams/:id" element={<WorkstreamDetailPage />} />
           <Route path="/memories" element={<MemoriesPage />} />
           <Route path="/usage" element={<UsagePage />} />
+          <Route path="/models" element={<ModelsPage />} />
           <Route path="/messages/:id/cost" element={<MessageCostPage />} />
         </Routes>
       </AppShell.Main>

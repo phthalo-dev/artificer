@@ -8,6 +8,8 @@ import type {
   Memory,
   Message,
   MessageCost,
+  ModelConfig,
+  ModelTiers,
   RuntimeState,
   UsageOverview,
   Workstream,
@@ -75,6 +77,24 @@ export function useMessageCost(id: string | undefined) {
     queryFn: () => api.get<MessageCost>(`/messages/${id}/cost`),
     refetchInterval: 3000,
     enabled: Boolean(id),
+  });
+}
+
+export function useModelConfig() {
+  return useQuery({
+    queryKey: ['model-config'],
+    queryFn: () => api.get<ModelConfig>('/config/models'),
+  });
+}
+
+export function useUpdateModels() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (tiers: Partial<ModelTiers>) =>
+      api.put<{ tiers: ModelTiers }>('/config/models', tiers),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['model-config'] });
+    },
   });
 }
 

@@ -2,6 +2,7 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
+import { buildGitEnv } from './git-env.js';
 
 const execAsync = promisify(exec);
 
@@ -14,6 +15,7 @@ function truncate(text: string): string {
 
 export function createShellTool(ctx: ToolContext): ToolDef[] {
   const { workspaceDir } = ctx;
+  const env = buildGitEnv(ctx.engine.config.github);
 
   return [
     {
@@ -39,6 +41,7 @@ export function createShellTool(ctx: ToolContext): ToolDef[] {
         try {
           const { stdout, stderr } = await execAsync(String(input.command), {
             cwd,
+            env,
             timeout: 1000 * 60 * 5,
             maxBuffer: 1024 * 1024 * 10,
           });

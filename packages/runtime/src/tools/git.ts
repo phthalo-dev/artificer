@@ -2,6 +2,7 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
+import { buildGitEnv } from './git-env.js';
 
 const execAsync = promisify(exec);
 
@@ -12,10 +13,15 @@ function truncate(text: string): string {
   return `${text.slice(0, MAX_OUTPUT)}\n... (output truncated)`;
 }
 
-async function run(command: string, cwd: string): Promise<string> {
+async function run(
+  command: string,
+  cwd: string,
+  env: NodeJS.ProcessEnv,
+): Promise<string> {
   try {
     const { stdout, stderr } = await execAsync(command, {
       cwd,
+      env,
       timeout: 1000 * 60 * 10,
       maxBuffer: 1024 * 1024 * 20,
     });
@@ -33,6 +39,7 @@ async function run(command: string, cwd: string): Promise<string> {
 
 export function createGitTools(ctx: ToolContext): ToolDef[] {
   const { workspaceDir } = ctx;
+  const env = buildGitEnv(ctx.engine.config.github);
 
   return [
     {
@@ -57,7 +64,7 @@ export function createGitTools(ctx: ToolContext): ToolDef[] {
         const cwd = input.cwd
           ? `${workspaceDir}/${String(input.cwd)}`
           : workspaceDir;
-        return run(`git ${String(input.args)}`, cwd);
+        return run(`git ${String(input.args)}`, cwd, env);
       },
     },
     {
@@ -82,7 +89,7 @@ export function createGitTools(ctx: ToolContext): ToolDef[] {
         const cwd = input.cwd
           ? `${workspaceDir}/${String(input.cwd)}`
           : workspaceDir;
-        return run(`gh ${String(input.args)}`, cwd);
+        return run(`gh ${String(input.args)}`, cwd, env);
       },
     },
   ];

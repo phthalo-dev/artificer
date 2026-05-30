@@ -228,7 +228,10 @@ export class Store {
   // --- Reviews ---
 
   async createReview(
-    input: Pick<Review, 'workstreamId' | 'target' | 'notes' | 'approved'>,
+    input: Pick<
+      Review,
+      'workstreamId' | 'target' | 'notes' | 'approved' | 'stage' | 'severity'
+    >,
   ): Promise<Review> {
     const review: Review = {
       id: newId('rev'),

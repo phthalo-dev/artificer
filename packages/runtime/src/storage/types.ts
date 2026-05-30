@@ -56,6 +56,12 @@ export interface Task {
   updatedAt: string;
 }
 
+/** Which lifecycle stage a review covered. */
+export type ReviewStage = 'plan' | 'work';
+
+/** Highest-severity issue a review surfaced; 'none' when nothing blocking. */
+export type ReviewSeverity = 'critical' | 'important' | 'minor' | 'none';
+
 export interface Review {
   id: string;
   workstreamId: string;
@@ -63,6 +69,10 @@ export interface Review {
   target: string;
   notes: string;
   approved: boolean;
+  /** Whether the plan or the implemented work was reviewed. */
+  stage?: ReviewStage;
+  /** Highest-severity issue found, so the orchestrator can gate reliably. */
+  severity?: ReviewSeverity;
   createdAt: string;
 }
 

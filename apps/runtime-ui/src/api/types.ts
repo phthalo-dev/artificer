@@ -66,12 +66,17 @@ export interface Task {
   updatedAt: string;
 }
 
+export type ReviewStage = 'plan' | 'work';
+export type ReviewSeverity = 'critical' | 'important' | 'minor' | 'none';
+
 export interface Review {
   id: string;
   workstreamId: string;
   target: string;
   notes: string;
   approved: boolean;
+  stage?: ReviewStage;
+  severity?: ReviewSeverity;
   createdAt: string;
 }
 
@@ -175,4 +180,31 @@ export interface MessageCost {
   byWorkstream: Record<string, UsageSummary>;
   byRole: Record<string, UsageSummary>;
   tree: RunNode[];
+}
+
+export type ModelTier = 'low' | 'medium' | 'high';
+
+export interface ModelTiers {
+  low: string;
+  medium: string;
+  high: string;
+}
+
+export interface ModelPricing {
+  inputPerMTok: number;
+  outputPerMTok: number;
+  cacheWritePerMTok: number;
+  cacheReadPerMTok: number;
+}
+
+export interface CatalogModel {
+  id: string;
+  provider: string;
+  pricing: ModelPricing;
+}
+
+export interface ModelConfig {
+  tiers: ModelTiers;
+  roleTiers: Record<RoleName, ModelTier>;
+  catalog: CatalogModel[];
 }

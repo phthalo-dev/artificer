@@ -45,6 +45,8 @@ async function workstreamStatus(
       reviews: reviews.map((r) => ({
         target: r.target,
         approved: r.approved,
+        stage: r.stage,
+        severity: r.severity,
         notes: r.notes,
       })),
     },

@@ -8,8 +8,10 @@ import {
 import type { RoleName } from './storage/types.js';
 
 export interface RuntimeConfig {
-  /** Anthropic API key the agent uses as its own identity. */
-  anthropicApiKey: string;
+  /** API key for the LLM gateway (an OpenCode Zen key, or a provider key). */
+  apiKey: string;
+  /** Base URL of the LLM gateway, e.g. https://opencode.ai/zen/v1. */
+  baseURL: string;
   /** Default model (the "medium" tier); used as a fallback. */
   model: string;
   /** Concrete model id for each complexity tier. */
@@ -30,6 +32,22 @@ export interface RuntimeConfig {
   resumeOnStartup: boolean;
   /** Human-facing name of this agent entity. */
   agentName: string;
+  /**
+   * The agent's own GitHub credentials. When set, git/gh/run_shell commands
+   * authenticate as this account (separate from the user's). Undefined when no
+   * token is configured, in which case tools fall back to ambient credentials.
+   */
+  github?: GitHubConfig;
+}
+
+/** The agent's GitHub identity, used to clone, push, and open/comment on PRs. */
+export interface GitHubConfig {
+  /** Personal access token used for git HTTPS auth and the `gh` CLI. */
+  token: string;
+  /** Commit author/committer name (the agent account's name). */
+  userName?: string;
+  /** Commit author/committer email (recommend the account's noreply email). */
+  userEmail?: string;
 }
 
 function required(name: string, value: string | undefined): string {
@@ -44,10 +62,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     ? path.resolve(env.ARTIFICER_DATA_DIR)
     : path.resolve(process.cwd(), 'data');
 
+  // Tier model ids accept any Zen model id (LLM_MODEL* preferred; the legacy
+  // ANTHROPIC_MODEL* names still work for back-compat).
   const models: ModelTiers = {
-    low: env.ANTHROPIC_MODEL_LOW || 'claude-haiku-4-5-20251001',
-    medium: env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
-    high: env.ANTHROPIC_MODEL_HIGH || 'claude-opus-4-8',
+    low: env.LLM_MODEL_LOW || env.ANTHROPIC_MODEL_LOW || 'claude-haiku-4-5',
+    medium: env.LLM_MODEL || env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
+    high: env.LLM_MODEL_HIGH || env.ANTHROPIC_MODEL_HIGH || 'claude-opus-4-8',
   };
 
   // Per-role tier overrides, e.g. RUNTIME_TIER_WORKER=medium.
@@ -57,8 +77,21 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     if (isModelTier(override)) roleTiers[role] = override;
   }
 
+  const apiKey =
+    env.LLM_API_KEY || env.ZEN_API_KEY || env.ANTHROPIC_API_KEY;
+
+  const githubToken = env.GITHUB_TOKEN || env.GH_TOKEN;
+  const github: GitHubConfig | undefined = githubToken
+    ? {
+        token: githubToken,
+        userName: env.GITHUB_USER_NAME,
+        userEmail: env.GITHUB_USER_EMAIL,
+      }
+    : undefined;
+
   return {
-    anthropicApiKey: required('ANTHROPIC_API_KEY', env.ANTHROPIC_API_KEY),
+    apiKey: required('LLM_API_KEY (or ZEN_API_KEY / ANTHROPIC_API_KEY)', apiKey),
+    baseURL: env.LLM_BASE_URL || 'https://opencode.ai/zen/v1',
     model: models.medium,
     models,
     roleTiers,
@@ -73,5 +106,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
       : 60,
     resumeOnStartup: env.RUNTIME_RESUME_ON_STARTUP !== 'false',
     agentName: env.AGENT_NAME || 'Artificer',
+    github,
   };
 }

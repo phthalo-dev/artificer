@@ -14,11 +14,19 @@ import {
 import { IconArrowLeft } from '@tabler/icons-react';
 import { Link, useParams } from 'react-router-dom';
 import { useWorkstream } from '../api/hooks';
+import type { ReviewSeverity } from '../api/types';
 import { BreakdownTable } from '../components/BreakdownTable';
 import { RunsTable } from '../components/RunsTable';
 import { StatusBadge } from '../components/StatusBadge';
 import { UsageStats } from '../components/UsageStats';
 import { formatTime } from '../format';
+
+const SEVERITY_COLORS: Record<ReviewSeverity, string> = {
+  critical: 'red',
+  important: 'orange',
+  minor: 'yellow',
+  none: 'green',
+};
 
 export function WorkstreamDetailPage() {
   const { id } = useParams();
@@ -158,12 +166,30 @@ export function WorkstreamDetailPage() {
             {reviews.map((r) => (
               <Card key={r.id} withBorder radius="md" padding="sm">
                 <Group justify="space-between" mb={4}>
-                  <Text size="sm" fw={600}>
-                    {r.target}
-                  </Text>
-                  <Badge color={r.approved ? 'green' : 'orange'} variant="light">
-                    {r.approved ? 'approved' : 'changes requested'}
-                  </Badge>
+                  <Group gap="xs">
+                    <Text size="sm" fw={600}>
+                      {r.target}
+                    </Text>
+                    {r.stage ? (
+                      <Badge color="gray" variant="light" size="sm">
+                        {r.stage}
+                      </Badge>
+                    ) : null}
+                  </Group>
+                  <Group gap="xs">
+                    {r.severity && r.severity !== 'none' ? (
+                      <Badge
+                        color={SEVERITY_COLORS[r.severity]}
+                        variant="light"
+                        size="sm"
+                      >
+                        {r.severity}
+                      </Badge>
+                    ) : null}
+                    <Badge color={r.approved ? 'green' : 'orange'} variant="light">
+                      {r.approved ? 'approved' : 'changes requested'}
+                    </Badge>
+                  </Group>
                 </Group>
                 <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
                   {r.notes}

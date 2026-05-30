@@ -1,14 +1,15 @@
-import type Anthropic from '@anthropic-ai/sdk';
+import type { LanguageModel } from 'ai';
 import type { RuntimeConfig } from '../config.js';
 import type { EngineApi, ToolContext } from '../context.js';
-import { runToolLoop } from '../llm/anthropic.js';
+import { runToolLoop } from '../llm/loop.js';
 import type { Store } from '../storage/store.js';
 import type { RunRecord } from '../storage/types.js';
 import { toolsForRole } from '../tools/registry.js';
 import { getRole } from './roles.js';
 
 export interface ExecuteCallDeps {
-  client: Anthropic;
+  /** Resolves a model id to an AI SDK model bound to the configured gateway. */
+  resolveModel: (modelId: string) => LanguageModel;
   config: RuntimeConfig;
   store: Store;
   engine: EngineApi;
@@ -65,7 +66,7 @@ export async function executeCall(
   run: RunRecord,
   deps: ExecuteCallDeps,
 ): Promise<RunRecord> {
-  const { client, config, store, engine } = deps;
+  const { resolveModel, config, store, engine } = deps;
 
   const workspaceDir = run.workstreamId
     ? store.layout.workstreamWorkspace(run.workstreamId)
@@ -84,8 +85,7 @@ export async function executeCall(
     const userMessage = await buildContext(store, run);
 
     const result = await runToolLoop({
-      client,
-      model: run.model ?? config.model,
+      model: resolveModel(run.model ?? config.model),
       system: role.system(config.agentName),
       userMessage,
       tools,

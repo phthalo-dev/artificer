@@ -56,7 +56,7 @@ export function createArtifactTools(ctx: ToolContext): ToolDef[] {
     {
       name: 'submit_review',
       description:
-        'Record a review of a plan or a piece of work, including notes and whether it is approved. The orchestrator uses this to decide next steps.',
+        'Record a review of a plan or a piece of work, including notes and whether it is approved. The orchestrator uses this to decide next steps. Approve only when there are no Critical or Important issues.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -64,10 +64,24 @@ export function createArtifactTools(ctx: ToolContext): ToolDef[] {
             type: 'string',
             description: 'What was reviewed (e.g. "plan", or a file path).',
           },
-          notes: { type: 'string', description: 'Review feedback.' },
+          notes: {
+            type: 'string',
+            description: 'Review feedback, grouped by severity.',
+          },
           approved: {
             type: 'boolean',
             description: 'Whether the work is approved as-is.',
+          },
+          stage: {
+            type: 'string',
+            enum: ['plan', 'work'],
+            description: 'Whether you reviewed the plan or the implemented work.',
+          },
+          severity: {
+            type: 'string',
+            enum: ['critical', 'important', 'minor', 'none'],
+            description:
+              'Highest-severity issue you found; "none" when nothing needs to change.',
           },
           workstreamId: {
             type: 'string',
@@ -80,13 +94,26 @@ export function createArtifactTools(ctx: ToolContext): ToolDef[] {
         const workstreamId =
           (input.workstreamId as string | undefined) ?? run.workstreamId;
         if (!workstreamId) return 'Error: no workstream specified.';
+        const stage =
+          input.stage === 'plan' || input.stage === 'work'
+            ? input.stage
+            : undefined;
+        const severity = (
+          ['critical', 'important', 'minor', 'none'] as const
+        ).includes(input.severity as never)
+          ? (input.severity as 'critical' | 'important' | 'minor' | 'none')
+          : undefined;
         const review = await store.createReview({
           workstreamId,
           target: String(input.target),
           notes: String(input.notes),
           approved: Boolean(input.approved),
+          stage,
+          severity,
         });
-        return `Review ${review.id} recorded (approved: ${review.approved}).`;
+        return `Review ${review.id} recorded (approved: ${review.approved}${
+          severity ? `, severity: ${severity}` : ''
+        }).`;
       },
     },
   ];

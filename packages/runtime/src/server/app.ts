@@ -10,10 +10,28 @@ import {
   summarizeByRole,
 } from '../engine/cost.js';
 import type { Engine } from '../engine/engine.js';
+import { type LlmSdkPackage, MODEL_CATALOG } from '../llm/catalog.js';
 
 const sendMessageSchema = z.object({
   content: z.string().min(1, 'content is required'),
 });
+
+const updateModelsSchema = z
+  .object({
+    low: z.string().min(1).optional(),
+    medium: z.string().min(1).optional(),
+    high: z.string().min(1).optional(),
+  })
+  .refine((v) => v.low || v.medium || v.high, {
+    message: 'provide at least one tier',
+  });
+
+const PROVIDER_LABEL: Record<LlmSdkPackage, string> = {
+  '@ai-sdk/anthropic': 'Anthropic',
+  '@ai-sdk/openai': 'OpenAI',
+  '@ai-sdk/google': 'Google',
+  '@ai-sdk/openai-compatible': 'OpenAI-compatible',
+};
 
 /** Builds the Hono app exposing the agent's "person-like" HTTP surface. */
 export function createApp(engine: Engine): Hono {
@@ -21,6 +39,34 @@ export function createApp(engine: Engine): Hono {
   app.use('*', cors());
 
   app.get('/health', (c) => c.json({ ok: true, agent: engine.config.agentName }));
+
+  // --- Model configuration ---
+
+  // Current tier models, role->tier mapping, and the full model catalog with
+  // pricing so the UI can let you test different configurations.
+  app.get('/config/models', (c) => {
+    const catalog = Object.values(MODEL_CATALOG).map((entry) => ({
+      id: entry.id,
+      provider: PROVIDER_LABEL[entry.npm],
+      pricing: entry.pricing,
+    }));
+    return c.json({
+      tiers: engine.getModelTiers(),
+      roleTiers: engine.config.roleTiers,
+      catalog,
+    });
+  });
+
+  // Update the model used by one or more tiers. Applies to subsequent runs.
+  app.put('/config/models', async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = updateModelsSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+    const tiers = engine.setModelTiers(parsed.data);
+    return c.json({ tiers });
+  });
 
   // --- Messages: talk to the agent ---
 

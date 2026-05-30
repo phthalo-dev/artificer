@@ -1,17 +1,12 @@
+import { catalogPricing, type ModelPricing } from '../llm/catalog.js';
 import type { TokenUsage } from '../storage/types.js';
 
-/** USD per million tokens for a model. */
-export interface ModelPricing {
-  inputPerMTok: number;
-  outputPerMTok: number;
-  cacheWritePerMTok: number;
-  cacheReadPerMTok: number;
-}
+export type { ModelPricing } from '../llm/catalog.js';
 
 /**
- * Best-effort pricing by model family. These follow Anthropic's published
- * per-tier rates (cache writes ~1.25x input, cache reads ~0.1x input) and are
- * ESTIMATES — verify against current pricing, or override per model below.
+ * Best-effort pricing by model family, used only when a model id is not present
+ * in the Zen catalog. These are ESTIMATES based on Anthropic-style per-tier
+ * rates (cache writes ~1.25x input, cache reads ~0.1x input).
  */
 const TIERS: Array<{ match: RegExp; pricing: ModelPricing }> = [
   {
@@ -43,14 +38,14 @@ const TIERS: Array<{ match: RegExp; pricing: ModelPricing }> = [
   },
 ];
 
-/** Exact overrides keyed by model id take precedence over tier matching. */
-const OVERRIDES: Record<string, ModelPricing> = {};
-
 const FALLBACK: ModelPricing = TIERS[2].pricing;
 
 export function getModelPricing(model: string | undefined): ModelPricing {
   if (!model) return FALLBACK;
-  if (OVERRIDES[model]) return OVERRIDES[model];
+  // Exact, published Zen pricing wins.
+  const exact = catalogPricing(model);
+  if (exact) return exact;
+  // Otherwise estimate from the model family.
   for (const tier of TIERS) {
     if (tier.match.test(model)) return tier.pricing;
   }
