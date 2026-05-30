@@ -52,3 +52,9 @@ prisma/migrations
 
 
 cdk.out
+
+.env
+.env.local
+
+# Local debug dumps
+cost.json
