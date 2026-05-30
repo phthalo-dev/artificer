@@ -1,0 +1,18 @@
+services:
+  runtime:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    image: artificer-runtime:dev
+    ports:
+      - "4100:4100"
+    env_file:
+      - .env
+    environment:
+      ARTIFICER_DATA_DIR: /data
+      PORT: "4100"
+    volumes:
+      - runtime-data:/data
+
+volumes:
+  runtime-data:
