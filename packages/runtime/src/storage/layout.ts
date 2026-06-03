@@ -76,4 +76,14 @@ export class Layout {
   workstreamWorkspace(workstreamId: string): string {
     return path.join(this.workspaceDir, workstreamId);
   }
+
+  /** Spilled tool-result bodies for a run (large outputs kept off the prompt). */
+  toolResultsDir(runId: string): string {
+    return path.join(this.root, 'tool-results', runId);
+  }
+
+  /** Per-workstream LRU of recently read files for context hints. */
+  workstreamFileCacheFile(workstreamId: string): string {
+    return path.join(this.workstreamDir(workstreamId), 'file-cache.json');
+  }
 }

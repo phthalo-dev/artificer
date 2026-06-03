@@ -37,6 +37,8 @@ export interface Workstream {
   summary: string;
   /** Optional repository this workstream operates on. */
   repoUrl?: string;
+  /** Optional base commit to check out after cloning (bench / SWE tasks). */
+  baseCommit?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -84,6 +86,8 @@ export interface ToolInvocation {
   output: string;
   error?: string;
   at: string;
+  /** On-disk path when output was spilled to tool-results storage. */
+  spillPath?: string;
 }
 
 /** Token consumption for a single call, summed across its API requests. */

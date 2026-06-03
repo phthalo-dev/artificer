@@ -11,6 +11,8 @@ import {
 } from '../engine/cost.js';
 import type { Engine } from '../engine/engine.js';
 import { type LlmSdkPackage, MODEL_CATALOG } from '../llm/catalog.js';
+import { listPresets } from '../engine/presets.js';
+import { readBenchOverview, readBenchRun, readBenchSuites } from './bench.js';
 
 const sendMessageSchema = z.object({
   content: z.string().min(1, 'content is required'),
@@ -25,6 +27,22 @@ const updateModelsSchema = z
   .refine((v) => v.low || v.medium || v.high, {
     message: 'provide at least one tier',
   });
+
+const updateRoleTiersSchema = z.record(
+  z.enum([
+    'communicator',
+    'orchestrator',
+    'planner',
+    'reviewer',
+    'worker',
+    'librarian',
+  ]),
+  z.enum(['low', 'medium', 'high']),
+);
+
+const applyPresetSchema = z.object({
+  presetId: z.string().min(1),
+});
 
 const PROVIDER_LABEL: Record<LlmSdkPackage, string> = {
   '@ai-sdk/anthropic': 'Anthropic',
@@ -53,6 +71,14 @@ export function createApp(engine: Engine): Hono {
     return c.json({
       tiers: engine.getModelTiers(),
       roleTiers: engine.config.roleTiers,
+      activePresetId: engine.getModelPresetId(),
+      presets: listPresets().map((p) => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        tiers: p.tiers,
+        roleTiers: p.roleTiers,
+      })),
       catalog,
     });
   });
@@ -65,7 +91,48 @@ export function createApp(engine: Engine): Hono {
       return c.json({ error: parsed.error.flatten() }, 400);
     }
     const tiers = engine.setModelTiers(parsed.data);
-    return c.json({ tiers });
+    return c.json({
+      tiers,
+      roleTiers: engine.config.roleTiers,
+      activePresetId: engine.getModelPresetId(),
+    });
+  });
+
+  app.put('/config/role-tiers', async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = updateRoleTiersSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+    const roleTiers = engine.setRoleTiers(parsed.data);
+    return c.json({
+      tiers: engine.getModelTiers(),
+      roleTiers,
+      activePresetId: engine.getModelPresetId(),
+    });
+  });
+
+  app.put('/config/preset', async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = applyPresetSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+    try {
+      const applied = engine.applyPreset(parsed.data.presetId);
+      return c.json({
+        presetId: applied.preset.id,
+        name: applied.preset.name,
+        tiers: applied.tiers,
+        roleTiers: applied.roleTiers,
+        activePresetId: engine.getModelPresetId(),
+      });
+    } catch (err) {
+      return c.json(
+        { error: err instanceof Error ? err.message : String(err) },
+        400,
+      );
+    }
   });
 
   // --- Messages: talk to the agent ---
@@ -176,6 +243,29 @@ export function createApp(engine: Engine): Hono {
       byRole: summarizeByRole(runs),
       tree: buildCallTree(runs),
     });
+  });
+
+  // --- Benchmark results (SWE-bench-style harness output) ---
+
+  // Suite-level summary plus one row per instance, read from bench/results.
+  app.get('/bench/runs', async (c) => {
+    const overview = await readBenchOverview();
+    if (!overview) {
+      return c.json({ error: 'no benchmark results (run `pnpm bench`)' }, 404);
+    }
+    return c.json(overview);
+  });
+
+  app.get('/bench/suites', async (c) => {
+    const suites = await readBenchSuites();
+    return c.json({ suites });
+  });
+
+  // Detail for a single instance: metrics, patch, verifier verdict, trajectory.
+  app.get('/bench/runs/:instanceId', async (c) => {
+    const detail = await readBenchRun(c.req.param('instanceId'));
+    if (!detail) return c.json({ error: 'not found' }, 404);
+    return c.json(detail);
   });
 
   // --- Live event stream ---

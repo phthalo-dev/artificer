@@ -1,0 +1,16 @@
+{
+  "kind": "swebench",
+  "name": "SWE-bench Lite mini (6 tasks)",
+  "description": "Curated SWE-bench Lite instances for quick regression runs.",
+  "dataset": "princeton-nlp/SWE-bench_Lite",
+  "split": "test",
+  "config": "default",
+  "instanceIds": [
+    "pallets__flask-4045",
+    "psf__requests-2674",
+    "pytest-dev__pytest-5221",
+    "scikit-learn__scikit-learn-13497",
+    "sympy__sympy-16503",
+    "astropy__astropy-6938"
+  ]
+}

@@ -9,7 +9,19 @@ import {
   type ToolSet,
 } from 'ai';
 import { emptyUsage, type ToolInvocation } from '../storage/types.js';
+import { applyResultBudget } from '../storage/tool-results.js';
+import type { ToolResultConfig } from '../config.js';
+import type { Layout } from '../storage/layout.js';
 import type { CallResult, ToolDef } from './types.js';
+
+export interface ToolResultSpillContext {
+  layout: Layout;
+  runId: string;
+  config: ToolResultConfig;
+  onSpill?: (info: { tool: string; path: string; previewChars: number }) => void;
+  getRunCharTotal: () => number;
+  addRunChars: (n: number) => void;
+}
 
 export interface RunToolLoopOptions {
   /** A resolved AI SDK model (see resolveLanguageModel). */
@@ -22,6 +34,8 @@ export interface RunToolLoopOptions {
   maxTokens?: number;
   /** Called whenever a tool finishes, for live observability. */
   onToolCall?: (invocation: ToolInvocation) => void;
+  /** Spill large tool outputs to disk instead of feeding them to the model. */
+  toolResultSpill?: ToolResultSpillContext;
 }
 
 /** Cache-creation tokens live in provider metadata, not the normalized usage. */
@@ -48,9 +62,11 @@ export async function runToolLoop(
     maxIterations,
     maxTokens = 4096,
     onToolCall,
+    toolResultSpill,
   } = opts;
 
   const toolCalls: ToolInvocation[] = [];
+  let toolIndex = 0;
 
   const sdkTools: ToolSet = {};
   for (const def of tools) {
@@ -61,12 +77,40 @@ export async function runToolLoop(
         const args = (input ?? {}) as Record<string, unknown>;
         const at = new Date().toISOString();
         try {
-          const output = await def.handler(args);
+          const rawOutput = await def.handler(args);
+          let output = rawOutput || '(no output)';
+          let spillPath: string | undefined;
+
+          if (toolResultSpill) {
+            const index = toolIndex++;
+            const budget = await applyResultBudget({
+              layout: toolResultSpill.layout,
+              runId: toolResultSpill.runId,
+              index,
+              toolName: def.name,
+              body: output,
+              maxPerInvocation: toolResultSpill.config.maxCharsPerInvocation,
+              maxPerRun: toolResultSpill.config.maxCharsPerRun,
+              runTotalChars: toolResultSpill.getRunCharTotal(),
+            });
+            output = budget.output;
+            spillPath = budget.spillPath;
+            toolResultSpill.addRunChars(budget.runTotalChars - toolResultSpill.getRunCharTotal());
+            if (spillPath) {
+              toolResultSpill.onSpill?.({
+                tool: def.name,
+                path: spillPath,
+                previewChars: output.length,
+              });
+            }
+          }
+
           const invocation: ToolInvocation = {
             name: def.name,
             input: args,
-            output: output || '(no output)',
+            output,
             at,
+            ...(spillPath ? { spillPath } : {}),
           };
           toolCalls.push(invocation);
           onToolCall?.(invocation);

@@ -1,9 +1,11 @@
 import {
   Badge,
   Button,
+  Card,
   Group,
   Loader,
   Select,
+  SimpleGrid,
   Stack,
   Table,
   Text,
@@ -12,9 +14,10 @@ import {
 import { notifications } from '@mantine/notifications';
 import { IconCheck, IconDeviceFloppy, IconRefresh } from '@tabler/icons-react';
 import { useEffect, useMemo, useState } from 'react';
-import { useModelConfig, useUpdateModels } from '../api/hooks';
+import { useApplyPreset, useModelConfig, useUpdateModels } from '../api/hooks';
 import type {
   CatalogModel,
+  ModelPresetInfo,
   ModelTier,
   ModelTiers,
   RoleName,
@@ -23,9 +26,9 @@ import type {
 const TIERS: ModelTier[] = ['low', 'medium', 'high'];
 
 const TIER_BLURB: Record<ModelTier, string> = {
-  low: 'Lightweight, conversational work.',
-  medium: 'Coordination, review, and memory.',
-  high: 'Heavy reasoning and the actual work.',
+  low: 'Routing, comms, lightweight review.',
+  medium: 'Planning and implementation.',
+  high: 'Escalation only (orchestrator override).',
 };
 
 function money(n: number): string {
@@ -39,13 +42,75 @@ function priceLabel(model: CatalogModel | undefined): string {
   return `in ${money(i)} · out ${money(o)} /Mtok`;
 }
 
+function PresetCard({
+  preset,
+  active,
+  loading,
+  onApply,
+}: {
+  preset: ModelPresetInfo;
+  active: boolean;
+  loading: boolean;
+  onApply: () => void;
+}) {
+  return (
+    <Card
+      withBorder
+      radius="md"
+      padding="md"
+      style={{
+        borderColor: active ? 'var(--mantine-color-blue-6)' : undefined,
+        background: active ? 'var(--mantine-color-blue-0)' : undefined,
+      }}
+    >
+      <Group justify="space-between" align="flex-start" mb={6}>
+        <div>
+          <Group gap="xs">
+            <Text fw={600} size="sm">
+              {preset.name}
+            </Text>
+            {active && (
+              <Badge size="xs" color="blue" variant="filled">
+                active
+              </Badge>
+            )}
+          </Group>
+          <Text size="xs" c="dimmed" mt={4}>
+            {preset.description}
+          </Text>
+        </div>
+        <Button
+          size="xs"
+          variant={active ? 'light' : 'filled'}
+          loading={loading}
+          disabled={active}
+          onClick={onApply}
+        >
+          {active ? 'Active' : 'Apply'}
+        </Button>
+      </Group>
+      <Text size="xs" ff="monospace" c="dimmed">
+        {preset.tiers.low} / {preset.tiers.medium} / {preset.tiers.high}
+      </Text>
+    </Card>
+  );
+}
+
 export function ModelsPage() {
   const { data, isLoading } = useModelConfig();
   const update = useUpdateModels();
+  const applyPreset = useApplyPreset();
   const [draft, setDraft] = useState<ModelTiers | null>(null);
+  const [roleDraft, setRoleDraft] = useState<Record<
+    RoleName,
+    ModelTier
+  > | null>(null);
 
   useEffect(() => {
-    if (data) setDraft(data.tiers);
+    if (data) {
+      setDraft(data.tiers);
+      setRoleDraft(data.roleTiers);
+    }
   }, [data]);
 
   const byId = useMemo(() => {
@@ -54,7 +119,6 @@ export function ModelsPage() {
     return map;
   }, [data]);
 
-  // Group catalog options by provider for the dropdown.
   const selectData = useMemo(() => {
     const groups = new Map<string, { value: string; label: string }[]>();
     for (const m of data?.catalog ?? []) {
@@ -65,33 +129,31 @@ export function ModelsPage() {
     return [...groups.entries()].map(([group, items]) => ({ group, items }));
   }, [data]);
 
-  // Which roles run on each tier (inverts the role->tier mapping).
   const rolesByTier = useMemo(() => {
     const map: Record<ModelTier, RoleName[]> = { low: [], medium: [], high: [] };
-    for (const [role, tier] of Object.entries(data?.roleTiers ?? {})) {
+    for (const [role, tier] of Object.entries(roleDraft ?? {})) {
       map[tier as ModelTier].push(role as RoleName);
     }
     return map;
-  }, [data]);
+  }, [roleDraft]);
 
-  if (isLoading || !data || !draft) return <Loader size="sm" />;
+  if (isLoading || !data || !draft || !roleDraft) return <Loader size="sm" />;
 
-  const dirty = TIERS.some((t) => draft[t] !== data.tiers[t]);
+  const tiersDirty = TIERS.some((t) => draft[t] !== data.tiers[t]);
 
-  // Include the current value even if it isn't in the catalog (custom id).
   const optionsFor = (current: string) => {
     if (byId.has(current)) return selectData;
     return [{ group: 'Current', items: [{ value: current, label: current }] }, ...selectData];
   };
 
-  const save = () => {
+  const saveTiers = () => {
     update.mutate(draft, {
       onSuccess: () =>
         notifications.show({
           color: 'teal',
           icon: <IconCheck size={16} />,
           title: 'Models updated',
-          message: 'New runs will use the updated models.',
+          message: 'New runs will use the updated tier models.',
         }),
       onError: (err) =>
         notifications.show({
@@ -102,21 +164,68 @@ export function ModelsPage() {
     });
   };
 
+  const apply = (presetId: string) => {
+    applyPreset.mutate(presetId, {
+      onSuccess: (res) => {
+        setDraft(res.tiers);
+        setRoleDraft(res.roleTiers);
+        notifications.show({
+          color: 'teal',
+          icon: <IconCheck size={16} />,
+          title: `${res.name} applied`,
+          message: 'Tier models and role map updated for subsequent runs.',
+        });
+      },
+      onError: (err) =>
+        notifications.show({
+          color: 'red',
+          title: 'Preset failed',
+          message: err instanceof Error ? err.message : 'Unknown error',
+        }),
+    });
+  };
+
   return (
     <Stack gap="lg">
-      <Group justify="space-between" align="flex-end">
-        <div>
-          <Title order={3}>Models</Title>
-          <Text size="sm" c="dimmed">
-            Pick a model per complexity tier. Changes apply to runs started
-            afterwards — handy for testing different configurations.
+      <div>
+        <Title order={3}>Models</Title>
+        <Text size="sm" c="dimmed" mt={4}>
+          Pick a preset or tune tiers manually. Changes apply to runs started
+          afterwards — no restart required.
+        </Text>
+      </div>
+
+      <div>
+        <Text fw={600} size="sm" mb="sm">
+          Presets
+        </Text>
+        <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
+          {data.presets.map((preset) => (
+            <PresetCard
+              key={preset.id}
+              preset={preset}
+              active={data.activePresetId === preset.id}
+              loading={applyPreset.isPending}
+              onApply={() => apply(preset.id)}
+            />
+          ))}
+        </SimpleGrid>
+        {data.activePresetId === 'custom' && (
+          <Text size="xs" c="dimmed" mt="xs">
+            Custom configuration (manual tier edits).
           </Text>
-        </div>
+        )}
+      </div>
+
+      <Group justify="space-between" align="flex-end">
+        <Text fw={600} size="sm">
+          Tier models
+        </Text>
         <Group gap="xs">
           <Button
             variant="default"
             leftSection={<IconRefresh size={16} />}
-            disabled={!dirty || update.isPending}
+            disabled={!tiersDirty || update.isPending}
             onClick={() => setDraft(data.tiers)}
           >
             Reset
@@ -124,10 +233,10 @@ export function ModelsPage() {
           <Button
             leftSection={<IconDeviceFloppy size={16} />}
             loading={update.isPending}
-            disabled={!dirty}
-            onClick={save}
+            disabled={!tiersDirty}
+            onClick={saveTiers}
           >
-            Save
+            Save tiers
           </Button>
         </Group>
       </Group>
@@ -147,11 +256,9 @@ export function ModelsPage() {
             return (
               <Table.Tr key={tier}>
                 <Table.Td>
-                  <Group gap={6} mb={4}>
-                    <Text fw={600} tt="capitalize">
-                      {tier}
-                    </Text>
-                  </Group>
+                  <Text fw={600} tt="capitalize">
+                    {tier}
+                  </Text>
                   <Text size="xs" c="dimmed">
                     {TIER_BLURB[tier]}
                   </Text>
@@ -182,11 +289,6 @@ export function ModelsPage() {
                       </Group>
                     )}
                   />
-                  {selected && (
-                    <Text size="xs" c="dimmed" mt={4}>
-                      {selected.provider}
-                    </Text>
-                  )}
                 </Table.Td>
                 <Table.Td>
                   {selected ? money(selected.pricing.inputPerMTok) : '—'}
@@ -201,21 +303,8 @@ export function ModelsPage() {
       </Table>
 
       <Text size="xs" c="dimmed">
-        Output tokens dominate agent cost, so the output price matters most. The
-        currently active configuration is{' '}
-        <Text span fw={600}>
-          {data.tiers.low}
-        </Text>{' '}
-        /{' '}
-        <Text span fw={600}>
-          {data.tiers.medium}
-        </Text>{' '}
-        /{' '}
-        <Text span fw={600}>
-          {data.tiers.high}
-        </Text>
-        . Set defaults in the runtime's .env (LLM_MODEL_LOW / LLM_MODEL /
-        LLM_MODEL_HIGH).
+        Startup default: MODEL_PRESET=async-economy. Bench: pnpm bench:swebench /
+        pnpm bench:deepswe (results under bench/results/&lt;preset&gt;/&lt;suite&gt;).
       </Text>
     </Stack>
   );

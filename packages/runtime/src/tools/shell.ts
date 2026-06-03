@@ -2,15 +2,63 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
+import { checkGitCloneInWorkspace, checkReviewerWrite } from './shell-policy.js';
 import { buildGitEnv } from './git-env.js';
 
 const execAsync = promisify(exec);
 
 const MAX_OUTPUT = 16_000;
+const DEFAULT_TIMEOUT_MS = 1000 * 60 * 5;
 
 function truncate(text: string): string {
   if (text.length <= MAX_OUTPUT) return text;
   return `${text.slice(0, MAX_OUTPUT)}\n... (output truncated)`;
+}
+
+export interface ShellRunResult {
+  output: string;
+  timedOut: boolean;
+}
+
+/**
+ * Run a shell command with a hard timeout. On timeout the child is sent
+ * SIGKILL (not the default SIGTERM, which a hung or signal-ignoring process can
+ * swallow), guaranteeing the command cannot burn the whole run budget. The
+ * returned output carries an explicit marker so the model learns it hung.
+ */
+export async function runShellCommand(opts: {
+  command: string;
+  cwd: string;
+  env: NodeJS.ProcessEnv;
+  timeoutMs?: number;
+}): Promise<ShellRunResult> {
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT_MS;
+  try {
+    const { stdout, stderr } = await execAsync(opts.command, {
+      cwd: opts.cwd,
+      env: opts.env,
+      timeout: timeoutMs,
+      killSignal: 'SIGKILL',
+      maxBuffer: 1024 * 1024 * 10,
+    });
+    const parts = [stdout, stderr].filter(Boolean).join('\n').trim();
+    return { output: parts || '(no output)', timedOut: false };
+  } catch (err) {
+    const e = err as {
+      stdout?: string;
+      stderr?: string;
+      message: string;
+      killed?: boolean;
+      signal?: string;
+    };
+    const partial = [e.stdout, e.stderr].filter(Boolean).join('\n').trim();
+    if (e.killed || e.signal === 'SIGKILL') {
+      const marker = `Command timed out after ${timeoutMs}ms and was killed.`;
+      return { output: partial ? `${marker}\n${partial}` : marker, timedOut: true };
+    }
+    const detail = [e.stdout, e.stderr, e.message].filter(Boolean).join('\n').trim();
+    return { output: `Command failed:\n${detail}`, timedOut: false };
+  }
 }
 
 export function createShellTool(ctx: ToolContext): ToolDef[] {
@@ -38,23 +86,17 @@ export function createShellTool(ctx: ToolContext): ToolDef[] {
         const cwd = input.cwd
           ? `${workspaceDir}/${String(input.cwd)}`
           : workspaceDir;
-        try {
-          const { stdout, stderr } = await execAsync(String(input.command), {
-            cwd,
-            env,
-            timeout: 1000 * 60 * 5,
-            maxBuffer: 1024 * 1024 * 10,
-          });
-          const parts = [stdout, stderr].filter(Boolean).join('\n').trim();
-          return truncate(parts || '(no output)');
-        } catch (err) {
-          const e = err as { stdout?: string; stderr?: string; message: string };
-          const detail = [e.stdout, e.stderr, e.message]
-            .filter(Boolean)
-            .join('\n')
-            .trim();
-          return truncate(`Command failed:\n${detail}`);
+        const command = String(input.command);
+        const cloneCheck = checkGitCloneInWorkspace(command, cwd, workspaceDir);
+        if (!cloneCheck.allowed) {
+          return `Error: ${cloneCheck.reason}`;
         }
+        const writeCheck = checkReviewerWrite(command, ctx.run.role);
+        if (!writeCheck.allowed) {
+          return `Error: ${writeCheck.reason}`;
+        }
+        const { output } = await runShellCommand({ command, cwd, env });
+        return truncate(output);
       },
     },
   ];

@@ -15,6 +15,20 @@ export type {
 } from './types';
 export { InstanceState } from './types';
 
+export { WakeService } from './wake.js';
+export type { WakeServiceConfig } from './wake.js';
+
+export { QueueBridge } from './queue-bridge.js';
+export type { QueueBridgeConfig } from './queue-bridge.js';
+
+export { IdleMonitor } from './idle-monitor.js';
+export type { IdleMonitorConfig } from './idle-monitor.js';
+
+export { CloudWorkDispatcher, createCloudWorkDispatcher } from './dispatcher.js';
+
+export { runBridge, loadBridgeConfigFromEnv } from './bridge.js';
+export type { BridgeConfig } from './bridge.js';
+
 export interface OrchestratorConfig {
   awsRegion: string;
   defaultSubnetId: string;

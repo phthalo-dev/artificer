@@ -12,7 +12,7 @@
     "type-check": "tsc --noEmit"
   },
   "dependencies": {
-    "@artificer/opencode-client": "workspace:*",
+    "@artificer/agent-gateway": "workspace:*",
     "zod": "^3.22.4"
   },
   "devDependencies": {

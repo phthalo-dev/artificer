@@ -1,0 +1,7 @@
+# Official SWE-bench evaluation harness. Pulls in datasets + docker clients.
+# Install into a Python 3.11+ virtualenv:
+#   python -m venv .venv && source .venv/bin/activate
+#   pip install -r bench/eval/requirements.txt
+# Requires a running Docker daemon; the harness builds a per-instance image
+# and runs the FAIL_TO_PASS / PASS_TO_PASS tests inside it.
+swebench>=3.0.0

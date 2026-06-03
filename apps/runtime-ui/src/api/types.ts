@@ -182,6 +182,97 @@ export interface MessageCost {
   tree: RunNode[];
 }
 
+// --- Benchmark harness (SWE-bench-style) ---
+
+export interface BenchModels {
+  low: string;
+  medium: string;
+  high: string;
+}
+
+export interface BenchInstanceSummary {
+  instanceId: string;
+  repo: string;
+  outcome: string;
+  resolved: boolean | null;
+  durationMs: number;
+  patchBytes: number;
+  costUsd: number;
+  runs: number;
+  inputTokens: number;
+  outputTokens: number;
+  hasTrajectory: boolean;
+}
+
+export interface BenchEfficiencyPoint {
+  id: string;
+  label: string;
+  costUsd: number;
+  scorePct: number;
+  kind: 'instance' | 'run';
+  resolved: boolean | null;
+  isCurrent?: boolean;
+}
+
+export interface BenchSuiteCatalogEntry {
+  id: string;
+  kind: 'swebench' | 'deepswe';
+  name: string;
+  description?: string;
+  taskCount: number;
+  runCommand: string;
+  evalCommand: string;
+}
+
+export interface BenchOverview {
+  generatedAt: string | null;
+  graded: boolean;
+  modelName: string | null;
+  models: BenchModels | null;
+  suiteKind: 'swebench' | 'deepswe' | null;
+  suiteName: string | null;
+  suiteDescription: string | null;
+  summary: {
+    instances: number;
+    resolved: number | null;
+    resolveRate: number | null;
+    totalCostUsd: number;
+    costPerSolvedUsd: number | null;
+    avgCostUsd: number;
+    totalRuns: number;
+    inputTokens: number;
+    outputTokens: number;
+  };
+  instances: BenchInstanceSummary[];
+  instanceEfficiency: BenchEfficiencyPoint[];
+  runEfficiency: BenchEfficiencyPoint[];
+}
+
+export type VerifierStatus =
+  | 'resolved'
+  | 'unresolved'
+  | 'empty_patch'
+  | 'error'
+  | 'ungraded';
+
+export interface BenchRunDetail {
+  instanceId: string;
+  repo: string;
+  baseCommit: string;
+  outcome: string;
+  resolved: boolean | null;
+  problemStatement: string | null;
+  modelName: string | null;
+  models: BenchModels | null;
+  durationMs: number;
+  patchBytes: number;
+  usage: UsageSummary | null;
+  byRole: Record<string, UsageSummary>;
+  patch: string | null;
+  verifier: { status: VerifierStatus; note: string | null };
+  trajectory: RunNode[] | null;
+}
+
 export type ModelTier = 'low' | 'medium' | 'high';
 
 export interface ModelTiers {
@@ -203,8 +294,18 @@ export interface CatalogModel {
   pricing: ModelPricing;
 }
 
+export interface ModelPresetInfo {
+  id: string;
+  name: string;
+  description: string;
+  tiers: ModelTiers;
+  roleTiers: Record<RoleName, ModelTier>;
+}
+
 export interface ModelConfig {
   tiers: ModelTiers;
   roleTiers: Record<RoleName, ModelTier>;
+  activePresetId: string;
+  presets: ModelPresetInfo[];
   catalog: CatalogModel[];
 }

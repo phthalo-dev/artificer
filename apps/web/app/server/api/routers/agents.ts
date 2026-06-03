@@ -5,7 +5,7 @@ import { CreateAgentSchema, UpdateAgentSchema } from '@artificer/shared';
 import { encrypt, decrypt } from '@artificer/shared';
 import { env } from '../../env';
 import { Orchestrator } from '@artificer/orchestrator';
-import { AgentGateway } from '@artificer/agent-gateway';
+import { AgentGateway } from '@artificer/agent-gateway/opencode';
 
 let orchestrator: Orchestrator | null = null;
 

@@ -6,11 +6,14 @@ import {
   createCommunicatorTools,
   createReplyTool,
 } from './communication.js';
+import { createEditTool } from './edit.js';
 import { createFetchTools } from './fetch.js';
 import { createFileTools } from './files.js';
 import { createGitTools } from './git.js';
 import { createOrchestratorTools } from './orchestrator-tool.js';
+import { createSearchTools } from './search.js';
 import { createShellTool } from './shell.js';
+import { createToolResultReadTools } from './tool-result-read.js';
 
 function byName(tools: ToolDef[], names: string[]): ToolDef[] {
   const set = new Set(names);
@@ -27,10 +30,14 @@ export function toolsForRole(role: RoleName, ctx: ToolContext): ToolDef[] {
   const reply = createReplyTool(ctx);
   const communicator = createCommunicatorTools(ctx);
   const files = createFileTools(ctx);
+  const edit = createEditTool(ctx);
   const shell = createShellTool(ctx);
   const git = createGitTools(ctx);
   const artifacts = createArtifactTools(ctx);
   const fetchTools = createFetchTools(ctx);
+  const toolResultRead = createToolResultReadTools(ctx);
+  const searchAll = createSearchTools(ctx);
+  const searchGrepOnly = createSearchTools(ctx, { includeGlob: false });
 
   switch (role) {
     case 'communicator':
@@ -44,6 +51,8 @@ export function toolsForRole(role: RoleName, ctx: ToolContext): ToolDef[] {
       return [
         ...orchestrator,
         ...reply,
+        ...searchGrepOnly,
+        ...toolResultRead,
         ...byName(artifacts, ['read_plan']),
         ...byName(files, ['read_file', 'list_files']),
       ];
@@ -51,6 +60,9 @@ export function toolsForRole(role: RoleName, ctx: ToolContext): ToolDef[] {
     case 'planner':
       return [
         ...files,
+        ...edit,
+        ...searchAll,
+        ...toolResultRead,
         ...shell,
         ...git,
         ...byName(artifacts, ['write_plan', 'read_plan']),
@@ -60,6 +72,8 @@ export function toolsForRole(role: RoleName, ctx: ToolContext): ToolDef[] {
     case 'reviewer':
       return [
         ...byName(files, ['read_file', 'list_files']),
+        ...searchAll,
+        ...toolResultRead,
         ...shell,
         ...git,
         ...byName(artifacts, ['read_plan', 'submit_review']),
@@ -69,6 +83,9 @@ export function toolsForRole(role: RoleName, ctx: ToolContext): ToolDef[] {
     case 'worker':
       return [
         ...files,
+        ...edit,
+        ...searchAll,
+        ...toolResultRead,
         ...shell,
         ...git,
         ...byName(artifacts, ['read_plan']),

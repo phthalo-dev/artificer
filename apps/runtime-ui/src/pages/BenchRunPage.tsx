@@ -1,0 +1,252 @@
+import {
+  Alert,
+  Anchor,
+  Badge,
+  Box,
+  Code,
+  Group,
+  Loader,
+  Paper,
+  SimpleGrid,
+  Stack,
+  Tabs,
+  Text,
+  Title,
+} from '@mantine/core';
+import { IconArrowLeft } from '@tabler/icons-react';
+import { Link, useParams } from 'react-router-dom';
+import { useBenchRun } from '../api/hooks';
+import type { BenchRunDetail, VerifierStatus } from '../api/types';
+import {
+  BenchTrajectory,
+  countSteps,
+  peakContext,
+} from '../components/BenchTrajectory';
+import { BreakdownTable } from '../components/BreakdownTable';
+import { formatCost, formatDuration } from '../format';
+
+const VERIFIER_COLOR: Record<VerifierStatus, string> = {
+  resolved: 'green',
+  unresolved: 'red',
+  empty_patch: 'orange',
+  error: 'red',
+  ungraded: 'gray',
+};
+
+function Metric({ label, value }: { label: string; value: string }) {
+  return (
+    <Box>
+      <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={4}>
+        {label}
+      </Text>
+      <Text fz={22} fw={700} lh={1}>
+        {value}
+      </Text>
+    </Box>
+  );
+}
+
+function VerdictBadge({ run }: { run: BenchRunDetail }) {
+  if (run.resolved === true)
+    return (
+      <Badge color="green" variant="filled" radius="sm" size="lg">
+        PASS
+      </Badge>
+    );
+  if (run.resolved === false)
+    return (
+      <Badge color="red" variant="light" radius="sm" size="lg">
+        FAIL
+      </Badge>
+    );
+  return (
+    <Badge color="gray" variant="light" radius="sm" size="lg">
+      UNGRADED
+    </Badge>
+  );
+}
+
+function PatchView({ patch }: { patch: string }) {
+  const lines = patch.split('\n');
+  return (
+    <Paper withBorder radius="md" p="sm" style={{ overflowX: 'auto' }}>
+      <Box
+        component="pre"
+        style={{ margin: 0, fontSize: 12, fontFamily: 'monospace', lineHeight: 1.5 }}
+      >
+        {lines.map((line, i) => {
+          let color: string | undefined;
+          if (line.startsWith('+') && !line.startsWith('+++'))
+            color = 'var(--mantine-color-green-7)';
+          else if (line.startsWith('-') && !line.startsWith('---'))
+            color = 'var(--mantine-color-red-7)';
+          else if (line.startsWith('@@'))
+            color = 'var(--mantine-color-blue-6)';
+          else if (
+            line.startsWith('diff ') ||
+            line.startsWith('index ') ||
+            line.startsWith('+++') ||
+            line.startsWith('---')
+          )
+            color = 'var(--mantine-color-dimmed)';
+          return (
+            <div key={i} style={{ color, whiteSpace: 'pre-wrap' }}>
+              {line || '\u00a0'}
+            </div>
+          );
+        })}
+      </Box>
+    </Paper>
+  );
+}
+
+export function BenchRunPage() {
+  const { instanceId } = useParams();
+  const { data, isLoading, error } = useBenchRun(instanceId);
+
+  if (isLoading) return <Loader size="sm" />;
+  if (error || !data) {
+    return (
+      <Alert color="red" title="Could not load benchmark run">
+        {error instanceof Error ? error.message : 'Not found'}
+      </Alert>
+    );
+  }
+
+  const usage = data.usage;
+  const steps = data.trajectory ? countSteps(data.trajectory) : null;
+  const peakCtx = data.trajectory ? peakContext(data.trajectory) : null;
+
+  return (
+    <Stack gap="lg">
+      <Anchor component={Link} to="/bench" size="sm">
+        <Group gap={4}>
+          <IconArrowLeft size={14} /> Back to benchmark
+        </Group>
+      </Anchor>
+
+      <div>
+        <Group gap={8} mb={4}>
+          <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
+            Artificer Runtime
+          </Text>
+          <Text size="xs" c="dimmed">
+            · {data.repo}
+          </Text>
+        </Group>
+        <Group gap="sm" align="center">
+          <Title order={2}>{data.modelName ?? 'runtime'}</Title>
+          <VerdictBadge run={data} />
+          <Badge variant="light" color="gray" radius="sm">
+            {data.outcome.replace(/_/g, ' ')}
+          </Badge>
+        </Group>
+        <Text c="dimmed" size="sm" mt={4}>
+          task: <Code>{data.instanceId}</Code>
+        </Text>
+      </div>
+
+      <Paper withBorder radius="md" p="lg">
+        <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }} spacing="xl">
+          <Metric label="Steps" value={steps !== null ? String(steps) : '—'} />
+          <Metric label="Cost" value={usage ? formatCost(usage.costUsd) : '—'} />
+          <Metric
+            label="Input tok"
+            value={usage ? usage.inputTokens.toLocaleString() : '—'}
+          />
+          <Metric
+            label="Output tok"
+            value={usage ? usage.outputTokens.toLocaleString() : '—'}
+          />
+          <Metric
+            label="Peak ctx"
+            value={peakCtx !== null ? peakCtx.toLocaleString() : '—'}
+          />
+          <Metric label="Duration" value={formatDuration(data.durationMs)} />
+        </SimpleGrid>
+      </Paper>
+
+      <Tabs defaultValue="trajectory" keepMounted={false}>
+        <Tabs.List>
+          <Tabs.Tab value="trajectory">Trajectory</Tabs.Tab>
+          <Tabs.Tab value="verifier">Verifier output</Tabs.Tab>
+          <Tabs.Tab value="patch">Model patch</Tabs.Tab>
+          <Tabs.Tab value="metrics">Metrics</Tabs.Tab>
+        </Tabs.List>
+
+        <Tabs.Panel value="trajectory" pt="md">
+          <Group gap="xs" mb="sm">
+            <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
+              {data.modelName}
+            </Text>
+            {usage && (
+              <Text size="xs" c="dimmed">
+                · {usage.runs} runs · {formatCost(usage.costUsd)}
+              </Text>
+            )}
+          </Group>
+          {data.trajectory ? (
+            <BenchTrajectory tree={data.trajectory} />
+          ) : (
+            <Alert color="gray" variant="light">
+              No trajectory captured for this instance yet. Re-run{' '}
+              <Code>pnpm bench</Code> to record the agent's step-by-step call
+              tree.
+            </Alert>
+          )}
+        </Tabs.Panel>
+
+        <Tabs.Panel value="verifier" pt="md">
+          <Group gap="sm" mb="sm">
+            <Badge color={VERIFIER_COLOR[data.verifier.status]} variant="light">
+              {data.verifier.status.replace(/_/g, ' ')}
+            </Badge>
+            <Text size="sm">{data.verifier.note}</Text>
+          </Group>
+          <Text size="sm" c="dimmed">
+            SWE-bench: <Code>pnpm bench:eval</Code>. DeepSWE:{' '}
+            <Code>pnpm bench:eval:deepswe</Code>. Then{' '}
+            <Code>pnpm bench:report</Code>.
+          </Text>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="patch" pt="md">
+          {data.patch ? (
+            <PatchView patch={data.patch} />
+          ) : (
+            <Text c="dimmed" size="sm">
+              No patch produced ({data.patchBytes} bytes).
+            </Text>
+          )}
+        </Tabs.Panel>
+
+        <Tabs.Panel value="metrics" pt="md">
+          <Stack gap="lg">
+            <div>
+              <Text fw={600} size="sm" mb={6}>
+                By role
+              </Text>
+              <BreakdownTable label="Role" data={data.byRole} />
+            </div>
+            {data.problemStatement && (
+              <div>
+                <Text fw={600} size="sm" mb={6}>
+                  Problem statement
+                </Text>
+                <Paper withBorder radius="md" p="sm">
+                  <Text
+                    size="sm"
+                    style={{ whiteSpace: 'pre-wrap' }}
+                    lineClamp={20}
+                  >
+                    {data.problemStatement}
+                  </Text>
+                </Paper>
+              </div>
+            )}
+          </Stack>
+        </Tabs.Panel>
+      </Tabs>
+    </Stack>
+  );
+}

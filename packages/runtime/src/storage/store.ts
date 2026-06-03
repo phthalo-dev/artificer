@@ -30,23 +30,45 @@ async function ensureDir(dir: string): Promise<void> {
   await fs.mkdir(dir, { recursive: true });
 }
 
-async function writeJson(file: string, data: unknown): Promise<void> {
+/** Per-target serialization so concurrent saveRun calls cannot collide on rename. */
+const writeChains = new Map<string, Promise<void>>();
+
+async function writeJsonAtomic(file: string, data: unknown): Promise<void> {
   await ensureDir(path.dirname(file));
-  await fs.writeFile(file, JSON.stringify(data, null, 2), 'utf8');
+  const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`;
+  const payload = JSON.stringify(data, null, 2);
+  await fs.writeFile(tmp, payload, 'utf8');
+  await fs.rename(tmp, file);
+}
+
+async function writeJson(file: string, data: unknown): Promise<void> {
+  const prev = writeChains.get(file) ?? Promise.resolve();
+  const next = prev
+    .catch(() => {})
+    .then(() => writeJsonAtomic(file, data));
+  writeChains.set(file, next);
+  await next;
 }
 
 async function readJson<T>(file: string): Promise<T | null> {
-  try {
-    const raw = await fs.readFile(file, 'utf8');
-    return JSON.parse(raw) as T;
-  } catch (err) {
-    const code = (err as NodeJS.ErrnoException).code;
-    // Missing file, or a path component that isn't a directory/is a dir.
-    if (code === 'ENOENT' || code === 'ENOTDIR' || code === 'EISDIR') {
-      return null;
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    try {
+      const raw = await fs.readFile(file, 'utf8');
+      if (!raw.trim()) return null;
+      return JSON.parse(raw) as T;
+    } catch (err) {
+      const code = (err as NodeJS.ErrnoException).code;
+      if (code === 'ENOENT' || code === 'ENOTDIR' || code === 'EISDIR') {
+        return null;
+      }
+      if (err instanceof SyntaxError && attempt < 2) {
+        await new Promise((r) => setTimeout(r, 25 * (attempt + 1)));
+        continue;
+      }
+      throw err;
     }
-    throw err;
   }
+  return null;
 }
 
 /** List subdirectory names in a dir, ignoring stray files like .DS_Store. */
@@ -122,7 +144,7 @@ export class Store {
 
   async createWorkstream(
     input: Pick<Workstream, 'title' | 'goal'> &
-      Partial<Pick<Workstream, 'repoUrl' | 'summary' | 'status'>>,
+      Partial<Pick<Workstream, 'repoUrl' | 'baseCommit' | 'summary' | 'status'>>,
   ): Promise<Workstream> {
     const ts = now();
     const workstream: Workstream = {
@@ -132,6 +154,7 @@ export class Store {
       status: input.status ?? 'pending',
       summary: input.summary ?? '',
       repoUrl: input.repoUrl,
+      baseCommit: input.baseCommit,
       createdAt: ts,
       updatedAt: ts,
     };
@@ -146,7 +169,9 @@ export class Store {
 
   async updateWorkstream(
     id: string,
-    patch: Partial<Pick<Workstream, 'status' | 'summary' | 'title' | 'repoUrl'>>,
+    patch: Partial<
+      Pick<Workstream, 'status' | 'summary' | 'title' | 'repoUrl' | 'baseCommit'>
+    >,
   ): Promise<Workstream | null> {
     const existing = await this.getWorkstream(id);
     if (!existing) return null;
