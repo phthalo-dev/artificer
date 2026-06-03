@@ -3,9 +3,20 @@ import type { RuntimeConfig } from '../config.js';
 import type { EngineApi, RuntimeEvent, SpawnCallInput } from '../context.js';
 import { resolveLanguageModel } from '../llm/provider.js';
 import { Store } from '../storage/store.js';
-import type { Message, RunRecord, Workstream } from '../storage/types.js';
+import type {
+  Message,
+  RunRecord,
+  Workstream,
+  WorkstreamStatus,
+} from '../storage/types.js';
 import { executeCall } from './call.js';
 import { findGitRepo } from './git-repo.js';
+import { cloneRepoIntoWorkspace, hasUncommittedChanges } from './git-ops.js';
+import {
+  nextWorkstreamAction,
+  type WorkstreamFacts,
+} from './workstream-machine.js';
+import { buildGitEnv } from '../tools/git-env.js';
 import { recordPlanReviewFallback } from './spawn-guards.js';
 import {
   insufficientBalanceUserMessage,
@@ -318,12 +329,7 @@ export class Engine implements EngineApi {
   ): Promise<void> {
     const ws = await this.store.getWorkstream(workstreamId);
     if (!ws) throw new Error(`workstream ${workstreamId} not found`);
-    await this.spawnCall({
-      role: 'orchestrator',
-      description: `A new workstream was created. Goal: ${ws.goal}. Get it planned and executed.`,
-      workstreamId,
-      originMessageId,
-    });
+    await this.stepWorkstream(workstreamId, originMessageId);
   }
 
   async startWorkstream(input: {
@@ -343,13 +349,7 @@ export class Engine implements EngineApi {
     });
     this.emit({ kind: 'workstream', at: ws.createdAt, data: ws });
 
-    await this.spawnCall({
-      role: 'orchestrator',
-      description: `A new workstream was created. Goal: ${input.goal}. Get it planned and executed.`,
-      workstreamId: ws.id,
-      parentRunId: input.parentRunId,
-      originMessageId: input.originMessageId,
-    });
+    await this.stepWorkstream(ws.id, input.originMessageId, input.parentRunId);
     return ws;
   }
 
@@ -467,7 +467,138 @@ export class Engine implements EngineApi {
     }
   }
 
-  /** After a child call finishes, re-invoke the workstream orchestrator. */
+  /** Workstream statuses from which no further work is dispatched. */
+  private static readonly FSM_TERMINAL = new Set<string>([
+    'done',
+    'blocked',
+    'failed',
+    'cancelled',
+  ]);
+
+  private static readonly STATUS_FOR_ROLE: Record<string, WorkstreamStatus> = {
+    planner: 'planning',
+    worker: 'in_progress',
+    reviewer: 'reviewing',
+  };
+
+  /**
+   * Advance a workstream one deterministic step: gather facts, ask the state
+   * machine for the next action, and execute it. This replaces the LLM
+   * orchestrator — routing is mechanical, so it lives in code.
+   */
+  private async stepWorkstream(
+    workstreamId: string,
+    originMessageId?: string,
+    parentRunId?: string,
+  ): Promise<void> {
+    const ws = await this.store.getWorkstream(workstreamId);
+    if (!ws || Engine.FSM_TERMINAL.has(ws.status)) return;
+
+    const action = nextWorkstreamAction(await this.computeFacts(ws));
+
+    switch (action.kind) {
+      case 'setup': {
+        const workspaceDir = this.store.layout.workstreamWorkspace(workstreamId);
+        try {
+          await cloneRepoIntoWorkspace(
+            workspaceDir,
+            ws.repoUrl ?? '',
+            ws.baseCommit,
+            buildGitEnv(this.config.github),
+          );
+        } catch (err) {
+          await this.blockWorkstream(
+            ws,
+            `setup_failed: could not clone ${ws.repoUrl} (${err instanceof Error ? err.message : String(err)})`,
+          );
+          return;
+        }
+        // Repo is ready now — continue without waiting for another tick.
+        await this.stepWorkstream(workstreamId, originMessageId, parentRunId);
+        return;
+      }
+      case 'dispatch': {
+        const status = Engine.STATUS_FOR_ROLE[action.role];
+        if (status && ws.status !== status) {
+          await this.store.updateWorkstream(workstreamId, { status });
+          await this.emitWorkstream(workstreamId);
+        }
+        await this.spawnCall({
+          role: action.role,
+          description: action.task,
+          workstreamId,
+          parentRunId,
+          originMessageId,
+        });
+        return;
+      }
+      case 'done':
+        await this.store.updateWorkstream(workstreamId, { status: 'done' });
+        await this.emitWorkstream(workstreamId);
+        await this.reply(`Workstream "${ws.title}" is complete.`, workstreamId);
+        return;
+      case 'blocked':
+        await this.blockWorkstream(ws, action.reason);
+        return;
+    }
+  }
+
+  /** Gather the facts the state machine transitions on. */
+  private async computeFacts(ws: Workstream): Promise<WorkstreamFacts> {
+    const workspaceDir = this.store.layout.workstreamWorkspace(ws.id);
+    const repoDir = await findGitRepo(workspaceDir);
+    const patchPresent = repoDir
+      ? await hasUncommittedChanges(repoDir)
+      : false;
+    const [plan, reviewsRaw, wsRuns] = await Promise.all([
+      this.store.readPlan(ws.id),
+      this.store.listReviews(ws.id),
+      this.store.listRunsForWorkstream(ws.id),
+    ]);
+    const reviews = [...reviewsRaw].sort((a, b) =>
+      a.createdAt.localeCompare(b.createdAt),
+    );
+    const lastReview = reviews.at(-1);
+    const workSinceLastReview = wsRuns.filter(
+      (r) =>
+        r.role === 'worker' &&
+        r.status === 'done' &&
+        (!lastReview || r.createdAt > lastReview.createdAt),
+    ).length;
+    return {
+      hasRepoUrl: Boolean(ws.repoUrl),
+      repoReady: repoDir !== undefined,
+      planWritten: Boolean(plan),
+      patchPresent,
+      reviewCount: reviews.length,
+      lastReviewApproved: lastReview?.approved,
+      workSinceLastReview,
+      totalRuns: wsRuns.length,
+      maxRuns: this.config.maxRunsPerWorkstream,
+    };
+  }
+
+  private async blockWorkstream(ws: Workstream, reason: string): Promise<void> {
+    await this.store.updateWorkstream(ws.id, {
+      status: 'blocked',
+      summary: `${ws.summary ?? ''}\n\n[System] ${reason}`.trim(),
+    });
+    await this.emitWorkstream(ws.id);
+    await this.reply(`Workstream "${ws.title}" paused: ${reason}`, ws.id);
+  }
+
+  private async emitWorkstream(workstreamId: string): Promise<void> {
+    const ws = await this.store.getWorkstream(workstreamId);
+    if (ws) {
+      this.emit({
+        kind: 'workstream',
+        at: ws.updatedAt ?? ws.createdAt,
+        data: ws,
+      });
+    }
+  }
+
+  /** After a work call finishes, advance the workstream state machine. */
   private async afterRun(run: RunRecord): Promise<void> {
     // The communicator's output is user-facing; if it answered in text without
     // ever using the reply tool, deliver that text so the message isn't lost.
@@ -489,141 +620,15 @@ export class Engine implements EngineApi {
       return;
     }
 
-    const reinvokes = (RUN_ROLES_THAT_REINVOKE as readonly string[]).includes(
-      run.role,
-    );
-    if (!reinvokes || !run.workstreamId) return;
+    // Only the generative work roles drive the state machine forward; the
+    // deterministic FSM decides what (if anything) happens next.
+    const isWork =
+      run.role === 'planner' ||
+      run.role === 'worker' ||
+      run.role === 'reviewer';
+    if (!isWork || !run.workstreamId) return;
 
-    const ws = await this.store.getWorkstream(run.workstreamId);
-    if (!ws || !Store.isActiveStatus(ws.status)) return;
-
-    const wsRuns = await this.store.listRunsForWorkstream(run.workstreamId);
-    let reviews = await this.store.listReviews(run.workstreamId);
-
-    // Reviewer finished without submit_review — retry once, then auto-approve the
-    // plan so workers can run before the bench timeout expires.
-    if (
-      run.role === 'reviewer' &&
-      run.status === 'done' &&
-      !hasSuccessfulTool(run, 'submit_review')
-    ) {
-      const plan = await this.store.readPlan(run.workstreamId);
-      const hasPlanReview = reviews.some((r) => r.stage === 'plan');
-      if (plan && !hasPlanReview) {
-        const failedReviewers = wsRuns.filter(
-          (r) =>
-            r.role === 'reviewer' &&
-            r.status === 'done' &&
-            !hasSuccessfulTool(r, 'submit_review'),
-        ).length;
-        if (failedReviewers <= 1) {
-          await this.spawnCall({
-            role: 'reviewer',
-            description:
-              'Your previous pass did not call submit_review. Read the plan with read_plan, ' +
-              'then call submit_review now with stage "plan", severity, approved, and notes. ' +
-              'Do not re-read the entire codebase.',
-            workstreamId: run.workstreamId,
-            parentRunId: run.id,
-            originMessageId: run.originMessageId,
-            complexity: 'high',
-          });
-          return;
-        }
-        await recordPlanReviewFallback(
-          this.store,
-          run.workstreamId,
-          run.output,
-        );
-        reviews = await this.store.listReviews(run.workstreamId);
-      }
-    }
-
-    // Approved plan review but no workers yet — start implementation without
-    // waiting for another orchestrator pass (flash orchestrators often loop).
-    if (
-      run.role === 'reviewer' &&
-      run.status === 'done' &&
-      hasSuccessfulTool(run, 'submit_review')
-    ) {
-      const planReview = reviews
-        .filter((r) => r.stage === 'plan')
-        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-        .at(-1);
-      const hasWorker = wsRuns.some((r) => r.role === 'worker');
-      if (planReview?.approved && !hasWorker) {
-        await this.spawnCall({
-          role: 'worker',
-          description:
-            'Implement the approved plan in the local repo. Apply the source changes from the plan. ' +
-            'Do not modify test files unless the plan explicitly requires it. Report BLOCKED if stuck.',
-          workstreamId: run.workstreamId,
-          parentRunId: run.id,
-          originMessageId: run.originMessageId,
-          complexity: 'medium',
-        });
-        return;
-      }
-    }
-
-    if (wsRuns.length >= this.config.maxRunsPerWorkstream) {
-      await this.store.updateWorkstream(run.workstreamId, {
-        status: 'blocked',
-        summary: `${ws.summary}\n\n[System] Hit the run cap (${this.config.maxRunsPerWorkstream}); pausing for human input.`.trim(),
-      });
-      await this.reply(
-        `Workstream "${ws.title}" hit its automatic work limit and is paused. Send a note if you want me to continue or adjust course.`,
-        run.workstreamId,
-      );
-      return;
-    }
-
-    // Stop when reviews keep rejecting or the workstream oscillates between
-    // re-planning and re-reviewing without converging.
-    const stall = detectConvergenceStall(wsRuns, reviews);
-    if (stall) {
-      const detail = convergenceStallMessage(stall);
-      await this.store.updateWorkstream(run.workstreamId, {
-        status: 'blocked',
-        summary: `${ws.summary}\n\n[System] ${detail}`.trim(),
-      });
-      await this.reply(
-        `Workstream "${ws.title}" paused: ${detail}`,
-        run.workstreamId,
-      );
-      return;
-    }
-
-    // Stop thrashing when work calls keep producing nothing (e.g. a reviewer
-    // that never submits a review) rather than burning the whole run budget.
-    const unproductiveStreak = await trailingUnproductiveWorkRuns(
-      wsRuns,
-      this.store,
-    );
-    if (unproductiveStreak >= MAX_UNPRODUCTIVE_WORK_RUNS) {
-      await this.store.updateWorkstream(run.workstreamId, {
-        status: 'blocked',
-        summary: `${ws.summary}\n\n[System] Paused after ${unproductiveStreak} consecutive work calls produced no usable result (e.g. a reviewer that never submitted a review). This usually means the model assigned to a role could not reliably drive its tools. Send a note to retry or reconfigure the role models.`.trim(),
-      });
-      await this.reply(
-        `Workstream "${ws.title}" stalled: ${unproductiveStreak} calls in a row produced no usable result, so I've paused it. This often means the model assigned to a role isn't reliably using its tools — try stronger models or send a note to continue.`,
-        run.workstreamId,
-      );
-      return;
-    }
-
-    // Coalesce: if a pass is already queued for this workstream, let it absorb
-    // this result instead of stacking another orchestrator call.
-    if (this.orchestratorQueued.has(run.workstreamId)) return;
-    this.orchestratorQueued.add(run.workstreamId);
-
-    await this.spawnCall({
-      role: 'orchestrator',
-      description: `${describeOutcome(run)}\n\nReview the workstream status and decide the next step.`,
-      workstreamId: run.workstreamId,
-      parentRunId: run.id,
-      originMessageId: run.originMessageId,
-    });
+    await this.stepWorkstream(run.workstreamId, run.originMessageId, run.id);
   }
 
   /** Notify the user once and pause active work when billing blocks LLM calls. */
