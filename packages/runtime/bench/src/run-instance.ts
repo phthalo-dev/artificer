@@ -7,6 +7,7 @@ import { collectCost } from './cost.js';
 import type { RunNode } from './client.js';
 import { type RuntimeEvent, subscribeEvents } from './events.js';
 import { extractPatch } from './extract-patch.js';
+import { decidePoll } from './poll.js';
 import type { RuntimeHandle } from './runtime-process.js';
 import type {
   AttemptOutcome,
@@ -16,8 +17,6 @@ import type {
 } from './types.js';
 
 const execAsync = promisify(exec);
-
-const TERMINAL = new Set(['done', 'failed', 'cancelled', 'blocked']);
 
 /**
  * Prints concise live progress lines from the runtime's event stream:
@@ -386,6 +385,8 @@ export async function runInstance(
   // Grace window: if the agent never starts a workstream and goes idle, stop.
   let idleSince: number | undefined;
 
+  // Grace before declaring an idle queue dead — covers normal between-run gaps.
+  const idleGraceMs = config.pollIntervalMs * 3;
   while (Date.now() < deadline) {
     await sleep(config.pollIntervalMs);
     let state;
@@ -399,25 +400,21 @@ export async function runInstance(
     if (ws) {
       workstreamId = ws.id;
       workstreamStatus = ws.status;
-
-      if (TERMINAL.has(ws.status)) {
-        outcome =
-          ws.status === 'done'
-            ? 'submitted'
-            : ws.status === 'blocked'
-              ? 'blocked'
-              : 'failed';
-        break;
-      }
-      idleSince = undefined;
-    } else if (!state.busy) {
-      // No workstream yet and the queue is idle: track how long this persists.
-      idleSince ??= Date.now();
-      if (Date.now() - idleSince > config.pollIntervalMs * 3) {
-        outcome = 'failed';
-        break;
-      }
     }
+
+    const decision = decidePoll(state, idleSince, Date.now(), idleGraceMs);
+    if (decision.kind === 'terminal') {
+      outcome = decision.outcome;
+      workstreamStatus = decision.workstreamStatus ?? workstreamStatus;
+      break;
+    }
+    if (decision.kind === 'stalled') {
+      // Workstream exists but nothing is running/queued (e.g. orchestrator
+      // stalled without dispatching), or no workstream ever started.
+      outcome = 'failed';
+      break;
+    }
+    idleSince = decision.idleSince;
   }
 
   stopProgress();
