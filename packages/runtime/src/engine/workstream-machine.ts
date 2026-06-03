@@ -12,10 +12,11 @@
 export const MAX_REVIEW_CYCLES = 3;
 
 export const PLAN_TASK =
-  'Investigate the goal in the local repo (read_file, grep, run_shell). ' +
-  'Write a concrete, step-by-step plan with write_plan, including the exact ' +
-  'test command to verify the fix. Investigate only what the blackboard does ' +
-  'not already cover.';
+  'Write the implementation plan for this goal and call write_plan in THIS run. ' +
+  'Do minimal investigation first — read the file(s) the issue points to and ' +
+  'grep the relevant symbol (a few calls), then write a short plan naming the ' +
+  'root-cause file and lines, the exact change, and the command to verify the ' +
+  'fix. Do not do git-history archaeology or read unrelated files.';
 
 export const IMPLEMENT_TASK =
   'Implement the plan by editing the repository source in the workspace. ' +

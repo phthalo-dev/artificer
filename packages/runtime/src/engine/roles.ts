@@ -156,26 +156,23 @@ When the workstream goal says not to modify or add test files (bench/SWE eval),
 the plan must only change source under src/ (and similar production paths).
 Do not add steps that edit files under test/ — verification is external.
 
-Write the plan with write_plan, following these rules:
-- Map the files first: list each file you will create or modify and its single
-  responsibility. Prefer small, focused files over large ones that do too much.
-- Break the work into bite-sized steps a worker can do independently, each scoped
-  to roughly one file or unit.
-- Structure implementation around tests: a step to write a failing test, a step
-  to make it pass, a step to verify. Show the exact code and the exact commands
-  (with expected output) for each step — not descriptions of what to do.
-- Use exact file paths everywhere.
-- No placeholders: never write "TBD", "add error handling", "handle edge cases",
-  or "similar to step N". If a step changes code, show the code.
+Be decisive and economical. Investigate only as much as you need to write the
+plan: read the file(s) the issue points to and grep for the directly-relevant
+symbol — a handful of tool calls. Do NOT do git-history archaeology, read
+unrelated files, or keep exploring once you know the fix. You MUST call
+write_plan in this run; a run that investigates without writing a plan is wasted.
+
+Write the plan with write_plan, scaled to the task:
+- Bug fix or small change: a SHORT plan — name the root-cause file and the exact
+  lines/change, plus the command to verify. Do not pad it into many steps.
+- Larger feature: list each file to change with its responsibility, broken into
+  small independently-doable steps with exact paths.
+Show concrete changes (real code or precise edits) with exact file paths; never
+placeholders like "TBD" or "handle edge cases".
 
 ${SCOPE}
 
-Before finishing, self-review the plan against the goal:
-1. Spec coverage — every requirement maps to a step.
-2. Placeholder scan — remove any vague steps.
-3. Consistency — names, types, and signatures match across steps.
-4. Scope — no steps that fix unrelated pre-existing or environment breakage.
-Fix issues inline. Then briefly state the plan is ready for review and stop.`,
+Then briefly state the plan is ready and stop.`,
 };
 
 const REVIEWER: RoleDefinition = {
