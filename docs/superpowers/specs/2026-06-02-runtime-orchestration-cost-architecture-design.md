@@ -170,12 +170,15 @@ Phases ship and are benchmarked independently on the `async-economy` mini-suite:
 - Auto-resolving SWE-bench eval (Docker harness unchanged).
 - Tuning model presets (orthogonal once the structure is fixed).
 
-## Open questions
+## Resolved decisions
 
-1. **Setup clone retries:** how many clone/checkout attempts before `setup_failed`? (Default: 1 retry, then block.)
-2. **`MAX_REVIEW_CYCLES` value:** start at 3; revisit with bench data.
-3. **Patch-size ceiling:** concrete byte limit for the warn-and-refuse path in `extract-patch.ts`.
-4. **Findings retention:** is append-only with full history fine for the mini-suite, or do long workstreams need a compaction pass on `findings`?
+1. **Setup clone retries:** 1 retry, then `blocked` reason `setup_failed`.
+2. **`MAX_REVIEW_CYCLES`:** 3 (revisit with bench data).
+3. **Patch-size handling:** warn above 256KB; flag (never silently truncate) above 1MB; excluding agent scratch files is the primary fix, the ceiling is a safety net.
+4. **Findings retention:** append-only, full history (compaction deferred until a workstream shows it's needed).
+5. **Bench bypasses the communicator:** for benchmark runs, the harness creates the workstream directly with `repoUrl`/`baseCommit` (structured intake), removing communicator variance from eval.
+6. **Always-on preflight clone for bench:** the harness pre-clones into `repoPath` before sending the task, so the FSM begins with `repoReady = true` and transitions straight to `plan`. Mirrors the Harbor environment for apples-to-apples comparison. (Production runs still rely on the FSM `setup` state to clone.)
+7. **Minimal model per role:** the orchestrator LLM role is removed entirely rather than tiered; remaining roles use the cheapest tier that performs.
 
 ## File change summary
 
