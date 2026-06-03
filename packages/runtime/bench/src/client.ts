@@ -80,6 +80,49 @@ export class RuntimeClient {
     return body.message;
   }
 
+  /**
+   * Create a workstream directly (bypassing the communicator). With
+   * autostart=false the orchestrator is held so the caller can preflight-clone
+   * before any agent runs; call startWorkstreamWork to release it.
+   */
+  async createWorkstream(input: {
+    title: string;
+    goal: string;
+    repoUrl?: string;
+    baseCommit?: string;
+    autostart?: boolean;
+  }): Promise<{ workstreamId: string; messageId: string }> {
+    const res = await fetch(`${this.baseUrl}/workstreams`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(input),
+    });
+    if (!res.ok && res.status !== 202) {
+      throw new Error(`POST /workstreams -> ${res.status} ${res.statusText}`);
+    }
+    return (await res.json()) as { workstreamId: string; messageId: string };
+  }
+
+  /** Release a workstream created with autostart=false (spawns orchestrator). */
+  async startWorkstreamWork(
+    workstreamId: string,
+    messageId: string,
+  ): Promise<void> {
+    const res = await fetch(
+      `${this.baseUrl}/workstreams/${workstreamId}/start`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ messageId }),
+      },
+    );
+    if (!res.ok && res.status !== 202) {
+      throw new Error(
+        `POST /workstreams/${workstreamId}/start -> ${res.status} ${res.statusText}`,
+      );
+    }
+  }
+
   async getState(): Promise<RuntimeState> {
     return this.get<RuntimeState>('/state');
   }

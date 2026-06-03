@@ -332,26 +332,55 @@ export async function runInstance(
     ? startProgress(runtime, config, startedAt)
     : () => {};
 
-  let messageId: string | undefined;
-  let preflightDone = false;
-  try {
-    const message = await client.sendMessage(
-      buildTaskMessage(instance, { preflight: config.preflightClone }),
-    );
-    messageId = message.id;
-  } catch (err) {
+  const repoUrl =
+    instance.repository_url ?? `https://github.com/${instance.repo}.git`;
+  const title =
+    instance.display_title ??
+    `${instance.repo.split('/').pop() ?? instance.repo} task`;
+
+  const failEarly = (err: unknown): InstanceResult => {
     setupTracker.stop();
     stopProgress();
     const rec = baseRecord();
     rec.error = err instanceof Error ? err.message : String(err);
+    rec.learnCallCount = setupTracker.learnCallCount;
     return {
       attempt: rec,
       prediction: emptyPrediction(instance, config.modelName),
     };
+  };
+
+  // Structured intake: create the workstream directly (no communicator). When
+  // preflighting, hold the orchestrator (autostart=false), clone into the
+  // workspace, then release — so the repo is on disk before any agent runs.
+  let messageId: string | undefined;
+  let workstreamId: string | undefined;
+  try {
+    const created = await client.createWorkstream({
+      title,
+      goal: buildTaskMessage(instance, { preflight: config.preflightClone }),
+      repoUrl,
+      baseCommit: instance.base_commit,
+      autostart: !config.preflightClone,
+    });
+    workstreamId = created.workstreamId;
+    messageId = created.messageId;
+  } catch (err) {
+    return failEarly(err);
+  }
+
+  if (config.preflightClone && workstreamId && messageId) {
+    const workspaceDir = path.join(runtime.dataDir, 'workspace', workstreamId);
+    try {
+      await preflightClone(workspaceDir, repoUrl, instance.base_commit);
+      setupTracker.notePreflightComplete();
+      await client.startWorkstreamWork(workstreamId, messageId);
+    } catch (err) {
+      return failEarly(err);
+    }
   }
 
   const deadline = startedAt + config.instanceTimeoutMs;
-  let workstreamId: string | undefined;
   let workstreamStatus: AttemptRecord['workstreamStatus'];
   let outcome: AttemptOutcome = 'timeout';
   // Grace window: if the agent never starts a workstream and goes idle, stop.
@@ -370,37 +399,6 @@ export async function runInstance(
     if (ws) {
       workstreamId = ws.id;
       workstreamStatus = ws.status;
-
-      if (config.preflightClone && !preflightDone) {
-        const repoUrl =
-          instance.repository_url ??
-          `https://github.com/${instance.repo}.git`;
-        const workspaceDir = path.join(
-          runtime.dataDir,
-          'workspace',
-          ws.id,
-        );
-        try {
-          await preflightClone(
-            workspaceDir,
-            repoUrl,
-            instance.base_commit,
-          );
-          setupTracker.notePreflightComplete();
-          preflightDone = true;
-        } catch (err) {
-          setupTracker.stop();
-          stopProgress();
-          const rec = baseRecord();
-          rec.error =
-            err instanceof Error ? err.message : String(err);
-          rec.learnCallCount = setupTracker.learnCallCount;
-          return {
-            attempt: rec,
-            prediction: emptyPrediction(instance, config.modelName),
-          };
-        }
-      }
 
       if (TERMINAL.has(ws.status)) {
         outcome =

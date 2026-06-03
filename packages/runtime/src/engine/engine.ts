@@ -275,6 +275,57 @@ export class Engine implements EngineApi {
     return { runId: run.id, taskId };
   }
 
+  /**
+   * Create a workstream directly from a structured request, bypassing the
+   * communicator. Used by structured intake (the bench harness) to remove
+   * communicator variance and to allow a preflight clone before any agent
+   * runs. An inbound message is recorded so cost/usage still attribute to a
+   * single origin. With `autostart: false` the orchestrator is not spawned —
+   * the caller can clone into the workspace first, then call kickoffWorkstream.
+   */
+  async createDirectWorkstream(input: {
+    title: string;
+    goal: string;
+    repoUrl?: string;
+    baseCommit?: string;
+    autostart?: boolean;
+  }): Promise<{ workstream: Workstream; messageId: string }> {
+    const message = await this.store.appendMessage({
+      direction: 'inbound',
+      content: input.goal,
+    });
+    this.emit({ kind: 'message', at: message.createdAt, data: message });
+
+    const ws = await this.store.createWorkstream({
+      title: input.title,
+      goal: input.goal,
+      repoUrl: input.repoUrl,
+      baseCommit: input.baseCommit,
+      status: 'pending',
+    });
+    this.emit({ kind: 'workstream', at: ws.createdAt, data: ws });
+
+    if (input.autostart !== false) {
+      await this.kickoffWorkstream(ws.id, message.id);
+    }
+    return { workstream: ws, messageId: message.id };
+  }
+
+  /** Spawn the orchestrator for a workstream created via createDirectWorkstream. */
+  async kickoffWorkstream(
+    workstreamId: string,
+    originMessageId: string,
+  ): Promise<void> {
+    const ws = await this.store.getWorkstream(workstreamId);
+    if (!ws) throw new Error(`workstream ${workstreamId} not found`);
+    await this.spawnCall({
+      role: 'orchestrator',
+      description: `A new workstream was created. Goal: ${ws.goal}. Get it planned and executed.`,
+      workstreamId,
+      originMessageId,
+    });
+  }
+
   async startWorkstream(input: {
     title: string;
     goal: string;

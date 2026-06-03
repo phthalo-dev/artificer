@@ -44,6 +44,18 @@ const applyPresetSchema = z.object({
   presetId: z.string().min(1),
 });
 
+const createWorkstreamSchema = z.object({
+  title: z.string().min(1),
+  goal: z.string().min(1),
+  repoUrl: z.string().min(1).optional(),
+  baseCommit: z.string().min(1).optional(),
+  autostart: z.boolean().optional(),
+});
+
+const startWorkstreamSchema = z.object({
+  messageId: z.string().min(1),
+});
+
 const PROVIDER_LABEL: Record<LlmSdkPackage, string> = {
   '@ai-sdk/anthropic': 'Anthropic',
   '@ai-sdk/openai': 'OpenAI',
@@ -160,6 +172,39 @@ export function createApp(engine: Engine): Hono {
   });
 
   // --- Workstreams ---
+
+  // Structured intake: create a workstream directly, bypassing the
+  // communicator. With autostart=false the orchestrator is held so the caller
+  // (e.g. the bench harness) can preflight-clone into the workspace first.
+  app.post('/workstreams', async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = createWorkstreamSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+    const { workstream, messageId } =
+      await engine.createDirectWorkstream(parsed.data);
+    return c.json({ workstreamId: workstream.id, messageId }, 202);
+  });
+
+  // Spawn the orchestrator for a workstream created with autostart=false.
+  app.post('/workstreams/:id/start', async (c) => {
+    const id = c.req.param('id');
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = startWorkstreamSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+    try {
+      await engine.kickoffWorkstream(id, parsed.data.messageId);
+    } catch (err) {
+      return c.json(
+        { error: err instanceof Error ? err.message : String(err) },
+        404,
+      );
+    }
+    return c.json({ ok: true }, 202);
+  });
 
   app.get('/workstreams', async (c) => {
     const workstreams = await engine.store.listWorkstreams();
