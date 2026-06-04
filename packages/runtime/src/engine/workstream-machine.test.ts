@@ -16,11 +16,26 @@ function facts(overrides: Partial<WorkstreamFacts> = {}): WorkstreamFacts {
     reviewCount: 0,
     lastReviewApproved: undefined,
     workSinceLastReview: 0,
+    consecutiveFailedRuns: 0,
     totalRuns: 1,
     maxRuns: 40,
     ...overrides,
   };
 }
+
+test('consecutive failed runs block early (resilience to a failing model/endpoint)', () => {
+  const a = nextWorkstreamAction(
+    facts({ planWritten: false, consecutiveFailedRuns: 3 }),
+  );
+  assert.equal(a.kind, 'blocked');
+});
+
+test('a single failure does not block prematurely', () => {
+  const a = nextWorkstreamAction(
+    facts({ planWritten: false, consecutiveFailedRuns: 1 }),
+  );
+  assert.equal((a as { role: string }).role, 'planner');
+});
 
 test('run cap takes precedence over everything', () => {
   const a = nextWorkstreamAction(

@@ -565,6 +565,14 @@ export class Engine implements EngineApi {
         r.status === 'done' &&
         (!lastReview || r.createdAt > lastReview.createdAt),
     ).length;
+    const ordered = [...wsRuns].sort((a, b) =>
+      a.createdAt.localeCompare(b.createdAt),
+    );
+    let consecutiveFailedRuns = 0;
+    for (let i = ordered.length - 1; i >= 0; i -= 1) {
+      if (ordered[i].status === 'failed') consecutiveFailedRuns += 1;
+      else break;
+    }
     return {
       hasRepoUrl: Boolean(ws.repoUrl),
       repoReady: repoDir !== undefined,
@@ -573,6 +581,7 @@ export class Engine implements EngineApi {
       reviewCount: reviews.length,
       lastReviewApproved: lastReview?.approved,
       workSinceLastReview,
+      consecutiveFailedRuns,
       totalRuns: wsRuns.length,
       maxRuns: this.config.maxRunsPerWorkstream,
     };

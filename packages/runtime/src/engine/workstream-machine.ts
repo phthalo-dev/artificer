@@ -11,6 +11,13 @@
 /** Consecutive reviews without approval before the workstream is blocked. */
 export const MAX_REVIEW_CYCLES = 3;
 
+/**
+ * Consecutive failed runs before the workstream is blocked. Guards against a
+ * failing model or a rate-limited/unavailable endpoint: without this the state
+ * machine would re-dispatch the same role until the hard run cap.
+ */
+export const MAX_FAILED_RUNS = 3;
+
 export const PLAN_TASK =
   'Write the implementation plan for this goal and call write_plan in THIS run. ' +
   'Do minimal investigation first — read the file(s) the issue points to and ' +
@@ -48,6 +55,8 @@ export interface WorkstreamFacts {
   lastReviewApproved?: boolean;
   /** Worker runs completed since the last review (or since the start). */
   workSinceLastReview: number;
+  /** Trailing runs that failed (e.g. the LLM endpoint erroring/rate-limited). */
+  consecutiveFailedRuns: number;
   /** Total runs in this workstream (drives the hard run cap). */
   totalRuns: number;
   /** Hard per-workstream run cap. */
@@ -67,6 +76,15 @@ export type WorkstreamAction =
 export function nextWorkstreamAction(f: WorkstreamFacts): WorkstreamAction {
   if (f.totalRuns >= f.maxRuns) {
     return { kind: 'blocked', reason: `run cap (${f.maxRuns}) reached` };
+  }
+
+  // Stop re-dispatching into a failing model/endpoint (e.g. a usage limit)
+  // rather than burning to the run cap.
+  if (f.consecutiveFailedRuns >= MAX_FAILED_RUNS) {
+    return {
+      kind: 'blocked',
+      reason: `${f.consecutiveFailedRuns} runs in a row failed (model or endpoint unavailable)`,
+    };
   }
 
   // Setup gate: a repo task with no local clone yet must be set up first.
