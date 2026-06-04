@@ -17,15 +17,10 @@ import {
   type WorkstreamFacts,
 } from './workstream-machine.js';
 import { buildGitEnv } from '../tools/git-env.js';
-import { recordPlanReviewFallback } from './spawn-guards.js';
 import {
   insufficientBalanceUserMessage,
   isInsufficientBalanceError,
 } from '../llm/errors.js';
-import {
-  convergenceStallMessage,
-  detectConvergenceStall,
-} from './convergence.js';
 import { type ModelTier, type ModelTiers, pickModel } from './models.js';
 import {
   cloneRoleTiers,
@@ -52,88 +47,6 @@ export interface RuntimeState {
   >;
 }
 
-const RUN_ROLES_THAT_REINVOKE = ['planner', 'reviewer', 'worker'] as const;
-
-const WORK_ROLES = ['planner', 'reviewer', 'worker'] as const;
-
-/**
- * How many consecutive "work" calls may produce no usable result before the
- * workstream is paused. Guards against thrash loops such as a reviewer that
- * never calls submit_review, which would otherwise make the orchestrator
- * re-spawn reviewers until the run cap / wall-clock timeout.
- */
-const MAX_UNPRODUCTIVE_WORK_RUNS = 3;
-
-/** True if the run made a successful (non-erroring) call to the named tool. */
-function hasSuccessfulTool(run: RunRecord, name: string): boolean {
-  return run.toolCalls.some((t) => t.name === name && !t.error);
-}
-
-/**
- * A work call that finished without producing its expected artifact: a
- * reviewer that never submitted a review, a planner that never wrote a plan,
- * or any work call that failed. Workers are only flagged when they fail, since
- * their useful output is varied and hard to detect structurally.
- *
- * Planner runs during repo setup (no local clone yet) are not counted as
- * unproductive — that is a setup failure, not model thrash.
- */
-async function isUnproductiveWorkRun(
-  run: RunRecord,
-  store: Store,
-): Promise<boolean> {
-  if (!(WORK_ROLES as readonly string[]).includes(run.role)) return false;
-  if (run.status === 'failed') return true;
-  if (run.role === 'reviewer') return !hasSuccessfulTool(run, 'submit_review');
-  if (run.role === 'planner') {
-    if (hasSuccessfulTool(run, 'write_plan')) return false;
-    if (run.workstreamId) {
-      const ws = await store.getWorkstream(run.workstreamId);
-      if (ws?.repoUrl) {
-        const workspaceDir = store.layout.workstreamWorkspace(run.workstreamId);
-        const localRepo = await findGitRepo(workspaceDir);
-        if (!localRepo) return false;
-      }
-    }
-    return true;
-  }
-  return false;
-}
-
-/** Count of trailing consecutive unproductive work runs in a workstream. */
-async function trailingUnproductiveWorkRuns(
-  runs: RunRecord[],
-  store: Store,
-): Promise<number> {
-  const work = runs
-    .filter((r) => (WORK_ROLES as readonly string[]).includes(r.role))
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
-  let count = 0;
-  for (let i = work.length - 1; i >= 0; i -= 1) {
-    if (await isUnproductiveWorkRun(work[i], store)) count += 1;
-    else break;
-  }
-  return count;
-}
-
-/**
- * The summary the orchestrator sees about a just-finished child. When a
- * reviewer or planner produced nothing, says so explicitly so the orchestrator
- * does not blindly repeat the same step.
- */
-function describeOutcome(run: RunRecord): string {
-  if (run.status === 'failed') {
-    return `A ${run.role} call failed: ${run.error ?? 'unknown error'}.`;
-  }
-  if (run.role === 'reviewer' && !hasSuccessfulTool(run, 'submit_review')) {
-    return `A reviewer call finished but did NOT submit a review (no verdict was recorded). Do not simply spawn another identical reviewer: if the plan/work already looks adequate, proceed to the next step; if a review is essential, re-spawn it at a higher complexity or escalate to the user.`;
-  }
-  if (run.role === 'planner' && !hasSuccessfulTool(run, 'write_plan')) {
-    return `A planner call finished but did NOT write a plan (no plan artifact was saved). Re-spawn the planner at a higher complexity with clearer instructions, or escalate to the user.`;
-  }
-  return `A ${run.role} call finished. Result:\n${run.output ?? '(no output)'}`;
-}
-
 /**
  * The runtime engine. It receives messages like a person would, runs the
  * hierarchical orchestration of small LLM calls, and persists everything to
@@ -145,14 +58,6 @@ export class Engine implements EngineApi {
   private readonly scheduler: Scheduler;
   private readonly events = new EventEmitter();
   private readonly active = new Map<string, ActiveRun>();
-  /**
-   * Workstreams with an orchestrator call already queued but not yet started.
-   * Used to coalesce the re-invocations that fan-out produces: when an
-   * orchestrator spawns several children, each one finishing would otherwise
-   * enqueue its own orchestrator pass. We keep just one pending pass, which
-   * sees all the completed work via get_status.
-   */
-  private readonly orchestratorQueued = new Set<string>();
   /** Avoid spamming the user when many concurrent calls hit the same billing wall. */
   private readonly balanceNotified = new Set<string>();
 
@@ -439,13 +344,6 @@ export class Engine implements EngineApi {
   private async runOne(runId: string): Promise<void> {
     const run = await this.store.getRun(runId);
     if (!run) return;
-
-    // This orchestrator pass is now starting, so it no longer counts as the
-    // "pending" one — a child finishing after this may legitimately queue a
-    // fresh pass to surface its result.
-    if (run.role === 'orchestrator' && run.workstreamId) {
-      this.orchestratorQueued.delete(run.workstreamId);
-    }
 
     this.active.set(runId, {
       runId,
