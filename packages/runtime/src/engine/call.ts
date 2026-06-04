@@ -101,6 +101,9 @@ async function buildContext(
     // done, so they pick up where the last call left off instead of starting a
     // fresh investigation every time.
     if (WORK_ROLES.has(run.role)) {
+      const findings = await findingsBlock(store, run.workstreamId);
+      if (findings) sections.push(findings);
+
       const recent = await recentWorkSummary(store, run.workstreamId);
       if (recent) sections.push(recent);
       const changed = await changedFilesSummary(workspaceDir);
@@ -145,6 +148,26 @@ async function buildContext(
   );
 
   return sections.join('\n\n');
+}
+
+/**
+ * The workstream blackboard: durable findings each role recorded, so a role
+ * reads what is already known instead of re-investigating. Oldest first.
+ */
+async function findingsBlock(
+  store: Store,
+  workstreamId: string,
+): Promise<string | null> {
+  const findings = await store.listFindings(workstreamId);
+  if (findings.length === 0) return null;
+  const lines = [...findings]
+    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .map((f) => `- [${f.role}${f.file ? ` · ${f.file}` : ''}] ${f.note}`);
+  return [
+    'Findings already recorded on this workstream (the shared blackboard).',
+    'Trust these and investigate only what they do not cover; add new ones with record_finding:',
+    ...lines,
+  ].join('\n');
 }
 
 /**

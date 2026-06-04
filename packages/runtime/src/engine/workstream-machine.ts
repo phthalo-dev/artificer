@@ -23,22 +23,26 @@ export const PLAN_TASK =
   'Do minimal investigation first — read the file(s) the issue points to and ' +
   'grep the relevant symbol (a few calls), then write a short plan naming the ' +
   'root-cause file and lines, the exact change, and the command to verify the ' +
-  'fix. Do not do git-history archaeology or read unrelated files.';
+  'fix. Do not do git-history archaeology or read unrelated files. Record the ' +
+  'root cause and the verify command with record_finding so the worker need ' +
+  'not re-investigate.';
 
 export const IMPLEMENT_TASK =
-  'Implement the plan by editing the repository source in the workspace. ' +
-  'Do not modify or add test files. Run the plan’s test command to check ' +
-  'your work. Report BLOCKED if stuck after a few attempts.';
+  'Read the recorded findings first and trust them — do not re-investigate what ' +
+  'they already establish. Implement the plan by editing the repository source ' +
+  'in the workspace. Do not modify or add test files. Run the plan’s test ' +
+  'command to check your work, and record any new fact (the exact test command, ' +
+  'a gotcha) with record_finding. Report BLOCKED if stuck after a few attempts.';
 
 export const FIX_TASK =
-  'A review rejected the current change. Address the recorded review issues ' +
-  'by editing the repository source, then re-run the test command. Do not ' +
-  'modify test files.';
+  'A review rejected the current change. Read the findings and recorded review ' +
+  'issues, address them by editing the repository source, then re-run the test ' +
+  'command. Do not modify test files.';
 
 export const REVIEW_TASK =
-  'Review the current diff against the goal (read the diff and run the test ' +
-  'command). Do not re-explore the whole repo and do not edit files. Call ' +
-  'submit_review with approved and any issues.';
+  'Review the current diff against the goal using the recorded findings and the ' +
+  'diff — do not re-explore the whole repo and do not edit files. Run the test ' +
+  'command, then call submit_review with approved and any issues.';
 
 export interface WorkstreamFacts {
   /** The workstream targets a repository (repoUrl set). */

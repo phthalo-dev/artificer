@@ -8,6 +8,7 @@ import {
 } from './memory-search.js';
 import {
   emptyUsage,
+  type Finding,
   type Memory,
   type Message,
   type Review,
@@ -272,6 +273,28 @@ export class Store {
 
   async listReviews(workstreamId: string): Promise<Review[]> {
     return listJson<Review>(this.layout.reviewsDir(workstreamId));
+  }
+
+  // --- Findings (the workstream blackboard's append-only shared notes) ---
+
+  async createFinding(
+    input: Pick<Finding, 'workstreamId' | 'role' | 'note'> &
+      Partial<Pick<Finding, 'file'>>,
+  ): Promise<Finding> {
+    const finding: Finding = {
+      id: newId('find'),
+      createdAt: now(),
+      ...input,
+    };
+    await writeJson(
+      this.layout.findingFile(finding.workstreamId, finding.id),
+      finding,
+    );
+    return finding;
+  }
+
+  async listFindings(workstreamId: string): Promise<Finding[]> {
+    return listJson<Finding>(this.layout.findingsDir(workstreamId));
   }
 
   // --- Runs (one record per LLM call) ---

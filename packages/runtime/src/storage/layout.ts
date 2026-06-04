@@ -60,6 +60,14 @@ export class Layout {
     return path.join(this.reviewsDir(workstreamId), `${reviewId}.json`);
   }
 
+  findingsDir(workstreamId: string): string {
+    return path.join(this.workstreamDir(workstreamId), 'findings');
+  }
+
+  findingFile(workstreamId: string, findingId: string): string {
+    return path.join(this.findingsDir(workstreamId), `${findingId}.json`);
+  }
+
   runFile(id: string): string {
     return path.join(this.runsDir, `${id}.json`);
   }

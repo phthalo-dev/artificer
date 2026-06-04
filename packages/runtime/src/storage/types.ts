@@ -78,6 +78,21 @@ export interface Review {
   createdAt: string;
 }
 
+/**
+ * A durable note one role records on the workstream blackboard so later roles
+ * read it instead of re-investigating: a root cause, a key file/symbol, the
+ * test command, a dead end, etc.
+ */
+export interface Finding {
+  id: string;
+  workstreamId: string;
+  role: RoleName;
+  /** The file or area the finding concerns, when applicable. */
+  file?: string;
+  note: string;
+  createdAt: string;
+}
+
 export type RunStatus = 'queued' | 'running' | 'done' | 'failed';
 
 export interface ToolInvocation {

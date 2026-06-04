@@ -66,7 +66,12 @@ export function toolsForRole(role: RoleName, ctx: ToolContext): ToolDef[] {
         ...shell,
         ...git,
         ...byName(artifacts, ['write_plan', 'read_plan']),
-        ...byName(orchestrator, ['get_status', 'query_memories', 'add_memory']),
+        ...byName(orchestrator, [
+          'get_status',
+          'query_memories',
+          'add_memory',
+          'record_finding',
+        ]),
       ];
 
     case 'reviewer':
@@ -77,7 +82,7 @@ export function toolsForRole(role: RoleName, ctx: ToolContext): ToolDef[] {
         ...shell,
         ...git,
         ...byName(artifacts, ['read_plan', 'submit_review']),
-        ...byName(orchestrator, ['get_status', 'query_memories']),
+        ...byName(orchestrator, ['get_status', 'query_memories', 'record_finding']),
       ];
 
     case 'worker':
@@ -89,7 +94,12 @@ export function toolsForRole(role: RoleName, ctx: ToolContext): ToolDef[] {
         ...shell,
         ...git,
         ...byName(artifacts, ['read_plan']),
-        ...byName(orchestrator, ['get_status', 'query_memories', 'add_memory']),
+        ...byName(orchestrator, [
+          'get_status',
+          'query_memories',
+          'add_memory',
+          'record_finding',
+        ]),
       ];
 
     case 'librarian':

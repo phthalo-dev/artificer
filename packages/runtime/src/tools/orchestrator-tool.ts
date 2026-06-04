@@ -352,5 +352,39 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
         return `Saved to memory (${memory.id}).`;
       },
     },
+    {
+      name: 'record_finding',
+      description:
+        'Record a durable finding on the workstream blackboard so later roles ' +
+        'read it instead of re-investigating from scratch: a root cause, a key ' +
+        'file/symbol, the exact test command, or a confirmed dead end. One ' +
+        'concrete fact per call.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          note: {
+            type: 'string',
+            description: 'The finding — one concrete, durable fact.',
+          },
+          file: {
+            type: 'string',
+            description: 'The file or area it concerns, when applicable.',
+          },
+        },
+        required: ['note'],
+      },
+      handler: async (input) => {
+        if (!run.workstreamId) {
+          return 'Error: findings can only be recorded inside a workstream.';
+        }
+        const finding = await store.createFinding({
+          workstreamId: run.workstreamId,
+          role: run.role,
+          note: String(input.note),
+          file: input.file ? String(input.file) : undefined,
+        });
+        return `Recorded finding (${finding.id}).`;
+      },
+    },
   ];
 }
