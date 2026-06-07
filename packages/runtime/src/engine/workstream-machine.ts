@@ -30,9 +30,11 @@ export const PLAN_TASK =
 export const IMPLEMENT_TASK =
   'Read the recorded findings first and trust them — do not re-investigate what ' +
   'they already establish. Implement the plan by editing the repository source ' +
-  'in the workspace. Do not modify or add test files. Run the plan’s test ' +
-  'command to check your work, and record any new fact (the exact test command, ' +
-  'a gotcha) with record_finding. Report BLOCKED if stuck after a few attempts.';
+  'in the workspace, making the issue’s FULL described behaviour correct: cover ' +
+  'every case the issue mentions (including asides like “also”/“as well” and ' +
+  'related code paths), not just the headline. Write a reproduction exercising ' +
+  'each case and confirm they all pass before finishing. Do not modify or add ' +
+  'test files. Record any new fact with record_finding. Report BLOCKED if stuck.';
 
 export const FIX_TASK =
   'A review rejected the current change. Read the findings and recorded review ' +
