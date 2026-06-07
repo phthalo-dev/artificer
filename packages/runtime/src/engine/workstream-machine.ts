@@ -32,9 +32,9 @@ export const IMPLEMENT_TASK =
   'they already establish. Implement the plan by editing the repository source ' +
   'in the workspace, making the issue’s FULL described behaviour correct: cover ' +
   'every case the issue mentions (including asides like “also”/“as well” and ' +
-  'related code paths), not just the headline. Write a reproduction exercising ' +
-  'each case and confirm they all pass before finishing. Do not modify or add ' +
-  'test files. Record any new fact with record_finding. Report BLOCKED if stuck.';
+  'related code paths), not just the headline. Run the plan’s test command to ' +
+  'check your work. Do not modify or add test files. Record any new fact with ' +
+  'record_finding. Report BLOCKED if stuck.';
 
 export const FIX_TASK =
   'A review rejected the current change. Read the findings and recorded review ' +
@@ -43,8 +43,12 @@ export const FIX_TASK =
 
 export const REVIEW_TASK =
   'Review the current diff against the goal using the recorded findings and the ' +
-  'diff — do not re-explore the whole repo and do not edit files. Run the test ' +
-  'command, then call submit_review with approved and any issues.';
+  'diff — do not re-explore the whole repo and do not edit files. Verify the ' +
+  'issue’s FULL behaviour: for every case it describes (including asides like ' +
+  '“also”/“as well”), construct and run that case and read the output — do not ' +
+  'trust the issue’s claims about what already works. Reject as incomplete ' +
+  '(Critical) if any described case is not handled, naming it. Then call ' +
+  'submit_review with approved and any issues.';
 
 export interface WorkstreamFacts {
   /** The workstream targets a repository (repoUrl set). */

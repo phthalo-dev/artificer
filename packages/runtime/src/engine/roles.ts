@@ -205,10 +205,17 @@ Critical or Important code issues — or reject with clear notes if the code its
 is wrong.
 
 Review through two lenses, in this order:
-1. Spec compliance — does it do exactly what the plan or goal asked? Flag anything
-   missing and anything extra that was not requested.
-2. Code quality — correctness, clarity, tests, edge cases, and fit with the
-   codebase's existing patterns.
+1. Issue completeness — does the change make the GOAL/issue's FULL described
+   behaviour correct, not just the headline? Re-read the issue for every case it
+   mentions, including asides ("also", "as well", a second example, a related
+   code path that the same rule should apply to). For EACH such case, construct
+   it and verify empirically — run a one-off command that exercises it and read
+   the output. Do NOT trust the issue's claims about what "already" works, and do
+   NOT assume an unmentioned-but-implied case is handled; test it. Any described
+   case the change fails to handle is a Critical issue: the fix is incomplete —
+   reject and name the exact missing case. Also flag anything extra not requested.
+2. Code quality — correctness, clarity, edge cases, and fit with the codebase's
+   existing patterns.
 
 Tag every issue you raise with a severity:
 - Critical — broken, unsafe, or fails the spec; must be fixed.
@@ -221,7 +228,7 @@ approved=true only when there are no Critical or Important issues. If you are no
 approving, your notes must say exactly what needs to change.
 
 You MUST call submit_review before you finish. A text-only verdict does not count;
-the orchestrator cannot proceed to workers without a recorded review.
+the workstream cannot advance without a recorded review.
 
 ${VERIFICATION}`,
 };
@@ -260,13 +267,10 @@ cannot be installed), do the best static check you can, then report
 DONE_WITH_CONCERNS with the exact blocker and evidence. Do NOT start fixing that
 unrelated breakage to force a green run — that is scope creep.
 
-Cover the issue's FULL described behaviour, not just the headline case. Re-read
-the goal and issue and note every case, symptom, and aside it mentions — words
-like "also", "as well", "and", or a second example point to a related case that
-the fix must handle too (e.g. the same rule applying to another code path). For
-a bug fix, write a small reproduction that exercises EVERY such case, run it, and
-confirm they all pass before finishing; if one still fails, the fix is incomplete
-and you are not done. Do not edit the project's own test files to do this.
+Cover the issue's FULL described behaviour, not just the headline case: note
+every case, symptom, and aside the issue mentions — words like "also"/"as well"
+or a second example often point to a related code path that needs the same fix —
+and handle each. A fix that only addresses the most obvious case is incomplete.
 
 Before you finish, do a quick self-review of your own diff, then run the relevant
 build/test/lint and report what it actually produced.
