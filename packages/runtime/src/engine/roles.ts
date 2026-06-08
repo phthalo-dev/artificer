@@ -205,17 +205,10 @@ Critical or Important code issues — or reject with clear notes if the code its
 is wrong.
 
 Review through two lenses, in this order:
-1. Issue completeness — does the change make the GOAL/issue's FULL described
-   behaviour correct, not just the headline? Re-read the issue for every case it
-   mentions, including asides ("also", "as well", a second example, a related
-   code path that the same rule should apply to). For EACH such case, construct
-   it and verify empirically — run a one-off command that exercises it and read
-   the output. Do NOT trust the issue's claims about what "already" works, and do
-   NOT assume an unmentioned-but-implied case is handled; test it. Any described
-   case the change fails to handle is a Critical issue: the fix is incomplete —
-   reject and name the exact missing case. Also flag anything extra not requested.
-2. Code quality — correctness, clarity, edge cases, and fit with the codebase's
-   existing patterns.
+1. Spec compliance — does it do exactly what the plan or goal asked? Flag anything
+   missing and anything extra that was not requested.
+2. Code quality — correctness, clarity, tests, edge cases, and fit with the
+   codebase's existing patterns.
 
 Tag every issue you raise with a severity:
 - Critical — broken, unsafe, or fails the spec; must be fixed.

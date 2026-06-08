@@ -471,6 +471,10 @@ export class Engine implements EngineApi {
       if (ordered[i].status === 'failed') consecutiveFailedRuns += 1;
       else break;
     }
+    // When no plan exists, every completed planner run failed to produce one.
+    const plannerRunsWithoutPlan = plan
+      ? 0
+      : wsRuns.filter((r) => r.role === 'planner' && r.status === 'done').length;
     return {
       hasRepoUrl: Boolean(ws.repoUrl),
       repoReady: repoDir !== undefined,
@@ -480,6 +484,7 @@ export class Engine implements EngineApi {
       lastReviewApproved: lastReview?.approved,
       workSinceLastReview,
       consecutiveFailedRuns,
+      plannerRunsWithoutPlan,
       totalRuns: wsRuns.length,
       maxRuns: this.config.maxRunsPerWorkstream,
     };

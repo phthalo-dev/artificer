@@ -17,11 +17,26 @@ function facts(overrides: Partial<WorkstreamFacts> = {}): WorkstreamFacts {
     lastReviewApproved: undefined,
     workSinceLastReview: 0,
     consecutiveFailedRuns: 0,
+    plannerRunsWithoutPlan: 0,
     totalRuns: 1,
     maxRuns: 40,
     ...overrides,
   };
 }
+
+test('planner that keeps finishing without a plan is blocked, not looped', () => {
+  const a = nextWorkstreamAction(
+    facts({ planWritten: false, plannerRunsWithoutPlan: 3 }),
+  );
+  assert.equal(a.kind, 'blocked');
+});
+
+test('a couple of planner attempts without a plan still dispatch the planner', () => {
+  const a = nextWorkstreamAction(
+    facts({ planWritten: false, plannerRunsWithoutPlan: 2 }),
+  );
+  assert.equal((a as { role: string }).role, 'planner');
+});
 
 test('consecutive failed runs block early (resilience to a failing model/endpoint)', () => {
   const a = nextWorkstreamAction(

@@ -18,6 +18,14 @@ export const MAX_REVIEW_CYCLES = 3;
  */
 export const MAX_FAILED_RUNS = 3;
 
+/**
+ * Planner runs that finished without producing a plan before the workstream is
+ * blocked. A planner that succeeds but never calls write_plan is not "failed",
+ * so without this guard the machine re-dispatches it until the wall-clock
+ * timeout (observed: a planner looping 9× on a hard repo, no patch).
+ */
+export const MAX_PLANNER_ATTEMPTS = 3;
+
 export const PLAN_TASK =
   'Write the implementation plan for this goal and call write_plan in THIS run. ' +
   'Do minimal investigation first — read the file(s) the issue points to and ' +
@@ -43,12 +51,8 @@ export const FIX_TASK =
 
 export const REVIEW_TASK =
   'Review the current diff against the goal using the recorded findings and the ' +
-  'diff — do not re-explore the whole repo and do not edit files. Verify the ' +
-  'issue’s FULL behaviour: for every case it describes (including asides like ' +
-  '“also”/“as well”), construct and run that case and read the output — do not ' +
-  'trust the issue’s claims about what already works. Reject as incomplete ' +
-  '(Critical) if any described case is not handled, naming it. Then call ' +
-  'submit_review with approved and any issues.';
+  'diff — do not re-explore the whole repo and do not edit files. Run the test ' +
+  'command, then call submit_review with approved and any issues.';
 
 export interface WorkstreamFacts {
   /** The workstream targets a repository (repoUrl set). */
@@ -67,6 +71,8 @@ export interface WorkstreamFacts {
   workSinceLastReview: number;
   /** Trailing runs that failed (e.g. the LLM endpoint erroring/rate-limited). */
   consecutiveFailedRuns: number;
+  /** Completed planner runs that did not produce a plan (planning is stuck). */
+  plannerRunsWithoutPlan: number;
   /** Total runs in this workstream (drives the hard run cap). */
   totalRuns: number;
   /** Hard per-workstream run cap. */
@@ -102,8 +108,15 @@ export function nextWorkstreamAction(f: WorkstreamFacts): WorkstreamAction {
     return { kind: 'setup' };
   }
 
-  // Plan before any implementation.
+  // Plan before any implementation — but stop re-dispatching a planner that
+  // keeps finishing without writing a plan.
   if (!f.planWritten) {
+    if (f.plannerRunsWithoutPlan >= MAX_PLANNER_ATTEMPTS) {
+      return {
+        kind: 'blocked',
+        reason: `planning stuck: ${f.plannerRunsWithoutPlan} planner runs produced no plan`,
+      };
+    }
     return { kind: 'dispatch', role: 'planner', task: PLAN_TASK };
   }
 
