@@ -24,11 +24,13 @@ function facts(overrides: Partial<WorkstreamFacts> = {}): WorkstreamFacts {
   };
 }
 
-test('planner that keeps finishing without a plan is blocked, not looped', () => {
+test('planner that keeps finishing without a plan falls through to a direct worker', () => {
   const a = nextWorkstreamAction(
-    facts({ planWritten: false, plannerRunsWithoutPlan: 3 }),
+    facts({ planWritten: false, plannerRunsWithoutPlan: 3, patchPresent: false }),
   );
-  assert.equal(a.kind, 'blocked');
+  assert.equal(a.kind, 'dispatch');
+  assert.equal((a as { role: string }).role, 'worker');
+  assert.match((a as { task: string }).task, /implement the goal directly/i);
 });
 
 test('a couple of planner attempts without a plan still dispatch the planner', () => {

@@ -44,6 +44,15 @@ export const IMPLEMENT_TASK =
   'check your work. Do not modify or add test files. Record any new fact with ' +
   'record_finding. Report BLOCKED if stuck.';
 
+/** Task when planning could not produce a plan: the worker does it all. */
+export const IMPLEMENT_DIRECT_TASK =
+  'No usable plan was produced, so implement the goal directly. Investigate the ' +
+  'repository (read_file, grep, run_shell), then edit the source to make the ' +
+  'issue’s FULL described behaviour correct — cover every case it mentions, not ' +
+  'just the headline. Run the project’s tests to check your work. Do not modify ' +
+  'or add test files. Record key facts with record_finding. Report BLOCKED if ' +
+  'genuinely stuck.';
+
 export const FIX_TASK =
   'A review rejected the current change. Read the findings and recorded review ' +
   'issues, address them by editing the repository source, then re-run the test ' +
@@ -108,21 +117,22 @@ export function nextWorkstreamAction(f: WorkstreamFacts): WorkstreamAction {
     return { kind: 'setup' };
   }
 
-  // Plan before any implementation — but stop re-dispatching a planner that
-  // keeps finishing without writing a plan.
-  if (!f.planWritten) {
-    if (f.plannerRunsWithoutPlan >= MAX_PLANNER_ATTEMPTS) {
-      return {
-        kind: 'blocked',
-        reason: `planning stuck: ${f.plannerRunsWithoutPlan} planner runs produced no plan`,
-      };
-    }
+  // Plan before any implementation — but if the planner keeps finishing without
+  // a plan, don't block: fall through to a worker that investigates and
+  // implements directly (single-agent style), so a flaky planner can't stall an
+  // otherwise-doable task.
+  if (!f.planWritten && f.plannerRunsWithoutPlan < MAX_PLANNER_ATTEMPTS) {
     return { kind: 'dispatch', role: 'planner', task: PLAN_TASK };
   }
 
-  // Implement until there is a candidate patch.
+  // Implement until there is a candidate patch — from the plan if we have one,
+  // otherwise directly from the goal.
   if (!f.patchPresent) {
-    return { kind: 'dispatch', role: 'worker', task: IMPLEMENT_TASK };
+    return {
+      kind: 'dispatch',
+      role: 'worker',
+      task: f.planWritten ? IMPLEMENT_TASK : IMPLEMENT_DIRECT_TASK,
+    };
   }
 
   // A candidate patch exists.
