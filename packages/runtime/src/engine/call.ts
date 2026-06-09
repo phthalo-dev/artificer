@@ -211,6 +211,9 @@ export async function executeCall(
       tools,
       maxIterations,
       maxRunMs: config.maxRunMs,
+      // The planner may emit a long plan in one response; give it room so the
+      // plan isn't truncated mid-write.
+      maxTokens: run.role === 'planner' ? 8192 : 4096,
       toolResultSpill: {
         layout: store.layout,
         runId: run.id,

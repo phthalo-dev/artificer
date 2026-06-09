@@ -540,6 +540,21 @@ export class Engine implements EngineApi {
       run.role === 'reviewer';
     if (!isWork || !run.workstreamId) return;
 
+    // A planner often writes its plan as prose in its final answer instead of
+    // calling write_plan (especially for long plans). Capture that text as the
+    // plan so its work isn't thrown away and the machine can advance to
+    // implementation, mirroring the communicator's reply fallback above.
+    if (run.role === 'planner' && run.status === 'done') {
+      const wrotePlan = run.toolCalls.some(
+        (t) => t.name === 'write_plan' && !t.error,
+      );
+      const text = run.output?.trim();
+      if (!wrotePlan && text && text.length > 200) {
+        const existing = await this.store.readPlan(run.workstreamId);
+        if (!existing) await this.store.writePlan(run.workstreamId, text);
+      }
+    }
+
     await this.stepWorkstream(run.workstreamId, run.originMessageId, run.id);
   }
 
