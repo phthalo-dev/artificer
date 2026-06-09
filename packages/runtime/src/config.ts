@@ -1,5 +1,6 @@
 import path from 'node:path';
 import type { DiagnosticsConfig } from './diagnostics/types.js';
+import type { SkillsConfig } from './engine/skills.js';
 import {
   isModelTier,
   type ModelTier,
@@ -45,6 +46,10 @@ export interface RuntimeConfig {
   concurrency: number;
   /** Max tool-use iterations allowed within a single call before forcing a stop. */
   maxIterationsPerCall: number;
+  /** Optional lower iteration cap for planner calls (bench tuning). */
+  maxIterationsPlanner?: number;
+  /** Wall-clock limit per LLM call; exceeded runs fail so the FSM can retry. */
+  maxCallDurationMs: number;
   /** Safety cap on total LLM calls per workstream to prevent runaway loops. */
   maxRunsPerWorkstream: number;
   /** Whether to re-invoke the orchestrator for workstreams interrupted by a restart. */
@@ -65,6 +70,13 @@ export interface RuntimeConfig {
   diagnostics: DiagnosticsConfig;
   /** Context-economics settings (tool spill, microcompact, file cache, search). */
   contextBorrowing: ContextBorrowingConfig;
+  /**
+   * Skills composition: load SKILL.md content into agent system prompts when
+   * an agent config declares `skills: [...]`. Disabled by default in
+   * production; opt in by setting RUNTIME_SKILLS_DIR to a directory of
+   * `<name>.md` or `<name>/SKILL.md` files.
+   */
+  skills: SkillsConfig;
 }
 
 /** The agent's GitHub identity, used to clone, push, and open/comment on PRs. */
@@ -126,6 +138,14 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
   const modelPresetId =
     hasTierOverride || hasRoleOverride ? 'custom' : preset.id;
 
+  const baseURL = env.LLM_BASE_URL || 'https://opencode.ai/zen/v1';
+  if (modelPresetId.startsWith('go-') && !baseURL.includes('/zen/go/')) {
+    throw new Error(
+      `MODEL_PRESET=${modelPresetId} requires LLM_BASE_URL=https://opencode.ai/zen/go/v1 ` +
+        `(OpenCode Go subscription). Current LLM_BASE_URL: ${baseURL}`,
+    );
+  }
+
   const apiKey =
     env.LLM_API_KEY || env.ZEN_API_KEY || env.ANTHROPIC_API_KEY;
 
@@ -165,9 +185,20 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     },
   };
 
+  const skillsDir = env.RUNTIME_SKILLS_DIR
+    ? path.resolve(env.RUNTIME_SKILLS_DIR)
+    : path.resolve(process.cwd(), 'skills');
+  const skills: SkillsConfig = {
+    enabled: env.RUNTIME_SKILLS_ENABLED === 'true' && !!env.RUNTIME_SKILLS_DIR,
+    dir: skillsDir,
+    maxTotalChars: env.RUNTIME_SKILLS_MAX_TOTAL_CHARS
+      ? Number(env.RUNTIME_SKILLS_MAX_TOTAL_CHARS)
+      : 24_000,
+  };
+
   return {
     apiKey: required('LLM_API_KEY (or ZEN_API_KEY / ANTHROPIC_API_KEY)', apiKey),
-    baseURL: env.LLM_BASE_URL || 'https://opencode.ai/zen/v1',
+    baseURL,
     model: models.medium,
     models,
     roleTiers,
@@ -178,6 +209,12 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     maxIterationsPerCall: env.RUNTIME_MAX_ITERATIONS
       ? Number(env.RUNTIME_MAX_ITERATIONS)
       : 24,
+    maxIterationsPlanner: env.RUNTIME_MAX_ITERATIONS_PLANNER
+      ? Number(env.RUNTIME_MAX_ITERATIONS_PLANNER)
+      : undefined,
+    maxCallDurationMs: env.RUNTIME_MAX_CALL_DURATION_MS
+      ? Number(env.RUNTIME_MAX_CALL_DURATION_MS)
+      : 600_000,
     maxRunsPerWorkstream: env.RUNTIME_MAX_RUNS_PER_WORKSTREAM
       ? Number(env.RUNTIME_MAX_RUNS_PER_WORKSTREAM)
       : 60,
@@ -186,5 +223,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     github,
     diagnostics,
     contextBorrowing,
+    skills,
   };
 }

@@ -5,6 +5,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import {
   plannerSpawnBlocked,
+  recordPlanReviewFallback,
   reviewerSpawnBlocked,
 } from './spawn-guards.js';
 import { Store } from '../storage/store.js';
@@ -152,4 +153,68 @@ test('reviewerSpawnBlocked after rejection until write_plan', async () => {
 
   const blocked = await reviewerSpawnBlocked(store, ws.id, 'plan');
   assert.ok(blocked?.includes('write_plan'));
+});
+
+test('recordPlanReviewFallback records an approved plan review', async () => {
+  const dataDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'artificer-spawn-guard-'),
+  );
+  const store = new Store(dataDir);
+  await store.init();
+  const ws = await store.createWorkstream({ title: 't', goal: 'g' });
+  await store.writePlan(ws.id, '# Plan');
+
+  await recordPlanReviewFallback(store, ws.id, 'looks good to me');
+
+  const reviews = await store.listReviews(ws.id);
+  assert.equal(reviews.length, 1);
+  assert.equal(reviews[0].stage, 'plan');
+  assert.equal(reviews[0].approved, true);
+  assert.equal(reviews[0].severity, 'minor');
+  assert.match(reviews[0].notes, /auto-approved/);
+  assert.match(reviews[0].notes, /looks good to me/);
+});
+
+test('recordPlanReviewFallback is a no-op when a plan review already exists', async () => {
+  const dataDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'artificer-spawn-guard-'),
+  );
+  const store = new Store(dataDir);
+  await store.init();
+  const ws = await store.createWorkstream({ title: 't', goal: 'g' });
+  await store.writePlan(ws.id, '# Plan');
+  await store.createReview({
+    workstreamId: ws.id,
+    target: 'plan',
+    notes: 'rejected',
+    approved: false,
+    stage: 'plan',
+    severity: 'important',
+  });
+
+  await recordPlanReviewFallback(store, ws.id, 'should be ignored');
+
+  const reviews = await store.listReviews(ws.id);
+  assert.equal(reviews.length, 1);
+  assert.equal(reviews[0].approved, false);
+  assert.equal(reviews[0].notes, 'rejected');
+});
+
+test('recordPlanReviewFallback clips very long reviewer output', async () => {
+  const dataDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'artificer-spawn-guard-'),
+  );
+  const store = new Store(dataDir);
+  await store.init();
+  const ws = await store.createWorkstream({ title: 't', goal: 'g' });
+  await store.writePlan(ws.id, '# Plan');
+
+  const huge = 'x'.repeat(5_000);
+  await recordPlanReviewFallback(store, ws.id, huge);
+
+  const reviews = await store.listReviews(ws.id);
+  assert.equal(reviews.length, 1);
+  // 1500-char cap from the implementation, with a trailing ellipsis marker.
+  assert.ok(reviews[0].notes.length < 2_000, 'notes should be clipped');
+  assert.match(reviews[0].notes, /…/);
 });

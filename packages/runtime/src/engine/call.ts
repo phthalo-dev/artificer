@@ -10,9 +10,12 @@ import { formatCallError } from '../llm/errors.js';
 import { runToolLoop } from '../llm/loop.js';
 import type { Store } from '../storage/store.js';
 import type { RunRecord } from '../storage/types.js';
-import { toolsForRole } from '../tools/registry.js';
+import { toolsForRole, toolsForAgent } from '../tools/registry.js';
 import { findGitRepo } from './git-repo.js';
 import { getRole } from './roles.js';
+import { getAgentConfig, getAgentConfigForWorkstream } from '../tools/agent-definition.js';
+import { resolveAgentConfig, resolveAgentConfigAsync } from './agent-config.js';
+import { withWallClockTimeout } from './call-timeout.js';
 
 const execAsync = promisify(exec);
 
@@ -162,8 +165,40 @@ export async function executeCall(
     : store.layout.workspaceDir;
 
   const ctx: ToolContext = { engine, run, workspaceDir };
-  const tools = toolsForRole(run.role, ctx);
-  const role = getRole(run.role);
+
+  let tools: import('../llm/types.js').ToolDef[];
+  let systemPrompt: string;
+  let maxIterations = config.maxIterationsPerCall;
+
+  if (run.agentConfigId) {
+    const agentConfig =
+      getAgentConfig(run.agentConfigId) ??
+      (run.workstreamId
+        ? await getAgentConfigForWorkstream(store, run.workstreamId, run.agentConfigId)
+        : undefined);
+    if (agentConfig) {
+      const resolved = await resolveAgentConfigAsync(
+        agentConfig,
+        config.agentName,
+        config.skills,
+      );
+      tools = toolsForAgent(resolved, ctx);
+      systemPrompt = resolved.systemPrompt;
+      maxIterations = resolved.maxTurns;
+    } else {
+      tools = toolsForRole(run.role, ctx);
+      const role = getRole(run.role);
+      systemPrompt = role.system(config.agentName);
+    }
+  } else {
+    tools = toolsForRole(run.role, ctx);
+    const role = getRole(run.role);
+    systemPrompt = role.system(config.agentName);
+  }
+
+  if (run.role === 'planner' && config.maxIterationsPlanner) {
+    maxIterations = Math.min(maxIterations, config.maxIterationsPlanner);
+  }
 
   run.status = 'running';
   run.startedAt = new Date().toISOString();
@@ -174,12 +209,13 @@ export async function executeCall(
     const userMessage = await buildContext(store, run, workspaceDir, config);
     let runCharTotal = 0;
 
-    const result = await runToolLoop({
+    const result = await withWallClockTimeout(
+      runToolLoop({
       model: resolveModel(run.model ?? config.model),
-      system: role.system(config.agentName),
+      system: systemPrompt,
       userMessage,
       tools,
-      maxIterations: config.maxIterationsPerCall,
+      maxIterations,
       toolResultSpill: {
         layout: store.layout,
         runId: run.id,
@@ -212,7 +248,10 @@ export async function executeCall(
         });
         void store.saveRun(run);
       },
-    });
+    }),
+      config.maxCallDurationMs,
+      `${run.role} call`,
+    );
 
     run.output = result.text;
     run.usage = result.usage;

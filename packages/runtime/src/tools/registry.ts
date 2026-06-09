@@ -1,6 +1,7 @@
 import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
 import type { RoleName } from '../storage/types.js';
+import type { ResolvedAgentConfig } from '../engine/agent-config.js';
 import { createArtifactTools } from './artifacts.js';
 import {
   createCommunicatorTools,
@@ -14,10 +15,39 @@ import { createOrchestratorTools } from './orchestrator-tool.js';
 import { createSearchTools } from './search.js';
 import { createShellTool } from './shell.js';
 import { createToolResultReadTools } from './tool-result-read.js';
+import { createAgentDefinitionTools } from './agent-definition.js';
 
 function byName(tools: ToolDef[], names: string[]): ToolDef[] {
   const set = new Set(names);
   return tools.filter((t) => set.has(t.name));
+}
+
+function buildAllTools(ctx: ToolContext): ToolDef[] {
+  const orchestrator = createOrchestratorTools(ctx);
+  const reply = createReplyTool(ctx);
+  const communicator = createCommunicatorTools(ctx);
+  const files = createFileTools(ctx);
+  const edit = createEditTool(ctx);
+  const shell = createShellTool(ctx);
+  const git = createGitTools(ctx);
+  const artifacts = createArtifactTools(ctx);
+  const fetchTools = createFetchTools(ctx);
+  const toolResultRead = createToolResultReadTools(ctx);
+  const searchAll = createSearchTools(ctx);
+
+  return [
+    ...orchestrator,
+    ...reply,
+    ...communicator,
+    ...files,
+    ...edit,
+    ...shell,
+    ...git,
+    ...artifacts,
+    ...fetchTools,
+    ...toolResultRead,
+    ...searchAll,
+  ];
 }
 
 /**
@@ -55,6 +85,7 @@ export function toolsForRole(role: RoleName, ctx: ToolContext): ToolDef[] {
         ...toolResultRead,
         ...byName(artifacts, ['read_plan']),
         ...byName(files, ['read_file', 'list_files']),
+        ...createAgentDefinitionTools(ctx),
       ];
 
     case 'planner':
@@ -102,4 +133,16 @@ export function toolsForRole(role: RoleName, ctx: ToolContext): ToolDef[] {
     default:
       return [];
   }
+}
+
+/**
+ * Returns the tools available to a dynamically configured agent. Resolves tools
+ * by name from the agent's resolved tool list.
+ */
+export function toolsForAgent(
+  agent: ResolvedAgentConfig,
+  ctx: ToolContext,
+): ToolDef[] {
+  const allTools = buildAllTools(ctx);
+  return byName(allTools, agent.tools);
 }

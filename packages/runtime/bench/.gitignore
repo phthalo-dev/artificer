@@ -1,3 +1,4 @@
 # Generated benchmark artifacts and dataset cache
 results/
 tasks/.cache/
+eval/.venv/

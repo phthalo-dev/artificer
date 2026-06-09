@@ -81,6 +81,8 @@ export async function startRuntime(
     RUNTIME_CONCURRENCY: '1',
     RUNTIME_MAX_RUNS_PER_WORKSTREAM: String(config.maxRunsPerWorkstream),
     RUNTIME_MAX_ITERATIONS: String(config.maxIterationsPerCall),
+    RUNTIME_MAX_ITERATIONS_PLANNER: String(config.maxIterationsPlanner),
+    RUNTIME_MAX_CALL_DURATION_MS: String(config.maxCallDurationMs),
     RUNTIME_RESUME_ON_STARTUP: 'false',
     LLM_MODEL: config.models.medium,
     LLM_MODEL_LOW: config.models.low,

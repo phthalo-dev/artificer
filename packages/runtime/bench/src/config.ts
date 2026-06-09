@@ -30,6 +30,10 @@ export interface BenchConfig {
   maxRunsPerWorkstream: number;
   /** Max tool-use iterations per call (passed to the runtime). */
   maxIterationsPerCall: number;
+  /** Lower iteration cap for planner calls in bench runs. */
+  maxIterationsPlanner: number;
+  /** Per-call wall-clock limit passed to the runtime, in ms. */
+  maxCallDurationMs: number;
   /** Model ids per tier, pinned for reproducibility. */
   models: { low: string; medium: string; high: string };
   /** Role -> tier map passed to spawned runtimes. */
@@ -148,6 +152,16 @@ export function loadBenchConfig(
     ),
     maxIterationsPerCall: Number(
       flag(argv, 'max-iterations') ?? env.BENCH_MAX_ITERATIONS ?? 30,
+    ),
+    maxIterationsPlanner: Number(
+      flag(argv, 'max-iterations-planner') ??
+        env.BENCH_MAX_ITERATIONS_PLANNER ??
+        15,
+    ),
+    maxCallDurationMs: Number(
+      flag(argv, 'max-call-duration-ms') ??
+        env.BENCH_MAX_CALL_DURATION_MS ??
+        600_000,
     ),
     models,
     roleTiers,

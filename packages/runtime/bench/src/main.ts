@@ -51,6 +51,22 @@ function warnGoModelMismatch(config: BenchConfig): void {
   );
 }
 
+/** Fail fast when a go-* preset is used without the Go gateway URL. */
+function requireGoGatewayForPreset(config: BenchConfig): void {
+  if (!config.presetId?.startsWith('go-')) return;
+  const base = process.env.LLM_BASE_URL ?? 'https://opencode.ai/zen/v1';
+  if (base.includes('/zen/go/')) return;
+  // eslint-disable-next-line no-console
+  console.error(
+    `[bench] error: preset "${config.presetId}" requires the OpenCode Go gateway.\n` +
+      `  Set in packages/runtime/.env:\n` +
+      `    LLM_BASE_URL=https://opencode.ai/zen/go/v1\n` +
+      `  Use an OpenCode Go subscription API key in LLM_API_KEY.\n` +
+      `  Current LLM_BASE_URL: ${base}`,
+  );
+  process.exit(1);
+}
+
 async function main(): Promise<void> {
   const config = loadBenchConfig();
   const { suite, instances } = await selectInstances(config);
@@ -64,6 +80,7 @@ async function main(): Promise<void> {
 
   await fs.mkdir(config.resultsDir, { recursive: true });
 
+  requireGoGatewayForPreset(config);
   warnGoModelMismatch(config);
 
   // eslint-disable-next-line no-console

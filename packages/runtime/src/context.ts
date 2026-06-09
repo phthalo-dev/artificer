@@ -1,5 +1,6 @@
 import type { RuntimeConfig } from './config.js';
 import type { ModelTier } from './engine/models.js';
+import type { AgentConfig } from './engine/agent-config.js';
 import type { Store } from './storage/store.js';
 import type {
   RoleName,
@@ -17,6 +18,8 @@ export interface SpawnCallInput {
   originMessageId?: string;
   /** Optional complexity override choosing the model tier for this call. */
   complexity?: ModelTier;
+  /** Optional dynamic agent configuration (Phase 2). */
+  agentConfig?: AgentConfig;
 }
 
 export type RuntimeEvent =

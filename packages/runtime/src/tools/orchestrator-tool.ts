@@ -58,6 +58,9 @@ async function workstreamStatus(
   const tasks = allTasks.slice(-MAX_STATUS_TASKS);
   const reviews = allReviews.slice(-MAX_STATUS_REVIEWS);
 
+  const phaseConfig = ws.phaseConfig;
+  const agentDefinitions = phaseConfig?.agentDefinitions ?? [];
+
   return JSON.stringify(
     {
       id: ws.id,
@@ -71,6 +74,21 @@ async function workstreamStatus(
       cloneLocation: localRepoPath
         ? path.relative(workspaceDir, localRepoPath) || '.'
         : undefined,
+      currentPhase: ws.currentPhase ?? 'setup',
+      phase: phaseConfig
+        ? {
+            name: phaseConfig.phase,
+            iterationsInPhase: phaseConfig.iterationsInPhase,
+            maxIterations: phaseConfig.maxIterations,
+            startedAt: phaseConfig.startedAt,
+            agentsPlanned: phaseConfig.agentsPlanned ?? false,
+          }
+        : undefined,
+      agentDefinitions: agentDefinitions.map((d) => ({
+        role: d.role,
+        agentConfigId: d.agentConfigId,
+      })),
+      phaseHistoryCount: ws.phaseHistory?.length ?? 0,
       hasPlan: plan !== null,
       taskCount: allTasks.length,
       omittedTasks: Math.max(0, allTasks.length - tasks.length),
@@ -106,7 +124,7 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
     {
       name: 'get_status',
       description:
-        'Query the current state of the system. Without a workstreamId, returns an overview of all workstreams. With a workstreamId, returns that workstream\'s full status, tasks, reviews, and whether a plan exists.',
+        'Query the current state of the system. Without a workstreamId, returns an overview of all workstreams. With a workstreamId, returns that workstream\'s full status including current phase, phase agent assignments, tasks, reviews, and whether a plan exists.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -142,7 +160,7 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
     {
       name: 'invoke_call',
       description:
-        'Spawn a new focused call to do a piece of work. Use role "planner" to produce a plan, "worker" to implement a single file or unit, "reviewer" to review work, or "orchestrator" to delegate a sub-stream. Optionally set "complexity" to choose the model power for this specific task (low = simple/cheap, high = hard reasoning); omit it to use the role default. When the spawned call finishes, the orchestrator for this workstream is automatically re-invoked with the result.',
+        'Spawn a new focused call to do a piece of work. Use role "planner" to produce a plan, "worker" to implement a single file or unit, "reviewer" to review work, or "orchestrator" to delegate a sub-stream. Optionally set "complexity" to choose the model power for this specific task (low = simple/cheap, high = hard reasoning); omit it to use the role default. When the spawned call finishes, the state machine dispatches the next action automatically.',
       inputSchema: {
         type: 'object',
         properties: {

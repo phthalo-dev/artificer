@@ -10,10 +10,12 @@ import {
   emptyUsage,
   type Memory,
   type Message,
+  type PhaseConfig,
   type Review,
   type RunRecord,
   type Task,
   type Workstream,
+  type WorkstreamPhase,
   type WorkstreamStatus,
 } from './types.js';
 
@@ -144,9 +146,10 @@ export class Store {
 
   async createWorkstream(
     input: Pick<Workstream, 'title' | 'goal'> &
-      Partial<Pick<Workstream, 'repoUrl' | 'baseCommit' | 'summary' | 'status'>>,
+      Partial<Pick<Workstream, 'repoUrl' | 'baseCommit' | 'summary' | 'status' | 'currentPhase'>>,
   ): Promise<Workstream> {
     const ts = now();
+    const initialPhase: WorkstreamPhase = input.currentPhase ?? 'setup';
     const workstream: Workstream = {
       id: newId('ws'),
       title: input.title,
@@ -155,6 +158,14 @@ export class Store {
       summary: input.summary ?? '',
       repoUrl: input.repoUrl,
       baseCommit: input.baseCommit,
+      currentPhase: initialPhase,
+      phaseConfig: {
+        phase: initialPhase,
+        maxIterations: 10,
+        iterationsInPhase: 0,
+        startedAt: ts,
+      },
+      phaseHistory: [],
       createdAt: ts,
       updatedAt: ts,
     };
@@ -170,12 +181,84 @@ export class Store {
   async updateWorkstream(
     id: string,
     patch: Partial<
-      Pick<Workstream, 'status' | 'summary' | 'title' | 'repoUrl' | 'baseCommit'>
+      Pick<Workstream, 'status' | 'summary' | 'title' | 'repoUrl' | 'baseCommit' | 'currentPhase' | 'phaseConfig'>
     >,
   ): Promise<Workstream | null> {
     const existing = await this.getWorkstream(id);
     if (!existing) return null;
     const updated: Workstream = { ...existing, ...patch, updatedAt: now() };
+    await writeJson(this.layout.workstreamFile(id), updated);
+    return updated;
+  }
+
+  async advancePhase(
+    id: string,
+    nextPhase: WorkstreamPhase,
+    maxIterations: number = 10,
+  ): Promise<Workstream | null> {
+    const existing = await this.getWorkstream(id);
+    if (!existing) return null;
+    const ts = now();
+    const phaseHistory = [...(existing.phaseHistory ?? [])];
+    if (existing.phaseConfig) {
+      phaseHistory.push(existing.phaseConfig);
+    }
+    const updated: Workstream = {
+      ...existing,
+      currentPhase: nextPhase,
+      phaseConfig: {
+        phase: nextPhase,
+        maxIterations,
+        iterationsInPhase: 0,
+        startedAt: ts,
+      },
+      phaseHistory,
+      updatedAt: ts,
+    };
+    await writeJson(this.layout.workstreamFile(id), updated);
+    return updated;
+  }
+
+  async incrementPhaseIterations(id: string): Promise<Workstream | null> {
+    const existing = await this.getWorkstream(id);
+    if (!existing || !existing.phaseConfig) return null;
+    const updated: Workstream = {
+      ...existing,
+      phaseConfig: {
+        ...existing.phaseConfig,
+        iterationsInPhase: existing.phaseConfig.iterationsInPhase + 1,
+      },
+      updatedAt: now(),
+    };
+    await writeJson(this.layout.workstreamFile(id), updated);
+    return updated;
+  }
+
+  async updatePhaseAgents(
+    id: string,
+    agentDefinitions: import('./types.js').PhaseAgentDefinition[],
+    agentConfigs?: import('./types.js').StoredAgentConfig[],
+  ): Promise<Workstream | null> {
+    const existing = await this.getWorkstream(id);
+    if (!existing || !existing.phaseConfig) return null;
+    const configsById: Record<string, import('./types.js').StoredAgentConfig> = {
+      ...(existing.phaseConfig.agentConfigs ?? {}),
+    };
+    if (agentConfigs) {
+      for (const config of agentConfigs) {
+        configsById[config.id] = config;
+      }
+    }
+    const updated: Workstream = {
+      ...existing,
+      phaseConfig: {
+        ...existing.phaseConfig,
+        agentsPlanned: true,
+        agentDefinitions,
+        agentConfigs: configsById,
+      },
+      updatedAt: now(),
+    };
     await writeJson(this.layout.workstreamFile(id), updated);
     return updated;
   }
@@ -287,6 +370,7 @@ export class Store {
           | 'originMessageId'
           | 'model'
           | 'status'
+          | 'agentConfigId'
         >
       >,
   ): Promise<RunRecord> {
@@ -303,6 +387,7 @@ export class Store {
       toolCalls: [],
       usage: emptyUsage(),
       createdAt: now(),
+      agentConfigId: input.agentConfigId,
     };
     await writeJson(this.layout.runFile(run.id), run);
     return run;

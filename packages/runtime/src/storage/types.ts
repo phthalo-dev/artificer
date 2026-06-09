@@ -27,6 +27,44 @@ export type WorkstreamStatus =
   | 'failed'
   | 'cancelled';
 
+export type WorkstreamPhase =
+  | 'setup'
+  | 'planning'
+  | 'implementing'
+  | 'verifying'
+  | 'done';
+
+export interface PhaseAgentDefinition {
+  id: string;
+  role: 'planner' | 'worker' | 'reviewer';
+  agentConfigId: string;
+}
+
+export interface PhaseConfig {
+  phase: WorkstreamPhase;
+  maxIterations: number;
+  iterationsInPhase: number;
+  startedAt: string;
+  agentsPlanned?: boolean;
+  agentDefinitions?: PhaseAgentDefinition[];
+  /** Agent configs defined for this phase (persisted for restart resilience). */
+  agentConfigs?: Record<string, StoredAgentConfig>;
+}
+
+/** Serializable agent configuration stored on a workstream phase. */
+export interface StoredAgentConfig {
+  id: string;
+  name: string;
+  archetype: string;
+  toolOverrides?: { add?: string[]; remove?: string[] };
+  modelTier: 'low' | 'medium' | 'high';
+  modelOverride?: string;
+  skills?: string[];
+  promptExtension?: string;
+  maxTurns?: number;
+  contextDirectives?: string;
+}
+
 export interface Workstream {
   id: string;
   title: string;
@@ -39,6 +77,12 @@ export interface Workstream {
   repoUrl?: string;
   /** Optional base commit to check out after cloning (bench / SWE tasks). */
   baseCommit?: string;
+  /** Current phase of the workstream lifecycle. */
+  currentPhase: WorkstreamPhase;
+  /** Configuration for the current phase. */
+  phaseConfig?: PhaseConfig;
+  /** History of completed phases. */
+  phaseHistory: PhaseConfig[];
   createdAt: string;
   updatedAt: string;
 }
@@ -130,6 +174,8 @@ export interface RunRecord {
   createdAt: string;
   startedAt?: string;
   finishedAt?: string;
+  /** Dynamic agent configuration (Phase 2). */
+  agentConfigId?: string;
 }
 
 export interface Memory {
