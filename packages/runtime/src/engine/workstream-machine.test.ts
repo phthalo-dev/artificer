@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
   MAX_REVIEW_CYCLES,
+  MAX_WORKER_RUNS_BEFORE_REVIEW,
   type WorkstreamFacts,
   nextWorkstreamAction,
 } from './workstream-machine.js';
@@ -16,6 +17,7 @@ function facts(overrides: Partial<WorkstreamFacts> = {}): WorkstreamFacts {
     reviewCount: 0,
     lastReviewApproved: undefined,
     workSinceLastReview: 0,
+    lastWorkerDone: false,
     consecutiveFailedRuns: 0,
     plannerRunsWithoutPlan: 0,
     totalRuns: 1,
@@ -84,8 +86,29 @@ test('plan written but no patch -> worker implements', () => {
   assert.equal((a as { role: string }).role, 'worker');
 });
 
-test('patch present, never reviewed -> reviewer', () => {
-  const a = nextWorkstreamAction(facts({ patchPresent: true, reviewCount: 0 }));
+test('patch present, worker reports done -> reviewer', () => {
+  const a = nextWorkstreamAction(
+    facts({ patchPresent: true, reviewCount: 0, workSinceLastReview: 1, lastWorkerDone: true }),
+  );
+  assert.equal((a as { role: string }).role, 'reviewer');
+});
+
+test('patch present but worker still working (not done, under cap) -> keep implementing', () => {
+  const a = nextWorkstreamAction(
+    facts({ patchPresent: true, reviewCount: 0, workSinceLastReview: 2, lastWorkerDone: false }),
+  );
+  assert.equal((a as { role: string }).role, 'worker');
+});
+
+test('worker never reports done -> review forced at the per-review cap', () => {
+  const a = nextWorkstreamAction(
+    facts({
+      patchPresent: true,
+      reviewCount: 0,
+      workSinceLastReview: MAX_WORKER_RUNS_BEFORE_REVIEW,
+      lastWorkerDone: false,
+    }),
+  );
   assert.equal((a as { role: string }).role, 'reviewer');
 });
 
@@ -96,13 +119,14 @@ test('patch present and approved -> done', () => {
   assert.deepEqual(a, { kind: 'done' });
 });
 
-test('rejected review with new worker output -> re-review', () => {
+test('rejected review, worker addressed it and reports done -> re-review', () => {
   const a = nextWorkstreamAction(
     facts({
       patchPresent: true,
       reviewCount: 1,
       lastReviewApproved: false,
       workSinceLastReview: 1,
+      lastWorkerDone: true,
     }),
   );
   assert.equal((a as { role: string }).role, 'reviewer');
@@ -143,7 +167,7 @@ test('full happy path converges to done without an orchestrator', () => {
   f = facts({ patchPresent: false });
   assert.equal((nextWorkstreamAction(f) as { role: string }).role, 'worker');
 
-  f = facts({ patchPresent: true, reviewCount: 0 });
+  f = facts({ patchPresent: true, reviewCount: 0, workSinceLastReview: 1, lastWorkerDone: true });
   assert.equal((nextWorkstreamAction(f) as { role: string }).role, 'reviewer');
 
   f = facts({ patchPresent: true, reviewCount: 1, lastReviewApproved: true });

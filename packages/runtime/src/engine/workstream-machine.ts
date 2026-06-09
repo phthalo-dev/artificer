@@ -12,6 +12,13 @@
 export const MAX_REVIEW_CYCLES = 3;
 
 /**
+ * Worker runs allowed since the last review before forcing a review, even if
+ * the worker never reports DONE. Lets a large task accumulate implementation
+ * across several worker runs instead of being reviewed after its first edit.
+ */
+export const MAX_WORKER_RUNS_BEFORE_REVIEW = 5;
+
+/**
  * Consecutive failed runs before the workstream is blocked. Guards against a
  * failing model or a rate-limited/unavailable endpoint: without this the state
  * machine would re-dispatch the same role until the hard run cap.
@@ -78,6 +85,8 @@ export interface WorkstreamFacts {
   lastReviewApproved?: boolean;
   /** Worker runs completed since the last review (or since the start). */
   workSinceLastReview: number;
+  /** Whether the most recent worker run reported it had finished (DONE). */
+  lastWorkerDone: boolean;
   /** Trailing runs that failed (e.g. the LLM endpoint erroring/rate-limited). */
   consecutiveFailedRuns: number;
   /** Completed planner runs that did not produce a plan (planning is stuck). */
@@ -140,9 +149,21 @@ export function nextWorkstreamAction(f: WorkstreamFacts): WorkstreamAction {
     return { kind: 'done' };
   }
 
-  // New, unreviewed work (or never reviewed) → review it.
+  // There is unreviewed worker output. Let the worker keep implementing until it
+  // reports DONE or hits the per-review cap, THEN review — so a large task is
+  // not reviewed (and rejected) after only its first edit.
   if (f.reviewCount === 0 || f.workSinceLastReview > 0) {
-    return { kind: 'dispatch', role: 'reviewer', task: REVIEW_TASK };
+    if (
+      f.lastWorkerDone ||
+      f.workSinceLastReview >= MAX_WORKER_RUNS_BEFORE_REVIEW
+    ) {
+      return { kind: 'dispatch', role: 'reviewer', task: REVIEW_TASK };
+    }
+    return {
+      kind: 'dispatch',
+      role: 'worker',
+      task: f.planWritten ? IMPLEMENT_TASK : IMPLEMENT_DIRECT_TASK,
+    };
   }
 
   // Last review rejected and the worker has not yet addressed it.

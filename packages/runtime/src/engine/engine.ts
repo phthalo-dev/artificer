@@ -457,12 +457,21 @@ export class Engine implements EngineApi {
       a.createdAt.localeCompare(b.createdAt),
     );
     const lastReview = reviews.at(-1);
-    const workSinceLastReview = wsRuns.filter(
-      (r) =>
-        r.role === 'worker' &&
-        r.status === 'done' &&
-        (!lastReview || r.createdAt > lastReview.createdAt),
-    ).length;
+    const workerRunsSinceReview = wsRuns
+      .filter(
+        (r) =>
+          r.role === 'worker' &&
+          r.status === 'done' &&
+          (!lastReview || r.createdAt > lastReview.createdAt),
+      )
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const workSinceLastReview = workerRunsSinceReview.length;
+    // The worker ends its turn with a status line (DONE / BLOCKED / …); treat a
+    // DONE as "ready for review" so we don't review a half-finished large task.
+    const lastWorker = workerRunsSinceReview.at(-1);
+    const lastWorkerDone = lastWorker
+      ? /\bDONE(_WITH_CONCERNS)?\b/.test(lastWorker.output ?? '')
+      : false;
     const ordered = [...wsRuns].sort((a, b) =>
       a.createdAt.localeCompare(b.createdAt),
     );
@@ -483,6 +492,7 @@ export class Engine implements EngineApi {
       reviewCount: reviews.length,
       lastReviewApproved: lastReview?.approved,
       workSinceLastReview,
+      lastWorkerDone,
       consecutiveFailedRuns,
       plannerRunsWithoutPlan,
       totalRuns: wsRuns.length,
