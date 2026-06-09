@@ -197,12 +197,20 @@ export async function executeCall(
     const userMessage = await buildContext(store, run, workspaceDir, config);
     let runCharTotal = 0;
 
+    // The planner gets a tighter iteration cap so it commits to write_plan
+    // instead of investigating until the wall-clock/instance timeout.
+    const maxIterations =
+      run.role === 'planner'
+        ? Math.min(config.maxPlannerIterations, config.maxIterationsPerCall)
+        : config.maxIterationsPerCall;
+
     const result = await runToolLoop({
       model: resolveModel(run.model ?? config.model),
       system: role.system(config.agentName),
       userMessage,
       tools,
-      maxIterations: config.maxIterationsPerCall,
+      maxIterations,
+      maxRunMs: config.maxRunMs,
       toolResultSpill: {
         layout: store.layout,
         runId: run.id,

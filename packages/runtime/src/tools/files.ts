@@ -3,6 +3,7 @@ import path from 'node:path';
 import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
 import { FileCache } from '../engine/file-cache.js';
+import { clampFileContent } from './read-clamp.js';
 import { diagnoseEdited } from './diagnose.js';
 
 /** Resolve a user-supplied path inside the workspace, rejecting escapes. */
@@ -24,11 +25,19 @@ export function createFileTools(ctx: ToolContext): ToolDef[] {
     {
       name: 'read_file',
       description:
-        'Read the contents of a file within the workspace. Paths are relative to the workspace root.',
+        'Read a file within the workspace (paths relative to the workspace root). Returns up to ~500 lines; for a larger file use offset/limit to read a window, or grep to find specific content.',
       inputSchema: {
         type: 'object',
         properties: {
           path: { type: 'string', description: 'Workspace-relative file path.' },
+          offset: {
+            type: 'number',
+            description: '1-based line to start at (default 1).',
+          },
+          limit: {
+            type: 'number',
+            description: 'Max lines to return (default 500).',
+          },
         },
         required: ['path'],
       },
@@ -36,6 +45,11 @@ export function createFileTools(ctx: ToolContext): ToolDef[] {
         const rel = String(input.path);
         const target = resolveScoped(workspaceDir, rel);
         const content = await fs.readFile(target, 'utf8');
+        const offset =
+          input.offset !== undefined ? Number(input.offset) : undefined;
+        const limit =
+          input.limit !== undefined ? Number(input.limit) : undefined;
+        const clamped = clampFileContent(content, { offset, limit });
         if (ctx.run.workstreamId) {
           const stat = await fs.stat(target);
           const lineCount = content.split('\n').length;
@@ -50,7 +64,7 @@ export function createFileTools(ctx: ToolContext): ToolDef[] {
           });
           await cache.save();
         }
-        return content;
+        return clamped;
       },
     },
     {

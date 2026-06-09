@@ -45,6 +45,10 @@ export interface RuntimeConfig {
   concurrency: number;
   /** Max tool-use iterations allowed within a single call before forcing a stop. */
   maxIterationsPerCall: number;
+  /** Tighter iteration cap for the planner, to force a decisive write_plan. */
+  maxPlannerIterations: number;
+  /** Hard wall-clock cap (ms) for a single call, aborting in-flight generation. */
+  maxRunMs: number;
   /** Safety cap on total LLM calls per workstream to prevent runaway loops. */
   maxRunsPerWorkstream: number;
   /** Whether to re-invoke the orchestrator for workstreams interrupted by a restart. */
@@ -178,6 +182,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     maxIterationsPerCall: env.RUNTIME_MAX_ITERATIONS
       ? Number(env.RUNTIME_MAX_ITERATIONS)
       : 24,
+    maxPlannerIterations: env.RUNTIME_MAX_PLANNER_ITERATIONS
+      ? Number(env.RUNTIME_MAX_PLANNER_ITERATIONS)
+      : 18,
+    maxRunMs: env.RUNTIME_MAX_RUN_MS ? Number(env.RUNTIME_MAX_RUN_MS) : 420_000,
     maxRunsPerWorkstream: env.RUNTIME_MAX_RUNS_PER_WORKSTREAM
       ? Number(env.RUNTIME_MAX_RUNS_PER_WORKSTREAM)
       : 60,

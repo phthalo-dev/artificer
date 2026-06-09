@@ -31,6 +31,8 @@ export interface RunToolLoopOptions {
   userMessage: string;
   tools: ToolDef[];
   maxIterations: number;
+  /** Hard wall-clock cap (ms) for the whole call; aborts in-flight generation. */
+  maxRunMs?: number;
   maxTokens?: number;
   /** Called whenever a tool finishes, for live observability. */
   onToolCall?: (invocation: ToolInvocation) => void;
@@ -60,6 +62,7 @@ export async function runToolLoop(
     userMessage,
     tools,
     maxIterations,
+    maxRunMs,
     maxTokens = 4096,
     onToolCall,
     toolResultSpill,
@@ -67,6 +70,10 @@ export async function runToolLoop(
 
   const toolCalls: ToolInvocation[] = [];
   let toolIndex = 0;
+
+  // Accumulated incrementally so an aborted (wall-clock) run still reports the
+  // tokens it spent.
+  const accUsage = emptyUsage();
 
   const sdkTools: ToolSet = {};
   for (const def of tools) {
@@ -135,15 +142,35 @@ export async function runToolLoop(
   }
 
   const messages: ModelMessage[] = [{ role: 'user', content: userMessage }];
+  const signal = maxRunMs ? AbortSignal.timeout(maxRunMs) : undefined;
 
-  const result = await generateText({
-    model,
-    system,
-    messages,
-    tools: tools.length > 0 ? sdkTools : undefined,
-    maxOutputTokens: maxTokens,
-    stopWhen: stepCountIs(maxIterations),
-  });
+  let result: Awaited<ReturnType<typeof generateText>> | undefined;
+  try {
+    result = await generateText({
+      model,
+      system,
+      messages,
+      tools: tools.length > 0 ? sdkTools : undefined,
+      maxOutputTokens: maxTokens,
+      stopWhen: stepCountIs(maxIterations),
+      abortSignal: signal,
+      onStepFinish: ({ usage: u, providerMetadata }) => {
+        const cr = u.cachedInputTokens ?? 0;
+        accUsage.inputTokens += Math.max(0, (u.inputTokens ?? 0) - cr);
+        accUsage.outputTokens += u.outputTokens ?? 0;
+        accUsage.cacheReadInputTokens += cr;
+        accUsage.cacheCreationInputTokens += cacheCreationTokens(providerMetadata);
+        accUsage.requests += 1;
+      },
+    });
+  } catch (err) {
+    // A wall-clock abort is expected: end the call as truncated with the work
+    // and tokens accumulated so far, rather than failing the run.
+    if (signal?.aborted) {
+      return { text: '', toolCalls, usage: accUsage, truncated: true };
+    }
+    throw err;
+  }
 
   const usage = emptyUsage();
   const cacheRead = result.totalUsage.cachedInputTokens ?? 0;
