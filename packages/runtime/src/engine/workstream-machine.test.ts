@@ -279,3 +279,18 @@ test('full happy path converges through phases', () => {
   f = facts({ currentPhase: 'verifying' });
   assert.deepEqual(nextWorkstreamAction(f), { kind: 'done' });
 });
+
+test('single-loop skips planner and reviewer', () => {
+  const base = { singleLoop: true, planWritten: false, patchPresent: false };
+  let f = facts({ ...base, currentPhase: 'setup', repoReady: true });
+  assert.deepEqual(nextWorkstreamAction(f), {
+    kind: 'phase_complete',
+    nextPhase: 'implementing',
+  });
+
+  f = facts({ ...base, currentPhase: 'implementing', patchPresent: false });
+  assert.equal((nextWorkstreamAction(f) as { role: string }).role, 'worker');
+
+  f = facts({ ...base, currentPhase: 'implementing', patchPresent: true });
+  assert.deepEqual(nextWorkstreamAction(f), { kind: 'done' });
+});

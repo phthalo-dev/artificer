@@ -2,6 +2,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import 'dotenv/config';
 import { type BenchConfig, loadBenchConfig } from './config.js';
+import { applySuiteDefaults } from './suite-defaults.js';
 import { formatUsd, sumUsage } from './cost.js';
 import { archiveBenchRun } from './history.js';
 import { runInstance } from './run-instance.js';
@@ -68,9 +69,10 @@ function requireGoGatewayForPreset(config: BenchConfig): void {
 }
 
 async function main(): Promise<void> {
-  const config = loadBenchConfig();
-  const { suite, instances } = await selectInstances(config);
+  const rawConfig = loadBenchConfig();
+  const { suite, instances } = await selectInstances(rawConfig);
   const kind = suiteKind(suite);
+  const config = applySuiteDefaults(rawConfig, kind);
 
   if (instances.length === 0) {
     // eslint-disable-next-line no-console
@@ -87,7 +89,10 @@ async function main(): Promise<void> {
   console.log(
     `[bench] suite=${suiteName(suite, config.suitePath)} (${kind}) · ` +
       `${instances.length} instance(s) · models ` +
-      `low=${config.models.low} medium=${config.models.medium} high=${config.models.high}`,
+      `low=${config.models.low} medium=${config.models.medium} high=${config.models.high}` +
+      `${config.preflightClone ? ' · preflight-clone' : ''}` +
+      `${config.dockerMode !== 'off' ? ` · docker=${config.dockerMode}` : ''}` +
+      `${config.singleLoop ? ' · single-loop' : ''}`,
   );
 
   const attempts: AttemptRecord[] = [];

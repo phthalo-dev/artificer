@@ -16,6 +16,7 @@ import { getRole } from './roles.js';
 import { getAgentConfig, getAgentConfigForWorkstream } from '../tools/agent-definition.js';
 import { resolveAgentConfig, resolveAgentConfigAsync } from './agent-config.js';
 import { withWallClockTimeout } from './call-timeout.js';
+import { singleLoopWorkerExtension } from './single-loop.js';
 
 const execAsync = promisify(exec);
 
@@ -125,6 +126,15 @@ async function buildContext(
       );
       const fileHints = fileCache.formatHintBlock();
       if (fileHints) sections.push(fileHints);
+
+      const runs = await store.listRunsForWorkstream(run.workstreamId);
+      const remaining = config.maxRunsPerWorkstream - runs.length;
+      if (remaining > 0 && remaining <= 5) {
+        sections.push(
+          `Urgency: ${remaining} LLM call(s) remain before this workstream is blocked. ` +
+            'Focus on a verified fix and finish.',
+        );
+      }
     }
   } else {
     const all = await store.listWorkstreams();
@@ -198,6 +208,10 @@ export async function executeCall(
 
   if (run.role === 'planner' && config.maxIterationsPlanner) {
     maxIterations = Math.min(maxIterations, config.maxIterationsPlanner);
+  }
+
+  if (config.singleLoop && run.role === 'worker') {
+    systemPrompt += singleLoopWorkerExtension(config.agentName);
   }
 
   run.status = 'running';

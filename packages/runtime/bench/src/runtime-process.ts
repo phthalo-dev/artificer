@@ -88,6 +88,7 @@ export async function startRuntime(
     LLM_MODEL_LOW: config.models.low,
     LLM_MODEL_HIGH: config.models.high,
     MODEL_PRESET: config.presetId ?? 'custom',
+    RUNTIME_SINGLE_LOOP: config.singleLoop ? 'true' : 'false',
   };
 
   for (const [role, tier] of Object.entries(config.roleTiers)) {

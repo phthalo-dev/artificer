@@ -2,6 +2,7 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { DEFAULT_PRESET_ID, getPreset } from './presets.js';
 import type { RoleName } from '../../src/storage/types.js';
+import { GENERIC_BENCH_DEFAULTS, type DockerMode } from './suite-defaults.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 
@@ -52,6 +53,15 @@ export interface BenchConfig {
   showTools: boolean;
   /** Clone repo into workspace before the agent runs (Harbor-style eval). */
   preflightClone: boolean;
+  /** Opt out of DeepSWE default preflight clone. */
+  noPreflightClone: boolean;
+  /** True when --preflight-clone or BENCH_PREFLIGHT_CLONE was set explicitly. */
+  preflightCloneExplicit: boolean;
+  /** Run shell commands inside the task Docker image (Harbor parity). */
+  dockerMode: DockerMode;
+  dockerModeExplicit: boolean;
+  /** Single-loop worker mode (A/B vs multi-role orchestration). */
+  singleLoop: boolean;
 }
 
 function flag(args: string[], name: string): string | undefined {
@@ -145,23 +155,29 @@ export function loadBenchConfig(
       flag(argv, 'poll-ms') ?? env.BENCH_POLL_MS ?? 5_000,
     ),
     instanceTimeoutMs: Number(
-      flag(argv, 'timeout-ms') ?? env.BENCH_TIMEOUT_MS ?? 1_200_000,
+      flag(argv, 'timeout-ms') ??
+        env.BENCH_TIMEOUT_MS ??
+        GENERIC_BENCH_DEFAULTS.instanceTimeoutMs,
     ),
     maxRunsPerWorkstream: Number(
-      flag(argv, 'max-runs') ?? env.BENCH_MAX_RUNS ?? 40,
+      flag(argv, 'max-runs') ??
+        env.BENCH_MAX_RUNS ??
+        GENERIC_BENCH_DEFAULTS.maxRunsPerWorkstream,
     ),
     maxIterationsPerCall: Number(
-      flag(argv, 'max-iterations') ?? env.BENCH_MAX_ITERATIONS ?? 30,
+      flag(argv, 'max-iterations') ??
+        env.BENCH_MAX_ITERATIONS ??
+        GENERIC_BENCH_DEFAULTS.maxIterationsPerCall,
     ),
     maxIterationsPlanner: Number(
       flag(argv, 'max-iterations-planner') ??
         env.BENCH_MAX_ITERATIONS_PLANNER ??
-        15,
+        GENERIC_BENCH_DEFAULTS.maxIterationsPlanner,
     ),
     maxCallDurationMs: Number(
       flag(argv, 'max-call-duration-ms') ??
         env.BENCH_MAX_CALL_DURATION_MS ??
-        600_000,
+        GENERIC_BENCH_DEFAULTS.maxCallDurationMs,
     ),
     models,
     roleTiers,
@@ -174,5 +190,29 @@ export function loadBenchConfig(
     preflightClone:
       boolFlag(argv, 'preflight-clone') ||
       env.BENCH_PREFLIGHT_CLONE === 'true',
+    noPreflightClone: boolFlag(argv, 'no-preflight-clone'),
+    preflightCloneExplicit:
+      boolFlag(argv, 'preflight-clone') || env.BENCH_PREFLIGHT_CLONE === 'true',
+    dockerMode: parseDockerMode(argv, env),
+    dockerModeExplicit:
+      boolFlag(argv, 'docker') ||
+      boolFlag(argv, 'no-docker') ||
+      env.BENCH_DOCKER_MODE !== undefined,
+    singleLoop:
+      boolFlag(argv, 'single-loop') || env.BENCH_SINGLE_LOOP === 'true',
   };
+}
+
+function parseDockerMode(
+  argv: string[],
+  env: NodeJS.ProcessEnv,
+): DockerMode {
+  if (boolFlag(argv, 'no-docker') || env.BENCH_DOCKER_MODE === 'off') {
+    return 'off';
+  }
+  if (boolFlag(argv, 'docker') || env.BENCH_DOCKER_MODE === 'on') {
+    return 'on';
+  }
+  if (env.BENCH_DOCKER_MODE === 'auto') return 'auto';
+  return GENERIC_BENCH_DEFAULTS.dockerMode;
 }

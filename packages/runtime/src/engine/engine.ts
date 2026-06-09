@@ -314,6 +314,16 @@ export class Engine implements EngineApi {
     const ws = await this.store.getWorkstream(workstreamId);
     if (!ws) throw new Error(`workstream ${workstreamId} not found`);
 
+    if (this.config.singleLoop) {
+      const facts = await this.gatherFacts(workstreamId);
+      if (facts?.repoReady) {
+        await this.store.updateWorkstream(workstreamId, {
+          currentPhase: 'implementing',
+          status: 'in_progress',
+        });
+      }
+    }
+
     const facts = await this.gatherFacts(workstreamId);
     if (!facts) return;
 
@@ -489,6 +499,7 @@ export class Engine implements EngineApi {
       consecutiveReviewerNoSubmit: noSubmitStreak,
       lastPlannerNoWritePlan,
       consecutivePlannerNoWritePlan: plannerNoWriteStreak,
+      singleLoop: this.config.singleLoop,
     };
   }
 

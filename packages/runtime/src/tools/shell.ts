@@ -1,18 +1,28 @@
 import { exec } from 'node:child_process';
+import path from 'node:path';
 import { promisify } from 'node:util';
 import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
+import { readDockerBenchManifest } from './docker-bench-manifest.js';
+import { runDockerShellCommand } from './docker-shell.js';
 import { checkGitCloneInWorkspace, checkReviewerWrite } from './shell-policy.js';
 import { buildGitEnv } from './git-env.js';
+import { elideOutput } from './output-elision.js';
 
 const execAsync = promisify(exec);
 
-const MAX_OUTPUT = 16_000;
 const DEFAULT_TIMEOUT_MS = 1000 * 60 * 5;
 
-function truncate(text: string): string {
-  if (text.length <= MAX_OUTPUT) return text;
-  return `${text.slice(0, MAX_OUTPUT)}\n... (output truncated)`;
+const SHELL_NOISE_ENV: NodeJS.ProcessEnv = {
+  PAGER: 'cat',
+  MANPAGER: 'cat',
+  LESS: '-R',
+  PIP_PROGRESS_BAR: 'off',
+  TQDM_DISABLE: '1',
+};
+
+function formatShellOutput(text: string): string {
+  return elideOutput(text);
 }
 
 export interface ShellRunResult {
@@ -36,7 +46,7 @@ export async function runShellCommand(opts: {
   try {
     const { stdout, stderr } = await execAsync(opts.command, {
       cwd: opts.cwd,
-      env: opts.env,
+      env: { ...SHELL_NOISE_ENV, ...opts.env },
       timeout: timeoutMs,
       killSignal: 'SIGKILL',
       maxBuffer: 1024 * 1024 * 10,
@@ -95,8 +105,18 @@ export function createShellTool(ctx: ToolContext): ToolDef[] {
         if (!writeCheck.allowed) {
           return `Error: ${writeCheck.reason}`;
         }
-        const { output } = await runShellCommand({ command, cwd, env });
-        return truncate(output);
+        const dataDir = path.resolve(ctx.engine.config.dataDir);
+        const dockerManifest = await readDockerBenchManifest(dataDir);
+        const timeoutMs = DEFAULT_TIMEOUT_MS;
+        const { output } = dockerManifest
+          ? await runDockerShellCommand({
+              command,
+              docker: dockerManifest,
+              timeoutMs,
+              extraEnv: env,
+            })
+          : await runShellCommand({ command, cwd, env, timeoutMs });
+        return formatShellOutput(output);
       },
     },
   ];

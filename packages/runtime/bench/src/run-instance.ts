@@ -9,6 +9,13 @@ import { type RuntimeEvent, subscribeEvents } from './events.js';
 import { extractPatch } from './extract-patch.js';
 import { decidePoll } from './poll.js';
 import type { RuntimeHandle } from './runtime-process.js';
+import {
+  hostRepoDir,
+  startDockerBenchEnv,
+  type DockerBenchEnv,
+} from './docker-env.js';
+import { buildDeepSweTaskBody } from './task-message.js';
+import { writeDockerBenchManifest } from '../../src/tools/docker-bench-manifest.js';
 import type {
   AttemptOutcome,
   AttemptRecord,
@@ -215,45 +222,20 @@ function shellQuote(value: string): string {
 /** Builds the task message handed to the agent for one benchmark instance. */
 export function buildTaskMessage(
   instance: BenchInstance,
-  options?: { preflight?: boolean },
+  options?: { preflight?: boolean; docker?: boolean },
 ): string {
   const repoUrl =
     instance.repository_url ?? `https://github.com/${instance.repo}.git`;
   const header = buildWorkstreamHeader(instance);
 
   if (instance.suite === 'deepswe') {
-    if (options?.preflight) {
-      return [
-        header,
-        '',
-        `Complete the software engineering task below in ${instance.repo}.`,
-        '',
-        'The repository is already cloned at `repo/` and checked out at the base commit.',
-        'Investigate with read_file, grep, and run_shell on the local tree.',
-        'Implement the requested behavior by editing the repository source.',
-        'The verifier tests observable behavior, not a specific implementation shape.',
-        'Do not modify or add test files. Do not open a pull request; leave the',
-        'change applied in the working tree.',
-        '',
-        instance.problem_statement,
-      ].join('\n');
-    }
-
     return [
       header,
       '',
-      `Complete the software engineering task below in ${instance.repo}.`,
-      '',
-      'Setup (do this first, exactly):',
-      `1. Clone ${repoUrl} into your workspace.`,
-      `2. Check out the exact base commit ${instance.base_commit}.`,
-      '',
-      'Implement the requested behavior by editing the repository source.',
-      'The verifier tests observable behavior, not a specific implementation shape.',
-      'Do not modify or add test files. Do not open a pull request; leave the',
-      'change applied in the working tree.',
-      '',
-      instance.problem_statement,
+      buildDeepSweTaskBody(instance, {
+        preflight: options?.preflight,
+        docker: options?.docker,
+      }),
     ].join('\n');
   }
 
@@ -317,6 +299,9 @@ export async function runInstance(
   const { client } = runtime;
 
   const setupTracker = startSetupTracker(runtime, startedAt);
+  let dockerEnv: DockerBenchEnv | undefined;
+  const useDocker =
+    resolveDockerMode(config, instance) && !!instance.docker_image;
 
   const baseRecord = (): AttemptRecord => ({
     instanceId: instance.instance_id,
@@ -337,7 +322,12 @@ export async function runInstance(
     instance.display_title ??
     `${instance.repo.split('/').pop() ?? instance.repo} task`;
 
-  const failEarly = (err: unknown): InstanceResult => {
+  const cleanup = async (): Promise<void> => {
+    if (dockerEnv) await dockerEnv.stop().catch(() => undefined);
+  };
+
+  const failEarly = async (err: unknown): Promise<InstanceResult> => {
+    await cleanup();
     setupTracker.stop();
     stopProgress();
     const rec = baseRecord();
@@ -355,27 +345,45 @@ export async function runInstance(
   let messageId: string | undefined;
   let workstreamId: string | undefined;
   try {
+    const bootstrapNeeded = useDocker || config.preflightClone;
     const created = await client.createWorkstream({
       title,
-      goal: buildTaskMessage(instance, { preflight: config.preflightClone }),
+      goal: buildTaskMessage(instance, {
+        preflight: bootstrapNeeded,
+        docker: useDocker,
+      }),
       repoUrl,
       baseCommit: instance.base_commit,
-      autostart: !config.preflightClone,
+      autostart: !bootstrapNeeded,
     });
     workstreamId = created.workstreamId;
     messageId = created.messageId;
   } catch (err) {
-    return failEarly(err);
+    return await failEarly(err);
   }
 
-  if (config.preflightClone && workstreamId && messageId) {
+  if (bootstrapNeeded && workstreamId && messageId) {
     const workspaceDir = path.join(runtime.dataDir, 'workspace', workstreamId);
+    const repoPath = hostRepoDir(workspaceDir);
     try {
-      await preflightClone(workspaceDir, repoUrl, instance.base_commit);
+      if (useDocker && instance.docker_image) {
+        dockerEnv = await startDockerBenchEnv(
+          instance.docker_image,
+          instance.instance_id,
+        );
+        await dockerEnv.bootstrapRepoToHost(repoPath);
+        await writeDockerBenchManifest(runtime.dataDir, {
+          containerId: dockerEnv.containerId,
+          workDir: dockerEnv.workDir,
+          hostRepoDir: repoPath,
+        });
+      } else {
+        await preflightClone(workspaceDir, repoUrl, instance.base_commit);
+      }
       setupTracker.notePreflightComplete();
       await client.startWorkstreamWork(workstreamId, messageId);
     } catch (err) {
-      return failEarly(err);
+      return await failEarly(err);
     }
   }
 
@@ -419,6 +427,7 @@ export async function runInstance(
 
   stopProgress();
   setupTracker.stop();
+  await cleanup();
 
   const rec = baseRecord();
   rec.messageId = messageId;
@@ -511,4 +520,13 @@ function emptyPrediction(
 
 function sleep(ms: number): Promise<void> {
   return new Promise((r) => setTimeout(r, ms));
+}
+
+function resolveDockerMode(
+  config: BenchConfig,
+  instance: BenchInstance,
+): boolean {
+  if (config.dockerMode === 'off') return false;
+  if (config.dockerMode === 'on') return !!instance.docker_image;
+  return !!instance.docker_image;
 }

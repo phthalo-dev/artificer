@@ -50,9 +50,12 @@ pnpm bench:swebench:report
 # or one shot:
 pnpm bench:full:swebench
 
-# DeepSWE mini (async-economy preset)
+# DeepSWE mini (deepswe preset — Harbor-aligned defaults)
 pnpm bench:deepswe
 pnpm bench:full:deepswe
+
+# DeepSWE single-loop A/B (one worker, no planner/reviewer)
+pnpm bench:deepswe:single-loop
 
 # DeepSWE TypeScript mini (quality-first for debugging)
 pnpm bench:deepswe:typescript:quality-first
@@ -75,8 +78,14 @@ Results land under `bench/results/<preset>/<suite>/` (e.g.
 `bench/results/async-economy/mini-suite/`).
 
 Model presets match the runtime (`MODEL_PRESET` / Models page in runtime-ui):
-`async-economy` (default), `ultra-budget`, `async-slow`, `quality-first`, `bench-budget`,
-`go-economy`, `go-flash`, `go-mimo`, `go-quality`, `go-minimax`.
+`async-economy` (default), `deepswe` (Harbor-aligned bench profile), `ultra-budget`,
+`async-slow`, `quality-first`, `bench-budget`, `go-economy`, `go-flash`, `go-mimo`,
+`go-quality`, `go-minimax`.
+
+**DeepSWE suite defaults** (applied automatically; override with flags):
+- Preflight clone from task image or git (Harbor-style — repo on disk before agent runs)
+- Docker shell execution inside the task evaluator image when `docker_image` is cached
+- Relaxed caps: 100 runs, 60m instance timeout, 50 iterations/call
 
 Go presets require `LLM_BASE_URL=https://opencode.ai/zen/go/v1` and an [OpenCode Go](https://opencode.ai/docs/go)
 subscription key. Start with `go-economy` for the best async correctness-per-dollar tradeoff.
@@ -98,13 +107,18 @@ pnpm bench --keep-data               # keep each instance's temp data dir
 pnpm bench --port 4111               # runtime port to spawn on
 pnpm bench --quiet                   # suppress live progress (start/end only)
 pnpm bench --quiet-tools             # live progress without per-tool lines
-pnpm bench --preflight-clone         # clone repo before agent runs (Harbor-style)
+pnpm bench --no-preflight-clone      # opt out of DeepSWE default preflight clone
+pnpm bench --preflight-clone         # force preflight on SWE-bench suites
+pnpm bench --docker                  # force Docker shell mode
+pnpm bench --no-docker               # disable Docker shell (host-only)
+pnpm bench --single-loop             # one worker loop (A/B vs multi-role)
 ```
 
-`BENCH_PREFLIGHT_CLONE=true` (or `--preflight-clone`) clones the target repo into
-the workstream workspace immediately after it is created, then sends a shortened
-task message. Use this to measure coding-only ceiling separately from clone
-orchestration. Full clone path remains the default for regression testing.
+DeepSWE suites **default to preflight clone** and **Docker shell mode** (`auto`)
+when the task has a cached `docker_image`. The driver bootstraps `repo/` from
+the evaluator image (dependencies included) and runs `run_shell` inside the
+container. Use `--no-preflight-clone` to test clone orchestration, or
+`--no-docker` for host-only shell (plain git clone).
 
 Each attempt in `attempts.json` records setup observability fields:
 `learnCallCount`, `localRepoReady`, `cloneLocation`, `setupPhaseMs`, and

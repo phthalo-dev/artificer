@@ -54,6 +54,25 @@ export const MODEL_PRESETS: ModelPreset[] = [
     roleTiers: ASYNC_ECONOMY_ROLES,
   },
   {
+    id: 'deepswe',
+    name: 'DeepSWE',
+    description:
+      'Harbor-aligned bench profile: kimi-k2.6 workhorse, medium orchestration/review, relaxed caps via suite defaults.',
+    tiers: {
+      low: 'gpt-5-nano',
+      medium: 'kimi-k2.6',
+      high: 'gpt-5.4-mini',
+    },
+    roleTiers: {
+      communicator: 'low',
+      orchestrator: 'medium',
+      planner: 'medium',
+      reviewer: 'medium',
+      worker: 'medium',
+      librarian: 'low',
+    },
+  },
+  {
     id: 'async-slow',
     name: 'Async slow',
     description:

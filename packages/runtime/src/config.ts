@@ -77,6 +77,8 @@ export interface RuntimeConfig {
    * `<name>.md` or `<name>/SKILL.md` files.
    */
   skills: SkillsConfig;
+  /** Bench A/B: skip planner/reviewer FSM and run one worker loop. */
+  singleLoop: boolean;
 }
 
 /** The agent's GitHub identity, used to clone, push, and open/comment on PRs. */
@@ -224,5 +226,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     diagnostics,
     contextBorrowing,
     skills,
+    singleLoop: env.RUNTIME_SINGLE_LOOP === 'true',
   };
 }

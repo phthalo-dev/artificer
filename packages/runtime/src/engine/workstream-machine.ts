@@ -18,6 +18,7 @@ import {
   detectConvergenceStallFromCounts,
 } from './convergence.js';
 import type { WorkstreamPhase } from '../storage/types.js';
+import { SINGLE_LOOP_IMPLEMENT_TASK } from './single-loop.js';
 
 /** Consecutive reviews without approval before the workstream is blocked. */
 export const MAX_REVIEW_CYCLES = 3;
@@ -120,6 +121,8 @@ export interface WorkstreamFacts {
    * Escalates to the orchestrator once this reaches the cap.
    */
   consecutivePlannerNoWritePlan: number;
+  /** Bench A/B mode: one worker loop, no planner/reviewer phases. */
+  singleLoop?: boolean;
 }
 
 /** Consecutive no-submit reviewer runs before the FSM escalates. */
@@ -147,6 +150,10 @@ export function nextWorkstreamAction(f: WorkstreamFacts): WorkstreamAction {
 
   if (f.currentPhase === 'done') {
     return { kind: 'done' };
+  }
+
+  if (f.singleLoop) {
+    return nextSingleLoopAction(f);
   }
 
   const convergenceStall = detectConvergenceStallFromCounts(
@@ -186,6 +193,25 @@ export function nextWorkstreamAction(f: WorkstreamFacts): WorkstreamAction {
     default:
       return { kind: 'blocked', reason: `unknown phase: ${f.currentPhase}` };
   }
+}
+
+function nextSingleLoopAction(f: WorkstreamFacts): WorkstreamAction {
+  if (f.hasRepoUrl && !f.repoReady) {
+    return { kind: 'setup' };
+  }
+  if (f.currentPhase === 'setup' || f.currentPhase === 'planning') {
+    return { kind: 'phase_complete', nextPhase: 'implementing' };
+  }
+  if (f.currentPhase === 'implementing') {
+    if (!f.patchPresent) {
+      return { kind: 'dispatch', role: 'worker', task: SINGLE_LOOP_IMPLEMENT_TASK };
+    }
+    return { kind: 'done' };
+  }
+  if (f.currentPhase === 'verifying') {
+    return { kind: 'done' };
+  }
+  return { kind: 'blocked', reason: `single-loop: unknown phase ${f.currentPhase}` };
 }
 
 function handleSetupPhase(f: WorkstreamFacts): WorkstreamAction {
