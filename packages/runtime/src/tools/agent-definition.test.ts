@@ -229,6 +229,7 @@ test('spawn_agent spawns a worker run carrying the agent config', async () => {
   clearAgentRegistry();
   const store = await makeStore();
   const ws = await makeWorkstream(store);
+  await store.writePlan(ws.id, '# Plan\n\n1. Fix the thing');
   const run = makeRun({ workstreamId: ws.id });
   const fake = makeFakeEngine(store, run, ws.id);
   const tools = createAgentDefinitionTools({
@@ -256,6 +257,30 @@ test('spawn_agent spawns a worker run carrying the agent config', async () => {
   assert.ok(call.agentConfig);
   assert.equal(call.agentConfig.id, agentId);
   assert.equal(call.agentConfig.archetype, 'coder');
+});
+
+test('spawn_agent blocked when workstream has no plan', async () => {
+  clearAgentRegistry();
+  const store = await makeStore();
+  const ws = await makeWorkstream(store);
+  const run = makeRun({ workstreamId: ws.id });
+  const fake = makeFakeEngine(store, run, ws.id);
+  const tools = createAgentDefinitionTools({
+    engine: fake.engine,
+    run,
+    workspaceDir: '/tmp',
+  });
+  const define = findTool('define_agent', tools);
+  const spawn = findTool('spawn_agent', tools);
+
+  const defined = (await define.handler({ name: 'coder-b', archetype: 'coder' })) as string;
+  const m = String(defined).match(/ID (agent_\w+)/);
+  assert.ok(m);
+  const agentId = m[1];
+
+  const out = await spawn.handler({ agentId, task: 'fix the thing' });
+  assert.match(String(out), /No plan exists/);
+  assert.equal(fake.spawnCalls.length, 0);
 });
 
 test('spawn_agent errors when the agent id is unknown', async () => {

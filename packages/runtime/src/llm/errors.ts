@@ -1,5 +1,17 @@
 import { APICallError } from 'ai';
 
+const CONTEXT_LENGTH_PATTERNS = [
+  /\bcontext\s*length\b/i,
+  /\bmaximum\s+context\b/i,
+  /\btoo\s+many\s+tokens\b/i,
+  /\binput\s+is\s+too\s+long\b/i,
+  /\bprompt\s+is\s+too\s+long\b/i,
+  /\bcontext\s+window\b/i,
+  /\btoken\s+limit\b/i,
+  /\bexceeds?\s+the\s+(?:model\s+)?(?:context|token)\s+limit\b/i,
+  /\brequest\s+too\s+large\b/i,
+];
+
 const BALANCE_PATTERNS = [
   /\binsufficient\s+balance\b/i,
   /\binsufficient\s+account\s+balance\b/i,
@@ -32,6 +44,18 @@ function matchesBalancePattern(text: string): boolean {
   return BALANCE_PATTERNS.some((pattern) => pattern.test(text));
 }
 
+function matchesContextLengthPattern(text: string): boolean {
+  return CONTEXT_LENGTH_PATTERNS.some((pattern) => pattern.test(text));
+}
+
+/** True when the provider rejected the call because the prompt exceeded context limits. */
+export function isContextLengthError(error: unknown): boolean {
+  if (APICallError.isInstance(error) && error.statusCode === 413) {
+    return true;
+  }
+  return errorTexts(error).some(matchesContextLengthPattern);
+}
+
 /** True when an LLM gateway rejected the call for insufficient balance/credits. */
 export function isInsufficientBalanceError(error: unknown): boolean {
   if (APICallError.isInstance(error) && error.statusCode === 402) {
@@ -41,8 +65,16 @@ export function isInsufficientBalanceError(error: unknown): boolean {
   return errorTexts(error).some(matchesBalancePattern);
 }
 
+export class CallAbortedError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'CallAbortedError';
+  }
+}
+
 /** Normalize an LLM failure for persistence on a run record. */
 export function formatCallError(error: unknown): string {
+  if (error instanceof CallAbortedError) return error.message;
   if (APICallError.isInstance(error)) {
     const parts = [error.message];
     if (error.statusCode) parts.push(`HTTP ${error.statusCode}`);

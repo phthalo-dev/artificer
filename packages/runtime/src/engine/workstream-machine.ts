@@ -17,6 +17,7 @@ import {
   convergenceStallMessage,
   detectConvergenceStallFromCounts,
 } from './convergence.js';
+import type { CrossRunRepetition } from './cross-run-loop.js';
 import type { WorkstreamPhase } from '../storage/types.js';
 import { SINGLE_LOOP_IMPLEMENT_TASK } from './single-loop.js';
 
@@ -45,18 +46,28 @@ export const PLAN_RETRY_TASK =
 
 export const IMPLEMENT_TASK =
   'Implement the plan by editing the repository source in the workspace. ' +
-  "Do not modify or add test files. Run the plan's test command to check " +
-  'your work. Report BLOCKED if stuck after a few attempts.';
+  "Do not modify or add test files. Run the plan's test command, read the " +
+  'output, and call declare_done with verified=true when it passes. Fix only ' +
+  'what the plan requires — do not broaden validation. Call declare_blocked if stuck.';
 
 export const FIX_TASK =
   'A review rejected the current change. Address the recorded review issues ' +
-  'by editing the repository source, then re-run the test command. Do not ' +
-  'modify test files.';
+  'by editing the repository source, then re-run the test command and call ' +
+  'declare_done with verified=true when it passes. Do not modify test files. ' +
+  'Call declare_blocked if stuck.';
 
 export const REVIEW_TASK =
   'Review the current diff against the goal (read the diff and run the test ' +
-  'command). Do not re-explore the whole repo and do not edit files. Call ' +
-  'submit_review with approved and any issues.';
+  'command). Re-run the worker testsRun command if provided in context — do not ' +
+  'trust declare_done without verifying. Check the fix is minimally scoped to the ' +
+  'issue (plan acceptance criteria and out-of-scope). Do not re-explore the whole ' +
+  'repo and do not edit files. Call submit_review with approved and any issues.';
+
+export const VERIFY_TASK =
+  'Final verification pass: re-run the plan test command, confirm git diff matches ' +
+  'the goal and acceptance criteria, then call declare_done with verified=true and ' +
+  'testsRun. Do not edit files unless tests fail — if they fail, fix minimally and ' +
+  're-verify. Call declare_blocked if verification cannot succeed.';
 
 /**
  * Hint task for re-dispatching a reviewer that finished without calling
@@ -79,6 +90,10 @@ export interface WorkstreamFacts {
   planWritten: boolean;
   /** The working tree has uncommitted changes (a candidate patch). */
   patchPresent: boolean;
+  /** Whether git status shows uncommitted changes in the workspace repo. */
+  hasGitDiff: boolean;
+  /** When true (single-loop bench), done requires hasGitDiff as well as patchPresent. */
+  requireGitDiffForDone?: boolean;
   /** Number of reviews recorded so far. */
   reviewCount: number;
   /** Whether the most recent review approved (undefined when none yet). */
@@ -123,6 +138,14 @@ export interface WorkstreamFacts {
   consecutivePlannerNoWritePlan: number;
   /** Bench A/B mode: one worker loop, no planner/reviewer phases. */
   singleLoop?: boolean;
+  /** Most recent worker run called declare_blocked. */
+  workerDeclaredBlocked?: boolean;
+  /** Reason from declare_blocked on the most recent worker run. */
+  workerBlockedReason?: string;
+  /** A worker run in the verifying phase completed with verified declare_done. */
+  verificationComplete?: boolean;
+  /** Cross-run identical tool repetition detected on worker runs. */
+  crossRunToolRepetition?: CrossRunRepetition | null;
 }
 
 /** Consecutive no-submit reviewer runs before the FSM escalates. */
@@ -181,6 +204,23 @@ export function nextWorkstreamAction(f: WorkstreamFacts): WorkstreamAction {
     };
   }
 
+  if (f.crossRunToolRepetition) {
+    const { toolName, count } = f.crossRunToolRepetition;
+    return {
+      kind: 'escalate',
+      reason:
+        `Worker repeated identical ${toolName} calls ${count} times across runs. ` +
+        'The orchestrator should change approach, models, or task decomposition.',
+    };
+  }
+
+  if (f.workerDeclaredBlocked && !f.patchPresent) {
+    return {
+      kind: 'blocked',
+      reason: f.workerBlockedReason ?? 'Worker declared the task blocked.',
+    };
+  }
+
   switch (f.currentPhase) {
     case 'setup':
       return handleSetupPhase(f);
@@ -203,7 +243,17 @@ function nextSingleLoopAction(f: WorkstreamFacts): WorkstreamAction {
     return { kind: 'phase_complete', nextPhase: 'implementing' };
   }
   if (f.currentPhase === 'implementing') {
+    if (f.crossRunToolRepetition) {
+      const { toolName, count } = f.crossRunToolRepetition;
+      return {
+        kind: 'escalate',
+        reason: `Worker repeated identical ${toolName} calls ${count} times across runs.`,
+      };
+    }
     if (!f.patchPresent) {
+      return { kind: 'dispatch', role: 'worker', task: SINGLE_LOOP_IMPLEMENT_TASK };
+    }
+    if (f.requireGitDiffForDone && !f.hasGitDiff) {
       return { kind: 'dispatch', role: 'worker', task: SINGLE_LOOP_IMPLEMENT_TASK };
     }
     return { kind: 'done' };
@@ -265,6 +315,9 @@ function handleImplementingPhase(f: WorkstreamFacts): WorkstreamAction {
   return { kind: 'dispatch', role: 'reviewer', task: REVIEW_TASK };
 }
 
-function handleVerifyingPhase(_f: WorkstreamFacts): WorkstreamAction {
-  return { kind: 'done' };
+function handleVerifyingPhase(f: WorkstreamFacts): WorkstreamAction {
+  if (f.verificationComplete) {
+    return { kind: 'done' };
+  }
+  return { kind: 'dispatch', role: 'worker', task: VERIFY_TASK };
 }

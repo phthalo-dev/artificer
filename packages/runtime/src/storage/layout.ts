@@ -44,6 +44,10 @@ export class Layout {
     return path.join(this.workstreamDir(id), 'plan.md');
   }
 
+  compactionFile(id: string): string {
+    return path.join(this.workstreamDir(id), 'compaction.json');
+  }
+
   tasksDir(workstreamId: string): string {
     return path.join(this.workstreamDir(workstreamId), 'tasks');
   }

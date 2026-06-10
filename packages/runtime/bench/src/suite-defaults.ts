@@ -8,10 +8,14 @@ export const GENERIC_BENCH_DEFAULTS = {
   maxIterationsPerCall: 30,
   maxIterationsPlanner: 15,
   maxCallDurationMs: 600_000,
+  toolResultMaxPerRunChars: 80_000,
   preflightClone: false,
   dockerMode: 'off' as const,
   singleLoop: false,
 };
+
+/** Raised per-run tool budget for DeepSWE (large TypeScript files + long greps). */
+export const DEEPSWE_TOOL_RESULT_MAX_PER_RUN_CHARS = 250_000;
 
 export type DockerMode = 'off' | 'auto' | 'on';
 
@@ -48,6 +52,15 @@ export function applySuiteDefaults(
   }
   if (config.maxIterationsPerCall === GENERIC_BENCH_DEFAULTS.maxIterationsPerCall) {
     next.maxIterationsPerCall = 50;
+  }
+  if (config.maxIterationsPlanner === GENERIC_BENCH_DEFAULTS.maxIterationsPlanner) {
+    next.maxIterationsPlanner = 20;
+  }
+  if (
+    config.toolResultMaxPerRunChars ===
+    GENERIC_BENCH_DEFAULTS.toolResultMaxPerRunChars
+  ) {
+    next.toolResultMaxPerRunChars = DEEPSWE_TOOL_RESULT_MAX_PER_RUN_CHARS;
   }
 
   return next;

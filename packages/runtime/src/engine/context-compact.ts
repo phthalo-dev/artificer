@@ -1,5 +1,7 @@
 import type { Store } from '../storage/store.js';
-import type { RunRecord, ToolInvocation } from '../storage/types.js';
+import type { CompactionArtifact, RunRecord, ToolInvocation } from '../storage/types.js';
+import { formatCompactionForContext } from './agentic-compact.js';
+import { recentRunsForDigest } from './compaction-estimate.js';
 
 export const CLEARED_TOOL_OUTPUT = '[Old tool result content cleared]';
 
@@ -46,8 +48,21 @@ function formatInvocation(
   return `${inv.name}(${args}) @ ${inv.at} → ${clip(inv.output)}`;
 }
 
-function completedRuns(runs: RunRecord[], excludeRunId?: string): RunRecord[] {
-  return runs
+/**
+ * Builds a digest of prior completed runs for microcompact context injection.
+ * When a compaction artifact exists, older history is omitted in favor of the summary.
+ */
+export async function buildPriorRunsDigest(
+  store: Pick<Store, 'listRunsForWorkstream'>,
+  workstreamId: string,
+  excludeRunId: string | undefined,
+  maxRuns: number,
+  microcompactEnabled: boolean,
+  compaction?: CompactionArtifact | null,
+  keepRecentRuns = 3,
+): Promise<string | null> {
+  const all = await store.listRunsForWorkstream(workstreamId);
+  const completed = all
     .filter(
       (r) =>
         r.status === 'done' &&
@@ -59,27 +74,30 @@ function completedRuns(runs: RunRecord[], excludeRunId?: string): RunRecord[] {
         new Date(a.finishedAt ?? a.createdAt).getTime() -
         new Date(b.finishedAt ?? b.createdAt).getTime(),
     );
-}
 
-/**
- * Builds a digest of prior completed runs for microcompact context injection.
- */
-export async function buildPriorRunsDigest(
-  store: Pick<Store, 'listRunsForWorkstream'>,
-  workstreamId: string,
-  excludeRunId: string | undefined,
-  maxRuns: number,
-  microcompactEnabled: boolean,
-): Promise<string | null> {
-  const all = await store.listRunsForWorkstream(workstreamId);
-  const completed = completedRuns(all, excludeRunId);
-  if (completed.length === 0) return null;
+  if (completed.length === 0 && !compaction?.summary) return null;
 
-  const selected = microcompactEnabled
-    ? completed.slice(-maxRuns)
-    : completed.slice(-2);
+  const selected = compaction?.summary
+    ? recentRunsForDigest(all, compaction, keepRecentRuns, maxRuns).filter(
+        (r) => r.id !== excludeRunId,
+      )
+    : microcompactEnabled
+      ? completed.slice(-maxRuns)
+      : completed.slice(-2);
 
-  const lines: string[] = ['Prior run tool activity (oldest first):'];
+  const lines: string[] = [];
+
+  if (compaction?.summary) {
+    lines.push('Compacted session history (older runs summarized):');
+    lines.push(formatCompactionForContext(compaction));
+    lines.push('');
+  }
+
+  if (selected.length === 0) {
+    return lines.length > 0 ? lines.join('\n') : null;
+  }
+
+  lines.push('Recent run tool activity (oldest first):');
   for (const run of selected) {
     lines.push(`Run ${run.id} [${run.role}]`);
     for (const inv of run.toolCalls) {

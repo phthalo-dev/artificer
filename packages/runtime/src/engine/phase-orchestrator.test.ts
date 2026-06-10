@@ -18,13 +18,20 @@ test('never invokes orchestrator for planning phase', () => {
   );
 });
 
-test('invokes orchestrator for implementing repo/bench tasks', () => {
-  assert.equal(shouldInvokePhaseOrchestrator(BENCH_GOAL, 'implementing'), true);
+test('skips orchestrator for typical short repo/bench tasks', () => {
+  assert.equal(shouldInvokePhaseOrchestrator(BENCH_GOAL, 'implementing'), false);
+});
+
+test('invokes orchestrator for long repo/bench tasks', () => {
+  assert.equal(
+    shouldInvokePhaseOrchestrator(`${BENCH_GOAL}\n${'detail line.\n'.repeat(200)}`, 'implementing'),
+    true,
+  );
 });
 
 test('invokes orchestrator for long non-repo implementing tasks', () => {
   assert.equal(
-    shouldInvokePhaseOrchestrator('x'.repeat(600), 'implementing'),
+    shouldInvokePhaseOrchestrator('x'.repeat(900), 'implementing'),
     true,
   );
 });

@@ -113,3 +113,48 @@ test('microcompact disabled keeps last two runs with clipped outputs', async () 
   assert.ok(digest!.includes('output-2-'));
   assert.ok(!digest!.includes(CLEARED_TOOL_OUTPUT));
 });
+
+test('compaction artifact replaces older runs in digest', async () => {
+  const runs: RunRecord[] = Array.from({ length: 5 }, (_, i) => ({
+    id: `run_${i}`,
+    role: 'worker' as const,
+    status: 'done' as const,
+    task: 't',
+    toolCalls: [
+      {
+        name: 'grep',
+        input: { pattern: `p${i}` },
+        output: `output-${i}`,
+        at: `2026-06-01T00:0${i}:00.000Z`,
+      },
+    ],
+    usage: emptyUsage(),
+    createdAt: `2026-06-01T00:0${i}:00.000Z`,
+    finishedAt: `2026-06-01T00:0${i}:30.000Z`,
+    workstreamId: 'ws_1',
+  }));
+
+  const compaction = {
+    summary: '## Goal\nFix bug\n## State\nIn progress',
+    updatedAt: '2026-06-01T01:00:00.000Z',
+    compactedThroughRunId: 'run_2',
+    generation: 1,
+  };
+
+  const digest = await buildPriorRunsDigest(
+    mockStore(runs),
+    'ws_1',
+    undefined,
+    8,
+    true,
+    compaction,
+    2,
+  );
+
+  assert.ok(digest!.includes('Compacted session history'));
+  assert.ok(digest!.includes('Fix bug'));
+  assert.ok(!digest!.includes('run_0'));
+  assert.ok(!digest!.includes('run_1'));
+  assert.ok(digest!.includes('run_3'));
+  assert.ok(digest!.includes('run_4'));
+});

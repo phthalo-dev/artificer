@@ -9,6 +9,26 @@ The task schema and prediction format are SWE-bench-compatible, so the same
 harness scales from the mini-suite to full SWE-bench Lite by changing the
 instance list.
 
+## Eval pyramid
+
+Three layers, fastest to slowest:
+
+| Layer | Command | What it checks |
+| --- | --- | --- |
+| **L1 — contract** | `pnpm test:contract` | Pure unit tests: within-call safety, FSM transitions, context compact, patch facts — no LLM |
+| **L2 — smoke** | `pnpm test:smoke` | Five short scenarios (read, grep, write, shell, declare_done) against a live runtime |
+| **L3 — e2e** | `pnpm bench:deepswe` (etc.) | Full SWE-bench / DeepSWE repo-fixing tasks with Docker grading |
+
+L2 smoke requires LLM credentials in `.env` unless you use VCR playback:
+
+```bash
+RUNTIME_VCR=playback RUNTIME_VCR_CASSETTE=bench/smoke/fixtures/default.json pnpm test:smoke
+```
+
+Set `SKIP_SMOKE=1` to skip L2 in CI. Integration tests (VCR playback fixtures): `pnpm test:integration`.
+
+**Single-loop + declare_done:** bench `--single-loop` runs one worker loop with no planner/reviewer. The worker must call `declare_done` to finish; the run cannot complete without it. By default a git diff is also required (`RUNTIME_REQUIRE_GIT_DIFF_FOR_DONE=true`); set it to `false` for echo-only smoke scenarios.
+
 ## How it works
 
 ```

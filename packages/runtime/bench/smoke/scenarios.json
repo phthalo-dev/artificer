@@ -1,0 +1,28 @@
+[
+  {
+    "id": "read-and-summarize",
+    "message": "Read package.json and summarize the name field.",
+    "expectedTools": ["read_file"]
+  },
+  {
+    "id": "grep-self",
+    "message": "Use grep to find 'runToolLoop' and report the file path.",
+    "expectedTools": ["grep"]
+  },
+  {
+    "id": "trivial-edit",
+    "message": "Create tmp-test.txt in the current directory with content 'smoke' via write_file.",
+    "expectedTools": ["write_file"]
+  },
+  {
+    "id": "shell-echo",
+    "message": "Run echo hello via run_shell.",
+    "expectedTools": ["run_shell"]
+  },
+  {
+    "id": "declare-done",
+    "message": "Echo test via run_shell then call declare_done with verified=true, a one-line summary, and testsRun set to the echo command.",
+    "singleLoop": true,
+    "expectedTools": ["run_shell", "declare_done"]
+  }
+]

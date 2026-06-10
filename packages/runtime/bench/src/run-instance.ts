@@ -344,8 +344,8 @@ export async function runInstance(
   // workspace, then release — so the repo is on disk before any agent runs.
   let messageId: string | undefined;
   let workstreamId: string | undefined;
+  const bootstrapNeeded = useDocker || config.preflightClone;
   try {
-    const bootstrapNeeded = useDocker || config.preflightClone;
     const created = await client.createWorkstream({
       title,
       goal: buildTaskMessage(instance, {

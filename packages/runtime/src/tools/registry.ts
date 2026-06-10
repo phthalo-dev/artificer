@@ -16,6 +16,8 @@ import { createSearchTools } from './search.js';
 import { createShellTool } from './shell.js';
 import { createToolResultReadTools } from './tool-result-read.js';
 import { createAgentDefinitionTools } from './agent-definition.js';
+import { createDeclareDoneTool } from './declare-done.js';
+import { createDeclareBlockedTool } from './declare-blocked.js';
 
 function byName(tools: ToolDef[], names: string[]): ToolDef[] {
   const set = new Set(names);
@@ -111,7 +113,7 @@ export function toolsForRole(role: RoleName, ctx: ToolContext): ToolDef[] {
         ...byName(orchestrator, ['get_status', 'query_memories']),
       ];
 
-    case 'worker':
+    case 'worker': {
       return [
         ...files,
         ...edit,
@@ -121,7 +123,10 @@ export function toolsForRole(role: RoleName, ctx: ToolContext): ToolDef[] {
         ...git,
         ...byName(artifacts, ['read_plan']),
         ...byName(orchestrator, ['get_status', 'query_memories', 'add_memory']),
+        createDeclareDoneTool(ctx),
+        createDeclareBlockedTool(ctx),
       ];
+    }
 
     case 'librarian':
       return [

@@ -17,6 +17,10 @@ import { getAgentConfig, getAgentConfigForWorkstream } from '../tools/agent-defi
 import { resolveAgentConfig, resolveAgentConfigAsync } from './agent-config.js';
 import { withWallClockTimeout } from './call-timeout.js';
 import { singleLoopWorkerExtension } from './single-loop.js';
+import { workerCompletionExtension } from './worker-completion.js';
+import { declareDoneTestsRun, runHasVerifiedDeclareDone } from './convergence.js';
+import { modelFamilyPromptForModel } from './model-family-prompts.js';
+import { pickModel } from './models.js';
 
 const execAsync = promisify(exec);
 
@@ -110,12 +114,42 @@ async function buildContext(
       const changed = await changedFilesSummary(workspaceDir);
       if (changed) sections.push(changed);
 
+      if (run.role === 'worker') {
+        const plan = await store.readPlan(run.workstreamId);
+        if (plan) {
+          sections.push(
+            `Current plan (follow acceptance criteria; use read_plan for full text):\n${clip(plan, 4_000)}`,
+          );
+        }
+      }
+
+      if (run.role === 'reviewer') {
+        const wsRuns = await store.listRunsForWorkstream(run.workstreamId);
+        const lastWorker = [...wsRuns]
+          .filter((r) => r.role === 'worker' && r.status === 'done')
+          .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+          .reverse()
+          .find((r) => runHasVerifiedDeclareDone(r));
+        if (lastWorker) {
+          const testsRun = declareDoneTestsRun(lastWorker);
+          if (testsRun) {
+            sections.push(
+              'Worker verification command (re-run this yourself; do not trust declare_done alone):\n' +
+                testsRun,
+            );
+          }
+        }
+      }
+
+      const compaction = await store.readCompaction(run.workstreamId);
       const digest = await buildPriorRunsDigest(
         store,
         run.workstreamId,
         run.id,
         8,
         config.contextBorrowing.microcompactEnabled,
+        compaction,
+        config.compaction.keepRecentRuns,
       );
       if (digest) sections.push(digest);
 
@@ -210,9 +244,21 @@ export async function executeCall(
     maxIterations = Math.min(maxIterations, config.maxIterationsPlanner);
   }
 
-  if (config.singleLoop && run.role === 'worker') {
-    systemPrompt += singleLoopWorkerExtension(config.agentName);
+  if (run.role === 'worker') {
+    systemPrompt += config.singleLoop
+      ? singleLoopWorkerExtension(config.agentName)
+      : workerCompletionExtension();
   }
+
+  const modelId = run.model ?? config.model;
+  systemPrompt += modelFamilyPromptForModel(modelId);
+
+  const summarizerModelId = pickModel(
+    config.models,
+    config.roleTiers,
+    'librarian',
+    'low',
+  );
 
   run.status = 'running';
   run.startedAt = new Date().toISOString();
@@ -225,11 +271,22 @@ export async function executeCall(
 
     const result = await withWallClockTimeout(
       runToolLoop({
-      model: resolveModel(run.model ?? config.model),
+      model: resolveModel(modelId),
       system: systemPrompt,
       userMessage,
       tools,
       maxIterations,
+      requireCompletionTool: run.role === 'worker',
+      requireWritePlan: run.role === 'planner',
+      plannerWritePlanNudgeStep: 4,
+      plannerWritePlanNudgeInterval: 4,
+      callSafety: config.callSafety,
+      compaction: config.compaction,
+      summarizeModel: resolveModel(summarizerModelId),
+      taskContext: userMessage,
+      onDiagnostics: config.callSafety.requestDiagnostics
+        ? (s) => console.info(`[run ${run.id}] ${JSON.stringify(s)}`)
+        : undefined,
       toolResultSpill: {
         layout: store.layout,
         runId: run.id,
@@ -269,7 +326,12 @@ export async function executeCall(
 
     run.output = result.text;
     run.usage = result.usage;
-    run.status = 'done';
+    if (result.truncated && run.role === 'worker') {
+      run.status = 'failed';
+      run.error = result.text.split('\n')[0] || 'Worker run incomplete';
+    } else {
+      run.status = 'done';
+    }
     run.finishedAt = new Date().toISOString();
     await store.saveRun(run);
     engine.emit({ kind: 'run', at: run.finishedAt, data: { ...run } });

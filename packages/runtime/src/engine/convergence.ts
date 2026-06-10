@@ -48,6 +48,46 @@ export function runHasSuccessfulTool(run: RunRecord, name: string): boolean {
   return run.toolCalls.some((t) => t.name === name && !t.error);
 }
 
+/** True when the worker called declare_done with verified=true. */
+export function runHasVerifiedDeclareDone(run: RunRecord): boolean {
+  return run.toolCalls.some(
+    (t) =>
+      t.name === 'declare_done' &&
+      !t.error &&
+      (t.input as { verified?: boolean } | undefined)?.verified === true,
+  );
+}
+
+/** True when the worker called declare_blocked successfully. */
+export function runHasDeclareBlocked(run: RunRecord): boolean {
+  return run.toolCalls.some((t) => t.name === 'declare_blocked' && !t.error);
+}
+
+/** Reason from the most recent successful declare_blocked call on a run. */
+export function declareBlockedReason(run: RunRecord): string | undefined {
+  const inv = [...run.toolCalls]
+    .reverse()
+    .find((t) => t.name === 'declare_blocked' && !t.error);
+  if (!inv) return undefined;
+  const input = inv.input as { reason?: string } | undefined;
+  return input?.reason?.trim() || undefined;
+}
+
+/** testsRun from the most recent verified declare_done on a run. */
+export function declareDoneTestsRun(run: RunRecord): string | undefined {
+  const inv = [...run.toolCalls]
+    .reverse()
+    .find(
+      (t) =>
+        t.name === 'declare_done' &&
+        !t.error &&
+        (t.input as { verified?: boolean } | undefined)?.verified === true,
+    );
+  if (!inv) return undefined;
+  const input = inv.input as { testsRun?: string } | undefined;
+  return input?.testsRun?.trim() || undefined;
+}
+
 /**
  * Count trailing reviewer runs that finished without calling submit_review.
  * Used by the FSM to break the "reviewer thrashes on the same prompt" loop

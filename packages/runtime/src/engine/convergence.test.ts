@@ -7,6 +7,7 @@ import {
   trailingPlannerReviewerCycles,
   trailingRejectedReviewCount,
   trailingReviewerNoSubmit,
+  runHasVerifiedDeclareDone,
 } from './convergence.js';
 import type { RunRecord, Review } from '../storage/types.js';
 
@@ -178,4 +179,32 @@ test('trailingReviewerNoSubmit ignores non-reviewer runs and queued/running', ()
   // Only done reviewer runs that did not submit count, and runs are sorted by
   // createdAt; the running reviewer is excluded.
   assert.equal(trailingReviewerNoSubmit(runs), 1);
+});
+
+test('runHasVerifiedDeclareDone requires verified=true on declare_done', () => {
+  const verified: RunRecord = {
+    ...run('worker', '1'),
+    toolCalls: [
+      {
+        name: 'declare_done',
+        input: { summary: 'fixed', verified: true },
+        output: 'DONE: fixed',
+        at: '2024-01-01T00:00:00.000Z',
+      },
+    ],
+  };
+  const unverified: RunRecord = {
+    ...run('worker', '2'),
+    toolCalls: [
+      {
+        name: 'declare_done',
+        input: { summary: 'fixed', verified: false },
+        output: 'Error: verified must be true',
+        error: 'verified must be true',
+        at: '2024-01-01T00:00:00.000Z',
+      },
+    ],
+  };
+  assert.equal(runHasVerifiedDeclareDone(verified), true);
+  assert.equal(runHasVerifiedDeclareDone(unverified), false);
 });

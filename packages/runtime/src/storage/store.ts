@@ -8,6 +8,7 @@ import {
 } from './memory-search.js';
 import {
   emptyUsage,
+  type CompactionArtifact,
   type Memory,
   type Message,
   type PhaseConfig,
@@ -285,6 +286,24 @@ export class Store {
   async readPlan(workstreamId: string): Promise<string | null> {
     try {
       return await fs.readFile(this.layout.planFile(workstreamId), 'utf8');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
+      throw err;
+    }
+  }
+
+  async writeCompaction(
+    workstreamId: string,
+    artifact: CompactionArtifact,
+  ): Promise<void> {
+    const file = this.layout.compactionFile(workstreamId);
+    await ensureDir(path.dirname(file));
+    await writeJson(file, artifact);
+  }
+
+  async readCompaction(workstreamId: string): Promise<CompactionArtifact | null> {
+    try {
+      return await readJson<CompactionArtifact>(this.layout.compactionFile(workstreamId));
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code === 'ENOENT') return null;
       throw err;

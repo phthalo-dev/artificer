@@ -23,6 +23,7 @@ function baseConfig(overrides: Partial<BenchConfig> = {}): BenchConfig {
     maxIterationsPerCall: 30,
     maxIterationsPlanner: 15,
     maxCallDurationMs: 600_000,
+    toolResultMaxPerRunChars: 80_000,
     models: { low: 'a', medium: 'b', high: 'c' },
     roleTiers,
     modelName: 'test',
@@ -48,6 +49,8 @@ describe('applySuiteDefaults', () => {
     assert.equal(out.maxRunsPerWorkstream, 100);
     assert.equal(out.instanceTimeoutMs, 3_600_000);
     assert.equal(out.maxIterationsPerCall, 50);
+    assert.equal(out.maxIterationsPlanner, 20);
+    assert.equal(out.toolResultMaxPerRunChars, 250_000);
   });
 
   it('respects explicit overrides', () => {

@@ -15,6 +15,8 @@ function facts(overrides: Partial<WorkstreamFacts> = {}): WorkstreamFacts {
     repoReady: true,
     planWritten: true,
     patchPresent: false,
+    hasGitDiff: false,
+    requireGitDiffForDone: false,
     reviewCount: 0,
     lastReviewApproved: undefined,
     workSinceLastReview: 0,
@@ -153,9 +155,29 @@ test('implementing phase: rejected review, worker has not addressed it -> worker
   assert.equal((a as { role: string }).role, 'worker');
 });
 
-test('verifying phase -> done', () => {
-  const a = nextWorkstreamAction(facts({ currentPhase: 'verifying' }));
-  assert.deepEqual(a, { kind: 'done' });
+test('verifying phase dispatches verification worker until complete', () => {
+  const pending = nextWorkstreamAction(facts({ currentPhase: 'verifying' }));
+  assert.equal(pending.kind, 'dispatch');
+  assert.equal((pending as { role: string }).role, 'worker');
+  assert.match((pending as { task: string }).task, /Final verification pass/);
+
+  const done = nextWorkstreamAction(
+    facts({ currentPhase: 'verifying', verificationComplete: true }),
+  );
+  assert.deepEqual(done, { kind: 'done' });
+});
+
+test('worker declare_blocked without patch -> blocked workstream', () => {
+  const a = nextWorkstreamAction(
+    facts({
+      currentPhase: 'implementing',
+      patchPresent: false,
+      workerDeclaredBlocked: true,
+      workerBlockedReason: 'cannot reproduce bug',
+    }),
+  );
+  assert.equal(a.kind, 'blocked');
+  assert.match((a as { reason: string }).reason, /cannot reproduce bug/);
 });
 
 test('done phase -> done', () => {
@@ -277,11 +299,20 @@ test('full happy path converges through phases', () => {
   assert.deepEqual(nextWorkstreamAction(f), { kind: 'phase_complete', nextPhase: 'verifying' });
 
   f = facts({ currentPhase: 'verifying' });
+  assert.equal((nextWorkstreamAction(f) as { role: string }).role, 'worker');
+
+  f = facts({ currentPhase: 'verifying', verificationComplete: true });
   assert.deepEqual(nextWorkstreamAction(f), { kind: 'done' });
 });
 
 test('single-loop skips planner and reviewer', () => {
-  const base = { singleLoop: true, planWritten: false, patchPresent: false };
+  const base = {
+    singleLoop: true,
+    planWritten: false,
+    patchPresent: false,
+    hasGitDiff: false,
+    requireGitDiffForDone: true,
+  };
   let f = facts({ ...base, currentPhase: 'setup', repoReady: true });
   assert.deepEqual(nextWorkstreamAction(f), {
     kind: 'phase_complete',
@@ -291,6 +322,23 @@ test('single-loop skips planner and reviewer', () => {
   f = facts({ ...base, currentPhase: 'implementing', patchPresent: false });
   assert.equal((nextWorkstreamAction(f) as { role: string }).role, 'worker');
 
-  f = facts({ ...base, currentPhase: 'implementing', patchPresent: true });
+  f = facts({ ...base, currentPhase: 'implementing', patchPresent: true, hasGitDiff: false });
+  assert.equal((nextWorkstreamAction(f) as { role: string }).role, 'worker');
+
+  f = facts({ ...base, currentPhase: 'implementing', patchPresent: true, hasGitDiff: true });
   assert.deepEqual(nextWorkstreamAction(f), { kind: 'done' });
+});
+
+test('single-loop done without git diff when requireGitDiffForDone is false', () => {
+  const a = nextWorkstreamAction(
+    facts({
+      singleLoop: true,
+      planWritten: false,
+      currentPhase: 'implementing',
+      patchPresent: true,
+      hasGitDiff: false,
+      requireGitDiffForDone: false,
+    }),
+  );
+  assert.deepEqual(a, { kind: 'done' });
 });

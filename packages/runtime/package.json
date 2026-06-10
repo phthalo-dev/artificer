@@ -47,6 +47,9 @@
     "bench:deepswe:typescript:go-quality": "tsx bench/src/main.ts --suite tasks/deepswe-typescript-mini.json --preset go-quality",
     "type-check": "tsc --noEmit",
     "test": "node --import tsx --test \"src/**/*.test.ts\" \"bench/src/**/*.test.ts\"",
+    "test:contract": "node --import tsx --test \"src/llm/*.test.ts\" \"src/engine/workstream-machine.test.ts\" \"src/engine/context-compact.test.ts\" \"src/engine/convergence.test.ts\" \"src/engine/patch-facts.test.ts\" \"src/engine/compaction-config.test.ts\" \"src/engine/compaction-estimate.test.ts\" \"src/engine/progressive-prune.test.ts\" \"src/engine/file-ops.test.ts\" \"src/engine/agentic-compact.test.ts\"",
+    "test:smoke": "bash bench/smoke/run-smoke.sh",
+    "test:integration": "node --import tsx --test \"src/**/*.integration.test.ts\"",
     "clean": "rm -rf dist",
     "docker:build": "docker build -t artificer-runtime:dev .",
     "docker:run": "docker compose up"

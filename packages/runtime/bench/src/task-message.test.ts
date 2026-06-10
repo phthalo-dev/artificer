@@ -24,5 +24,7 @@ describe('buildDeepSweTaskBody', () => {
     const body = buildDeepSweTaskBody(instance, { preflight: true, docker: true });
     assert.ok(body.includes('evaluator image'));
     assert.ok(body.includes('run_shell'));
+    assert.ok(body.includes('`/app`'));
+    assert.ok(body.includes('not `repo/src/...`'));
   });
 });

@@ -91,6 +91,24 @@ export async function plannerSpawnBlocked(
   return undefined;
 }
 
+/**
+ * Returns an error when spawn_agent would start a worker before a plan exists.
+ * Prevents orchestrators from bypassing the planning phase.
+ */
+export async function workerAgentSpawnBlocked(
+  store: Store,
+  workstreamId: string,
+): Promise<string | undefined> {
+  const plan = await store.readPlan(workstreamId);
+  if (plan) return undefined;
+
+  return (
+    'No plan exists for this workstream (write_plan was never called). ' +
+    'Do not spawn worker agents until a planner records a plan. ' +
+    'Let the FSM dispatch PLAN_RETRY_TASK or spawn one planner instructed to call write_plan.'
+  );
+}
+
 /** Returns an error when spawning a duplicate plan reviewer. */
 export async function reviewerSpawnBlocked(
   store: Store,

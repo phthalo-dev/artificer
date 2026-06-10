@@ -12,6 +12,14 @@ import {
   getPreset,
 } from './engine/presets.js';
 import type { RoleName } from './storage/types.js';
+import {
+  type CallSafetyConfig,
+  loadCallSafetyConfig,
+} from './llm/call-safety-config.js';
+import {
+  type CompactionConfig,
+  loadCompactionConfig,
+} from './engine/compaction-config.js';
 
 export interface ToolResultConfig {
   maxCharsPerInvocation: number;
@@ -70,6 +78,8 @@ export interface RuntimeConfig {
   diagnostics: DiagnosticsConfig;
   /** Context-economics settings (tool spill, microcompact, file cache, search). */
   contextBorrowing: ContextBorrowingConfig;
+  /** Cross-call agentic compaction (LLM summary of older run history). */
+  compaction: CompactionConfig;
   /**
    * Skills composition: load SKILL.md content into agent system prompts when
    * an agent config declares `skills: [...]`. Disabled by default in
@@ -79,6 +89,16 @@ export interface RuntimeConfig {
   skills: SkillsConfig;
   /** Bench A/B: skip planner/reviewer FSM and run one worker loop. */
   singleLoop: boolean;
+  /** Single-loop bench: require a git diff before marking done (default true). */
+  requireGitDiffForDone: boolean;
+  /** Within-call safety: loop detection, mistake tracking, context hygiene. */
+  callSafety: CallSafetyConfig;
+  /**
+   * Use detached spawn + process-group SIGKILL for run_shell on Unix. Disabled
+   * on Windows (no process-group kill). Set RUNTIME_SHELL_PROCESS_GROUP=false
+   * to fall back to exec on Unix.
+   */
+  shellUseProcessGroup: boolean;
 }
 
 /** The agent's GitHub identity, used to clone, push, and open/comment on PRs. */
@@ -227,5 +247,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     contextBorrowing,
     skills,
     singleLoop: env.RUNTIME_SINGLE_LOOP === 'true',
+    requireGitDiffForDone: env.RUNTIME_REQUIRE_GIT_DIFF_FOR_DONE !== 'false',
+    callSafety: loadCallSafetyConfig(env),
+    compaction: loadCompactionConfig(env),
+    shellUseProcessGroup:
+      process.platform !== 'win32' && env.RUNTIME_SHELL_PROCESS_GROUP !== 'false',
   };
 }

@@ -7,6 +7,7 @@ import {
   plannerSpawnBlocked,
   recordPlanReviewFallback,
   reviewerSpawnBlocked,
+  workerAgentSpawnBlocked,
 } from './spawn-guards.js';
 import { Store } from '../storage/store.js';
 import type { RunRecord } from '../storage/types.js';
@@ -198,6 +199,22 @@ test('recordPlanReviewFallback is a no-op when a plan review already exists', as
   assert.equal(reviews.length, 1);
   assert.equal(reviews[0].approved, false);
   assert.equal(reviews[0].notes, 'rejected');
+});
+
+test('workerAgentSpawnBlocked when no plan exists', async () => {
+  const dataDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'artificer-spawn-guard-'),
+  );
+  const store = new Store(dataDir);
+  await store.init();
+  const ws = await store.createWorkstream({ title: 't', goal: 'g' });
+
+  const blocked = await workerAgentSpawnBlocked(store, ws.id);
+  assert.ok(blocked);
+  assert.match(blocked!, /write_plan/);
+
+  await store.writePlan(ws.id, '# Plan');
+  assert.equal(await workerAgentSpawnBlocked(store, ws.id), undefined);
 });
 
 test('recordPlanReviewFallback clips very long reviewer output', async () => {

@@ -4,6 +4,7 @@ import { APICallError } from 'ai';
 import {
   formatCallError,
   insufficientBalanceUserMessage,
+  isContextLengthError,
   isInsufficientBalanceError,
 } from './errors.js';
 
@@ -30,6 +31,36 @@ test('isInsufficientBalanceError detects message text', () => {
     ),
     true,
   );
+});
+
+test('isContextLengthError detects overflow messages and 413', () => {
+  assert.equal(
+    isContextLengthError(new Error('prompt is too long for the model')),
+    true,
+  );
+  assert.equal(
+    isContextLengthError(
+      new APICallError({
+        message: 'maximum context length exceeded',
+        url: 'https://example.com',
+        requestBodyValues: {},
+        statusCode: 400,
+      }),
+    ),
+    true,
+  );
+  assert.equal(
+    isContextLengthError(
+      new APICallError({
+        message: 'Payload Too Large',
+        url: 'https://example.com',
+        requestBodyValues: {},
+        statusCode: 413,
+      }),
+    ),
+    true,
+  );
+  assert.equal(isContextLengthError(new Error('rate limit exceeded')), false);
 });
 
 test('isInsufficientBalanceError ignores unrelated failures', () => {

@@ -25,6 +25,10 @@ export interface CallResult {
   toolCalls: ToolInvocation[];
   /** Token usage summed across every model request in this call. */
   usage: TokenUsage;
-  /** Whether the call stopped because it hit the iteration ceiling. */
+  /** Whether the call ended without a terminal worker tool (declare_done / declare_blocked). */
   truncated: boolean;
+  /** Whether the worker called declare_blocked to signal it is stuck. */
+  blocked?: boolean;
+  /** Whether the call was retried once after a context-overflow compaction. */
+  retriedAfterCompaction?: boolean;
 }

@@ -2,6 +2,10 @@ import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { DockerBenchManifest } from './docker-bench-manifest.js';
 import { syncHostRepoToContainer } from './docker-bench-manifest.js';
+import {
+  formatDockerExecFailure,
+  rewriteDockerShellCommand,
+} from './docker-path.js';
 
 const exec = promisify(execFile);
 
@@ -30,6 +34,7 @@ export async function runDockerShellCommand(opts: {
 }): Promise<DockerShellResult> {
   const { containerId, workDir } = opts.docker;
   await syncHostRepoToContainer(opts.docker);
+  const command = rewriteDockerShellCommand(opts.command);
 
   const envArgs: string[] = [];
   for (const [key, value] of Object.entries({ ...NOISE_ENV, ...opts.extraEnv })) {
@@ -44,7 +49,7 @@ export async function runDockerShellCommand(opts: {
     containerId,
     'bash',
     '-lc',
-    opts.command,
+    command,
   ];
 
   try {
@@ -68,7 +73,6 @@ export async function runDockerShellCommand(opts: {
       const marker = `Command timed out after ${opts.timeoutMs}ms and was killed.`;
       return { output: partial ? `${marker}\n${partial}` : marker, timedOut: true };
     }
-    const detail = [e.stdout, e.stderr, e.message].filter(Boolean).join('\n').trim();
-    return { output: `Command failed:\n${detail}`, timedOut: false };
+    return { output: formatDockerExecFailure(e), timedOut: false };
   }
 }

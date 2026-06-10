@@ -6,12 +6,16 @@ import { Store } from '../storage/store.js';
 import type { Message, RunRecord, Workstream, WorkstreamPhase } from '../storage/types.js';
 import { executeCall } from './call.js';
 import { findGitRepo } from './git-repo.js';
+import { hasMeaningfulPatch } from './patch-facts.js';
 import {
   insufficientBalanceUserMessage,
   isInsufficientBalanceError,
 } from '../llm/errors.js';
 import {
+  declareBlockedReason,
+  runHasDeclareBlocked,
   runHasSuccessfulTool,
+  runHasVerifiedDeclareDone,
   trailingPlannerNoWritePlan,
   trailingPlannerReviewerCycles,
   trailingRejectedReviewCount,
@@ -33,6 +37,8 @@ import {
 } from './workstream-machine.js';
 import { getAgentConfigForWorkstream } from '../tools/agent-definition.js';
 import { shouldInvokePhaseOrchestrator } from './phase-orchestrator.js';
+import { detectCrossRunToolRepetition } from './cross-run-loop.js';
+import { maybeCompactWorkstream } from './compact-workstream.js';
 
 interface ActiveRun {
   runId: string;
@@ -94,6 +100,11 @@ async function isUnproductiveWorkRun(
         if (!localRepo) return false;
       }
     }
+    return true;
+  }
+  if (run.role === 'worker') {
+    if (runHasDeclareBlocked(run)) return false;
+    if (runHasVerifiedDeclareDone(run)) return false;
     return true;
   }
   return false;
@@ -480,11 +491,54 @@ export class Engine implements EngineApi {
       !runHasSuccessfulTool(lastPlannerRun, 'write_plan');
     const plannerNoWriteStreak = trailingPlannerNoWritePlan(runs);
 
+    const hasGitDiff = await hasMeaningfulPatch(workspaceDir);
+
+    const patchPresent = runs.some(
+      (r) =>
+        r.role === 'worker' &&
+        r.status === 'done' &&
+        runHasVerifiedDeclareDone(r),
+    );
+
+    const lastWorkerOutcomeRun = [...runs]
+      .filter((r) => r.role === 'worker' && (r.status === 'done' || r.status === 'failed'))
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .at(-1);
+
+    const workerDeclaredBlocked =
+      lastWorkerOutcomeRun !== undefined && runHasDeclareBlocked(lastWorkerOutcomeRun);
+    const workerBlockedReason = lastWorkerOutcomeRun
+      ? declareBlockedReason(lastWorkerOutcomeRun)
+      : undefined;
+
+    const phaseStartedAt = ws.phaseConfig?.startedAt;
+    const currentPhase = ws.currentPhase ?? 'setup';
+    const verificationComplete =
+      currentPhase === 'verifying' &&
+      phaseStartedAt !== undefined &&
+      runs.some(
+        (r) =>
+          r.role === 'worker' &&
+          r.status === 'done' &&
+          runHasVerifiedDeclareDone(r) &&
+          r.finishedAt !== undefined &&
+          r.finishedAt >= phaseStartedAt,
+      );
+
+    const crossRunToolRepetition =
+      currentPhase === 'implementing'
+        ? detectCrossRunToolRepetition(runs)
+        : null;
+
     return {
       hasRepoUrl: !!ws.repoUrl,
       repoReady: !!localRepo,
       planWritten: !!plan,
-      patchPresent: runs.some((r) => r.role === 'worker' && r.status === 'done'),
+      patchPresent,
+      hasGitDiff,
+      requireGitDiffForDone: this.config.singleLoop
+        ? this.config.requireGitDiffForDone
+        : undefined,
       reviewCount: reviews.length,
       lastReviewApproved: lastReview?.approved,
       workSinceLastReview,
@@ -500,6 +554,10 @@ export class Engine implements EngineApi {
       lastPlannerNoWritePlan,
       consecutivePlannerNoWritePlan: plannerNoWriteStreak,
       singleLoop: this.config.singleLoop,
+      workerDeclaredBlocked,
+      workerBlockedReason,
+      verificationComplete,
+      crossRunToolRepetition,
     };
   }
 
@@ -780,6 +838,15 @@ export class Engine implements EngineApi {
     }
 
     await this.store.incrementPhaseIterations(run.workstreamId);
+
+    if ((WORK_ROLES as readonly string[]).includes(run.role)) {
+      await maybeCompactWorkstream({
+        store: this.store,
+        config: this.config,
+        resolveModel: this.resolveModel,
+        workstreamId: run.workstreamId,
+      });
+    }
 
     const facts = await this.gatherFacts(run.workstreamId);
     if (!facts) return;

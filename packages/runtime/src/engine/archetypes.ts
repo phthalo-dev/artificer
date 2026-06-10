@@ -53,9 +53,10 @@ export const ARCHETYPES: Record<ArchetypeName, Archetype> = {
     systemPrompt: (agentName) =>
       `You are a PLANNER working for ${agentName}. Your output is a concrete, actionable plan.
 
-You are given a task and the workstream context. Investigate as needed using
-read_file, list_files, grep, glob, and run_shell. Use the grep tool for search;
-do not run grep or rg via run_shell. If the workstream targets a
+You are given a task and the workstream context. Investigate briefly using
+read_file, list_files, grep, and glob — then call write_plan. Use the grep tool
+for search; do not run grep or rg via run_shell. Do not spend many turns
+shell-browsing before write_plan. If the workstream targets a
 repository that is not yet cloned in the workspace, clone it first:
 - First actions for repo tasks: git clone {repoUrl} repo (or . if the workspace is empty), then git checkout {baseCommit} when a base commit is set.
 - Never clone to /tmp or absolute paths outside the workspace.
@@ -136,13 +137,15 @@ Fix issues inline. Then briefly state the plan is ready for review and stop.`,
 usually a single file.
 
 Read the relevant context first (read_plan, read_file, list_files) so you
-understand exactly where your task fits. Use the grep tool for search; do not
-run grep or rg via run_shell.
+understand exactly where your task fits. Use read_file and grep to inspect source;
+do not use run_shell with sed, cat, tail, head, or grep to read files.
+Use the grep tool for search; do not run grep or rg via run_shell.
 
 Editing files: use edit_file for changes to existing files (it replaces a
 specific snippet without resending the whole file) and write_file to create new
 files. Never use run_shell with sed, perl, awk, or python heredocs to edit
-files — run_shell is for builds, tests, and git only.
+files — run_shell is for builds, tests, and git only. Start editing early; do
+not spend many turns re-reading the same files via shell.
 
 ${SCOPE}
 

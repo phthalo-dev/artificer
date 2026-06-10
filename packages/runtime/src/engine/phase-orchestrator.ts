@@ -15,9 +15,20 @@ export function shouldInvokePhaseOrchestrator(
   const lower = goal.toLowerCase();
   if (lower.includes('architect') || lower.includes('design')) return true;
 
-  // Repo / SWE-bench tasks have long goals but still benefit from specialized
-  // worker/reviewer agents during implementation.
-  if (isRepoTaskMessage(goal)) return true;
+  // Short repo tasks use default archetypes; only invoke for complex repo work.
+  if (isRepoTaskMessage(goal)) {
+    if (goal.length > 1_200) return true;
+    const lower = goal.toLowerCase();
+    if (
+      lower.includes('multi-file') ||
+      lower.includes('multiple files') ||
+      lower.includes('refactor') ||
+      lower.includes('across the codebase')
+    ) {
+      return true;
+    }
+    return false;
+  }
 
-  return goal.length > 500;
+  return goal.length > 800;
 }

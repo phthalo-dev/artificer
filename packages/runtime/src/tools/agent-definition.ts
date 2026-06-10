@@ -6,6 +6,7 @@ import type { AgentConfig, ToolOverrides } from '../engine/agent-config.js';
 import { createAgentConfig } from '../engine/agent-config.js';
 import { isModelTier } from '../engine/models.js';
 import type { ModelTier } from '../engine/models.js';
+import { workerAgentSpawnBlocked } from '../engine/spawn-guards.js';
 import type { PhaseAgentDefinition, StoredAgentConfig } from '../storage/types.js';
 import type { Store } from '../storage/store.js';
 
@@ -273,6 +274,11 @@ export function createAgentDefinitionTools(ctx: ToolContext): ToolDef[] {
 
         const workstreamId =
           (input.workstreamId as string | undefined) ?? run.workstreamId;
+
+        if (workstreamId) {
+          const blocked = await workerAgentSpawnBlocked(store, workstreamId);
+          if (blocked) return `Error: ${blocked}`;
+        }
 
         const result = await engine.spawnCall({
           role: 'worker',

@@ -65,6 +65,17 @@ export interface StoredAgentConfig {
   contextDirectives?: string;
 }
 
+/** LLM-generated cross-call history summary (agentic compaction). */
+export interface CompactionArtifact {
+  summary: string;
+  updatedAt: string;
+  /** Last run id included in the compaction (older history lives in summary). */
+  compactedThroughRunId?: string;
+  generation: number;
+  tier?: 'soft' | 'hard';
+  estimatedCharsBefore?: number;
+}
+
 export interface Workstream {
   id: string;
   title: string;

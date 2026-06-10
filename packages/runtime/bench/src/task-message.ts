@@ -27,14 +27,23 @@ export function buildDeepSweWorkflowSection(repoDir: string): string {
 }
 
 /** Shell execution hints aligned with mini-swe-agent (stateless subshells). */
-export function buildShellExecutionHints(): string {
-  return [
+export function buildShellExecutionHints(docker = false): string {
+  const lines = [
     '## Command execution',
     '',
     'Each run_shell invocation uses a fresh subshell — directory and env changes do not persist.',
     'Prefix commands with `cd path &&` or `VAR=val cd path &&` when needed.',
     'Use non-interactive flags (-y, -f). Avoid vi, nano, and other interactive tools.',
-  ].join('\n');
+  ];
+  if (docker) {
+    lines.push(
+      '',
+      '**Docker evaluator:** run_shell runs inside the task image at `/app` (repo root).',
+      'Use `src/...` paths in shell commands — not `repo/src/...`.',
+      'read_file, grep, and edit_file still use the host `repo/` prefix.',
+    );
+  }
+  return lines.join('\n');
 }
 
 export function buildDeepSweTaskBody(
@@ -43,11 +52,13 @@ export function buildDeepSweTaskBody(
 ): string {
   const repoDir = options.docker ? 'repo' : options.preflight ? 'repo' : 'your workspace clone';
   const workflow = buildDeepSweWorkflowSection(repoDir);
-  const shellHints = buildShellExecutionHints();
+  const shellHints = buildShellExecutionHints(options.docker);
 
   if (options.preflight || options.docker) {
     const envNote = options.docker
-      ? 'The repository is bootstrapped from the task Docker image at `repo/` (dependencies installed). Use run_shell for builds and tests — commands execute inside the evaluator image.'
+      ? 'The repository is bootstrapped from the task Docker image. ' +
+        'read_file/grep/edit_file use the `repo/` prefix on the host workspace. ' +
+        'run_shell executes inside the evaluator image at `/app` (use `src/...`, not `repo/src/...`).'
       : 'The repository is already cloned at `repo/` and checked out at the base commit.';
 
     return [

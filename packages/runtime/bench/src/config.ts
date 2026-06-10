@@ -35,6 +35,8 @@ export interface BenchConfig {
   maxIterationsPlanner: number;
   /** Per-call wall-clock limit passed to the runtime, in ms. */
   maxCallDurationMs: number;
+  /** Max tool-result chars accumulated per LLM call (passed to the runtime). */
+  toolResultMaxPerRunChars: number;
   /** Model ids per tier, pinned for reproducibility. */
   models: { low: string; medium: string; high: string };
   /** Role -> tier map passed to spawned runtimes. */
@@ -178,6 +180,11 @@ export function loadBenchConfig(
       flag(argv, 'max-call-duration-ms') ??
         env.BENCH_MAX_CALL_DURATION_MS ??
         GENERIC_BENCH_DEFAULTS.maxCallDurationMs,
+    ),
+    toolResultMaxPerRunChars: Number(
+      flag(argv, 'tool-result-max-per-run') ??
+        env.BENCH_TOOL_RESULT_MAX_PER_RUN_CHARS ??
+        GENERIC_BENCH_DEFAULTS.toolResultMaxPerRunChars,
     ),
     models,
     roleTiers,

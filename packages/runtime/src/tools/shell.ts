@@ -8,6 +8,7 @@ import { runDockerShellCommand } from './docker-shell.js';
 import { checkGitCloneInWorkspace, checkReviewerWrite } from './shell-policy.js';
 import { buildGitEnv } from './git-env.js';
 import { elideOutput } from './output-elision.js';
+import { runShellCommandSpawn } from './shell-spawn.js';
 
 const execAsync = promisify(exec);
 
@@ -108,6 +109,9 @@ export function createShellTool(ctx: ToolContext): ToolDef[] {
         const dataDir = path.resolve(ctx.engine.config.dataDir);
         const dockerManifest = await readDockerBenchManifest(dataDir);
         const timeoutMs = DEFAULT_TIMEOUT_MS;
+        const useProcessGroup =
+          ctx.engine.config.shellUseProcessGroup && process.platform !== 'win32';
+        const runShell = useProcessGroup ? runShellCommandSpawn : runShellCommand;
         const { output } = dockerManifest
           ? await runDockerShellCommand({
               command,
@@ -115,7 +119,7 @@ export function createShellTool(ctx: ToolContext): ToolDef[] {
               timeoutMs,
               extraEnv: env,
             })
-          : await runShellCommand({ command, cwd, env, timeoutMs });
+          : await runShell({ command, cwd, env, timeoutMs });
         return formatShellOutput(output);
       },
     },
