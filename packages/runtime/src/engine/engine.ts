@@ -16,6 +16,8 @@ import {
   nextWorkstreamAction,
   type WorkstreamFacts,
 } from './workstream-machine.js';
+import { workerRunDone, workerRunSummary } from './worker-report.js';
+import { countNoProgressRepeats } from './worker-progress.js';
 import { buildGitEnv } from '../tools/git-env.js';
 import {
   insufficientBalanceUserMessage,
@@ -466,12 +468,12 @@ export class Engine implements EngineApi {
       )
       .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
     const workSinceLastReview = workerRunsSinceReview.length;
-    // The worker ends its turn with a status line (DONE / BLOCKED / …); treat a
-    // DONE as "ready for review" so we don't review a half-finished large task.
+    // The worker reports its outcome via report_status (DONE / BLOCKED / …);
+    // treat a DONE(_WITH_CONCERNS) as "ready for review" so we don't review a
+    // half-finished large task.
     const lastWorker = workerRunsSinceReview.at(-1);
-    const lastWorkerDone = lastWorker
-      ? /\bDONE(_WITH_CONCERNS)?\b/.test(lastWorker.output ?? '')
-      : false;
+    const lastWorkerDone = lastWorker ? workerRunDone(lastWorker) : false;
+    const noProgressRepeats = countNoProgressRepeats(workerRunsSinceReview);
     const ordered = [...wsRuns].sort((a, b) =>
       a.createdAt.localeCompare(b.createdAt),
     );
@@ -495,6 +497,7 @@ export class Engine implements EngineApi {
       lastWorkerDone,
       consecutiveFailedRuns,
       plannerRunsWithoutPlan,
+      noProgressRepeats,
       totalRuns: wsRuns.length,
       maxRuns: this.config.maxRunsPerWorkstream,
     };
@@ -531,9 +534,11 @@ export class Engine implements EngineApi {
     }
 
     if (run.taskId && run.workstreamId) {
+      const workerSummary =
+        run.role === 'worker' ? workerRunSummary(run) : undefined;
       await this.store.updateTask(run.workstreamId, run.taskId, {
         status: run.status === 'failed' ? 'failed' : 'done',
-        result: run.output ?? run.error,
+        result: workerSummary ?? run.output ?? run.error,
       });
     }
 

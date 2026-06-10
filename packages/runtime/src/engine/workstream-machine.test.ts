@@ -6,6 +6,7 @@ import {
   type WorkstreamFacts,
   nextWorkstreamAction,
 } from './workstream-machine.js';
+import { MAX_NO_PROGRESS_REPEATS } from './worker-progress.js';
 
 /** A workstream that has set up a repo and written a plan, no work yet. */
 function facts(overrides: Partial<WorkstreamFacts> = {}): WorkstreamFacts {
@@ -20,6 +21,7 @@ function facts(overrides: Partial<WorkstreamFacts> = {}): WorkstreamFacts {
     lastWorkerDone: false,
     consecutiveFailedRuns: 0,
     plannerRunsWithoutPlan: 0,
+    noProgressRepeats: 0,
     totalRuns: 1,
     maxRuns: 40,
     ...overrides,
@@ -96,6 +98,33 @@ test('patch present, worker reports done -> reviewer', () => {
 test('patch present but worker still working (not done, under cap) -> keep implementing', () => {
   const a = nextWorkstreamAction(
     facts({ patchPresent: true, reviewCount: 0, workSinceLastReview: 2, lastWorkerDone: false }),
+  );
+  assert.equal((a as { role: string }).role, 'worker');
+});
+
+test('worker thrashing with no progress -> blocked instead of re-dispatched', () => {
+  const a = nextWorkstreamAction(
+    facts({
+      patchPresent: true,
+      reviewCount: 0,
+      workSinceLastReview: 1,
+      lastWorkerDone: false,
+      noProgressRepeats: MAX_NO_PROGRESS_REPEATS,
+    }),
+  );
+  assert.equal(a.kind, 'blocked');
+  assert.match((a as { reason: string }).reason, /not_converging/);
+});
+
+test('a single non-progressing run does not block yet', () => {
+  const a = nextWorkstreamAction(
+    facts({
+      patchPresent: true,
+      reviewCount: 0,
+      workSinceLastReview: 1,
+      lastWorkerDone: false,
+      noProgressRepeats: MAX_NO_PROGRESS_REPEATS - 1,
+    }),
   );
   assert.equal((a as { role: string }).role, 'worker');
 });

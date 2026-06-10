@@ -54,6 +54,43 @@ export function createArtifactTools(ctx: ToolContext): ToolDef[] {
       },
     },
     {
+      name: 'report_status',
+      description:
+        'Report the outcome of this work run. Call this once, near the end of your turn, ' +
+        'before you stop — it is how the orchestrator learns whether you finished, and what ' +
+        'to do next. Do not just describe your status in prose; this call is required.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          status: {
+            type: 'string',
+            enum: ['done', 'done_with_concerns', 'blocked', 'needs_context'],
+            description:
+              '"done": the task is complete and verified. ' +
+              '"done_with_concerns": complete, but you have doubts worth flagging. ' +
+              '"blocked": you could not complete it. ' +
+              '"needs_context": you are missing information needed to proceed.',
+          },
+          summary: {
+            type: 'string',
+            description:
+              'What you changed (or attempted) and the verification you ran. For ' +
+              'blocked/needs_context, say exactly what you tried and what is missing or blocking.',
+          },
+          followUps: {
+            type: 'string',
+            description: 'Optional follow-ups or concerns for the reviewer.',
+          },
+        },
+        required: ['status', 'summary'],
+      },
+      handler: async (input) => {
+        const status = String(input.status);
+        const summary = String(input.summary);
+        return `Status recorded: ${status}. ${summary}`;
+      },
+    },
+    {
       name: 'submit_review',
       description:
         'Record a review of a plan or a piece of work, including notes and whether it is approved. The orchestrator uses this to decide next steps. Approve only when there are no Critical or Important issues.',

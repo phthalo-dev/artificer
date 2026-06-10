@@ -4,7 +4,7 @@ import { promisify } from 'node:util';
 import type { LanguageModel } from 'ai';
 import type { RuntimeConfig } from '../config.js';
 import type { EngineApi, ToolContext } from '../context.js';
-import { buildPriorRunsDigest } from './context-compact.js';
+import { buildPriorRunsDigest, clipDiff } from './context-compact.js';
 import { FileCache } from './file-cache.js';
 import { formatCallError } from '../llm/errors.js';
 import { runToolLoop } from '../llm/loop.js';
@@ -26,6 +26,7 @@ function clip(text: string, max: number): string {
 /** Best-effort summary of uncommitted changes so a fresh call sees prior work. */
 async function changedFilesSummary(
   workspaceDir: string,
+  includeDiff: boolean,
 ): Promise<string | null> {
   const repo = await findGitRepo(workspaceDir);
   if (!repo) return null;
@@ -38,7 +39,29 @@ async function changedFilesSummary(
     const text = stdout.trim();
     if (!text) return null;
     const rel = path.relative(workspaceDir, repo) || '.';
-    return `Files changed so far (git status --short, in ${rel}):\n${clip(text, 1_500)}`;
+    const sections = [
+      `Files changed so far (git status --short, in ${rel}):\n${clip(text, 1_500)}`,
+    ];
+    if (includeDiff) {
+      const diff = await uncommittedDiff(repo);
+      if (diff) sections.push(`Current diff (git diff HEAD):\n${clipDiff(diff)}`);
+    }
+    return sections.join('\n\n');
+  } catch {
+    return null;
+  }
+}
+
+/** Best-effort `git diff HEAD` of uncommitted changes, or null if unavailable. */
+async function uncommittedDiff(repo: string): Promise<string | null> {
+  try {
+    const { stdout } = await execAsync('git diff HEAD', {
+      cwd: repo,
+      timeout: 15_000,
+      maxBuffer: 1024 * 1024 * 10,
+    });
+    const diff = stdout.trim();
+    return diff || null;
   } catch {
     return null;
   }
@@ -106,7 +129,10 @@ async function buildContext(
 
       const recent = await recentWorkSummary(store, run.workstreamId);
       if (recent) sections.push(recent);
-      const changed = await changedFilesSummary(workspaceDir);
+      const changed = await changedFilesSummary(
+        workspaceDir,
+        run.role === 'reviewer',
+      );
       if (changed) sections.push(changed);
 
       const digest = await buildPriorRunsDigest(

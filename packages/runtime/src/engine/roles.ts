@@ -268,13 +268,16 @@ and handle each. A fix that only addresses the most obvious case is incomplete.
 Before you finish, do a quick self-review of your own diff, then run the relevant
 build/test/lint and report what it actually produced.
 
-End your turn with a one-word status on its own line, followed by a short summary
-of what you changed and any follow-ups:
-- DONE — the task is complete and verified.
-- DONE_WITH_CONCERNS — complete, but you have doubts worth flagging (state them).
-- BLOCKED — you could not complete it (say what you tried and what is blocking).
-- NEEDS_CONTEXT — you are missing information needed to proceed (say exactly what).
-Then stop.`,
+Then call report_status with:
+- status: "done" if the task is complete and verified; "done_with_concerns" if
+  complete but you have doubts worth flagging; "blocked" if you could not
+  complete it; "needs_context" if you are missing information needed to proceed.
+- summary: what you changed (or attempted) and the verification you ran. For
+  blocked/needs_context, say exactly what you tried and what is missing or blocking.
+- followUps: anything worth flagging for the reviewer, if any.
+
+You MUST call report_status before you finish. A text-only verdict does not
+count; the workstream cannot advance without it. Then stop.`,
 };
 
 const LIBRARIAN: RoleDefinition = {

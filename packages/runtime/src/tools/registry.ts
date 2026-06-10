@@ -93,7 +93,7 @@ export function toolsForRole(role: RoleName, ctx: ToolContext): ToolDef[] {
         ...toolResultRead,
         ...shell,
         ...git,
-        ...byName(artifacts, ['read_plan']),
+        ...byName(artifacts, ['read_plan', 'report_status']),
         ...byName(orchestrator, [
           'get_status',
           'query_memories',

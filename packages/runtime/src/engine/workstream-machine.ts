@@ -8,6 +8,8 @@
  * action — making every transition unit-testable without a model.
  */
 
+import { MAX_NO_PROGRESS_REPEATS } from './worker-progress.js';
+
 /** Consecutive reviews without approval before the workstream is blocked. */
 export const MAX_REVIEW_CYCLES = 3;
 
@@ -91,6 +93,8 @@ export interface WorkstreamFacts {
   consecutiveFailedRuns: number;
   /** Completed planner runs that did not produce a plan (planning is stuck). */
   plannerRunsWithoutPlan: number;
+  /** Trailing worker runs since the last review with no progress (thrash). */
+  noProgressRepeats: number;
   /** Total runs in this workstream (drives the hard run cap). */
   totalRuns: number;
   /** Hard per-workstream run cap. */
@@ -158,6 +162,12 @@ export function nextWorkstreamAction(f: WorkstreamFacts): WorkstreamAction {
       f.workSinceLastReview >= MAX_WORKER_RUNS_BEFORE_REVIEW
     ) {
       return { kind: 'dispatch', role: 'reviewer', task: REVIEW_TASK };
+    }
+    if (f.noProgressRepeats >= MAX_NO_PROGRESS_REPEATS) {
+      return {
+        kind: 'blocked',
+        reason: `not_converging: worker made no progress across ${f.noProgressRepeats} consecutive runs`,
+      };
     }
     return {
       kind: 'dispatch',

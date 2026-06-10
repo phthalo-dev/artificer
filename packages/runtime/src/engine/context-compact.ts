@@ -1,8 +1,6 @@
 import type { Store } from '../storage/store.js';
 import type { RunRecord, ToolInvocation } from '../storage/types.js';
 
-export const CLEARED_TOOL_OUTPUT = '[Old tool result content cleared]';
-
 export const COMPACTABLE_TOOLS = new Set([
   'read_file',
   'run_shell',
@@ -17,6 +15,13 @@ function clip(text: string, max = CLIP_CHARS): string {
   return text.length <= max ? text : `${text.slice(0, max)}…`;
 }
 
+export const MAX_DIFF_CHARS = 8_000;
+
+/** Caps a git diff to a character budget for inclusion in call context. */
+export function clipDiff(diff: string, max = MAX_DIFF_CHARS): string {
+  return diff.length <= max ? diff : `${diff.slice(0, max)}\n… (diff truncated)`;
+}
+
 function formatArgs(input: unknown): string {
   if (input === null || input === undefined) return '';
   if (typeof input === 'object') {
@@ -27,6 +32,32 @@ function formatArgs(input: unknown): string {
     }
   }
   return String(input);
+}
+
+const SHELL_FAILURE_RE = /^Command (failed|timed out)/;
+
+function countLines(text: string): number {
+  return text === '' ? 0 : text.split('\n').length;
+}
+
+/**
+ * One-line, deterministic summary of a compactable tool's output, used in
+ * place of the full output once a run is no longer the most recent. Keeps
+ * just enough signal (line/match/char counts, shell success) for the model
+ * to know what happened without paying for the original content again.
+ */
+export function summarizeToolResult(inv: ToolInvocation): string {
+  const { name, output } = inv;
+  if (name === 'read_file') return `${countLines(output)} lines`;
+  if (name === 'run_shell') {
+    const failed = SHELL_FAILURE_RE.test(output);
+    return `${failed ? 'failed' : 'ok'}, ${countLines(output)} lines output`;
+  }
+  if (name === 'grep' || name === 'glob') {
+    return `${output.trim() === '(no matches)' ? 0 : countLines(output)} matches`;
+  }
+  if (name === 'fetch_url') return `${output.length} chars`;
+  return clip(output);
 }
 
 function formatInvocation(
@@ -40,7 +71,7 @@ function formatInvocation(
       (inv.output.includes('read_tool_result') && inv.output.includes('spill_key=')
         ? inv.output.match(/spill_key="([^"]+)"/)?.[1]
         : undefined);
-    const suffix = spillHint ? ` → ${spillHint}` : ` → ${CLEARED_TOOL_OUTPUT}`;
+    const suffix = spillHint ? ` → ${spillHint}` : ` → ${summarizeToolResult(inv)}`;
     return `${inv.name}(${args}) @ ${inv.at}${suffix}`;
   }
   return `${inv.name}(${args}) @ ${inv.at} → ${clip(inv.output)}`;
