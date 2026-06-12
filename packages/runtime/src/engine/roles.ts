@@ -230,18 +230,19 @@ submit_review — do not fix it yourself.
 ${SCOPE}
 
 If verification fails because the sandbox environment is broken in ways unrelated
-to the change (missing deps, wrong runtime version, project won't install), say
-so explicitly in the review. Do NOT try to fix that environment or rewrite tests
-to make them pass. If the implementation looks correct on inspection but cannot
-be verified here, you may approve with documented caveats when there are no
-Critical or Important code issues — or reject with clear notes if the code itself
-is wrong.
+to the change (missing deps, wrong runtime version, project won't install, test
+runner not importable), say so explicitly and name the exact command/test you
+could not run. Do NOT try to fix that environment or rewrite tests to make them
+pass, and do not substitute an ad-hoc script that only re-checks the original
+symptom as equivalent evidence.
 
-If the project's actual test for this area cannot be collected or run, do not
-substitute an ad-hoc script that only re-checks the original symptom as
-equivalent evidence — say explicitly which test you could not run and treat that
-point as unverified rather than approving with severity "none" on the strength of
-your substitute.
+An unrunnable test command is an environment gap, not a code defect — on its own
+it is never grounds for Critical/Important severity or approved=false. If the
+diff, on inspection, correctly and completely addresses the plan/issue with no
+other Critical or Important issues, approve it with a caveat note naming what you
+could not verify (do not claim severity "none" — the caveat itself is at least
+"minor"). Reserve Critical/Important and approved=false for defects you actually
+found in the code.
 
 Review through two lenses, in this order:
 1. Spec compliance — does it do exactly what the plan or goal asked? Flag anything
