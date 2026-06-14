@@ -1,0 +1,12 @@
+{
+  "kind": "swebench",
+  "name": "SWE-bench Multimodal delay-mitigation test (2 tasks)",
+  "description": "2-instance probe: does a pause before instance 2 avoid the ~15min LLM-call stall seen on /zen/v1 after instance 1?",
+  "dataset": "SWE-bench/SWE-bench_Multimodal",
+  "split": "dev",
+  "config": "default",
+  "instanceIds": [
+    "markedjs__marked-1825",
+    "chartjs__Chart.js-9027"
+  ]
+}

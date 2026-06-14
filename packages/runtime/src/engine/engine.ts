@@ -105,7 +105,7 @@ export class Engine implements EngineApi {
   }
 
   /**
-   * Given the runs recovered at startup, re-invokes the orchestrator for each
+   * Given the runs recovered at startup, advances the state machine for each
    * still-active workstream that had an interrupted call, so work resumes
    * instead of stalling at the failed step. Returns the number resumed.
    */
@@ -124,13 +124,7 @@ export class Engine implements EngineApi {
     for (const [workstreamId, run] of repByWorkstream) {
       const ws = await this.store.getWorkstream(workstreamId);
       if (!ws || !Store.isActiveStatus(ws.status)) continue;
-      await this.spawnCall({
-        role: 'orchestrator',
-        description:
-          'The runtime restarted and an in-flight call for this workstream was interrupted. Review the current status with get_status and decide how to continue.',
-        workstreamId,
-        originMessageId: run.originMessageId,
-      });
+      await this.stepWorkstream(workstreamId, run.originMessageId);
       resumed += 1;
     }
     return resumed;

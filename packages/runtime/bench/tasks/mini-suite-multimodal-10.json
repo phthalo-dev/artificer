@@ -1,0 +1,20 @@
+{
+  "kind": "swebench",
+  "name": "SWE-bench Multimodal mini (10 tasks)",
+  "description": "Curated SWE-bench Multimodal (frontend JS) instances, 2 smallest-patch per repo across all 5 dev-split repos.",
+  "dataset": "SWE-bench/SWE-bench_Multimodal",
+  "split": "dev",
+  "config": "default",
+  "instanceIds": [
+    "markedjs__marked-1825",
+    "markedjs__marked-684",
+    "chartjs__Chart.js-11116",
+    "chartjs__Chart.js-9027",
+    "diegomura__react-pdf-471",
+    "diegomura__react-pdf-1541",
+    "processing__p5.js-6069",
+    "processing__p5.js-3068",
+    "Automattic__wp-calypso-22242",
+    "Automattic__wp-calypso-23915"
+  ]
+}
