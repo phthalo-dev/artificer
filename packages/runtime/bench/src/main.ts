@@ -132,6 +132,14 @@ async function main(): Promise<void> {
     }
 
     await writeArtifacts(config, suite, instances, attempts, predictions);
+
+    if (config.instanceDelayMs > 0 && i < instances.length) {
+      // eslint-disable-next-line no-console
+      console.log(
+        `[bench]   pausing ${(config.instanceDelayMs / 1000).toFixed(0)}s before next instance...`,
+      );
+      await sleep(config.instanceDelayMs);
+    }
   }
 
   await archiveBenchRun(config, suite, instances, attempts);
@@ -205,6 +213,10 @@ function printSummary(attempts: AttemptRecord[]): void {
   console.log(`[bench] total cost:       ${formatUsd(total.costUsd)}`);
   // eslint-disable-next-line no-console
   console.log(`[bench] total LLM calls:  ${total.runs}`);
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 main().catch((err) => {

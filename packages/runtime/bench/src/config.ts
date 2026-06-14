@@ -48,6 +48,8 @@ export interface BenchConfig {
   showTools: boolean;
   /** Clone repo into workspace before the agent runs (Harbor-style eval). */
   preflightClone: boolean;
+  /** Pause between instances, in ms (helps avoid provider rate-limit stalls). */
+  instanceDelayMs: number;
 }
 
 function flag(args: string[], name: string): string | undefined {
@@ -160,5 +162,8 @@ export function loadBenchConfig(
     preflightClone:
       boolFlag(argv, 'preflight-clone') ||
       env.BENCH_PREFLIGHT_CLONE === 'true',
+    instanceDelayMs: Number(
+      flag(argv, 'instance-delay-ms') ?? env.BENCH_INSTANCE_DELAY_MS ?? 0,
+    ),
   };
 }
