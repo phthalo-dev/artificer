@@ -4,6 +4,7 @@ import {
   IconBook,
   IconCoin,
   IconCpu,
+  IconFlask,
   IconLayoutDashboard,
 } from '@tabler/icons-react';
 import {
@@ -13,6 +14,8 @@ import {
   useLocation,
 } from 'react-router-dom';
 import { useRuntimeState } from './api/hooks';
+import { BenchPage } from './pages/BenchPage';
+import { BenchRunPage } from './pages/BenchRunPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { MemoriesPage } from './pages/MemoriesPage';
 import { MessageCostPage } from './pages/MessageCostPage';
@@ -24,6 +27,7 @@ import { WorkstreamsPage } from './pages/WorkstreamsPage';
 const NAV = [
   { to: '/', label: 'Dashboard', icon: IconLayoutDashboard },
   { to: '/workstreams', label: 'Workstreams', icon: IconActivity },
+  { to: '/bench', label: 'Benchmark', icon: IconFlask },
   { to: '/memories', label: 'Memories', icon: IconBook },
   { to: '/usage', label: 'Usage', icon: IconCoin },
   { to: '/models', label: 'Models', icon: IconCpu },
@@ -83,6 +87,8 @@ export function App() {
           <Route path="/" element={<DashboardPage />} />
           <Route path="/workstreams" element={<WorkstreamsPage />} />
           <Route path="/workstreams/:id" element={<WorkstreamDetailPage />} />
+          <Route path="/bench" element={<BenchPage />} />
+          <Route path="/bench/:instanceId" element={<BenchRunPage />} />
           <Route path="/memories" element={<MemoriesPage />} />
           <Route path="/usage" element={<UsagePage />} />
           <Route path="/models" element={<ModelsPage />} />

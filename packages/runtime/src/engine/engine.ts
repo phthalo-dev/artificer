@@ -3,10 +3,34 @@ import type { RuntimeConfig } from '../config.js';
 import type { EngineApi, RuntimeEvent, SpawnCallInput } from '../context.js';
 import { resolveLanguageModel } from '../llm/provider.js';
 import { Store } from '../storage/store.js';
-import type { Message, RunRecord, Workstream } from '../storage/types.js';
+import type {
+  Message,
+  RunRecord,
+  Workstream,
+  WorkstreamStatus,
+} from '../storage/types.js';
 import { executeCall } from './call.js';
+import { findGitRepo } from './git-repo.js';
+import { cloneRepoIntoWorkspace, hasUncommittedChanges } from './git-ops.js';
+import {
+  nextWorkstreamAction,
+  type WorkstreamFacts,
+} from './workstream-machine.js';
+import { workerRunDone, workerRunSummary } from './worker-report.js';
+import { countNoProgressRepeats } from './worker-progress.js';
+import { buildGitEnv } from '../tools/git-env.js';
+import {
+  insufficientBalanceUserMessage,
+  isInsufficientBalanceError,
+} from '../llm/errors.js';
 import { type ModelTier, type ModelTiers, pickModel } from './models.js';
+import {
+  cloneRoleTiers,
+  getPreset,
+  type ModelPreset,
+} from './presets.js';
 import { Scheduler } from './scheduler.js';
+import type { RoleName } from '../storage/types.js';
 
 interface ActiveRun {
   runId: string;
@@ -25,8 +49,6 @@ export interface RuntimeState {
   >;
 }
 
-const RUN_ROLES_THAT_REINVOKE = ['planner', 'reviewer', 'worker'] as const;
-
 /**
  * The runtime engine. It receives messages like a person would, runs the
  * hierarchical orchestration of small LLM calls, and persists everything to
@@ -38,6 +60,8 @@ export class Engine implements EngineApi {
   private readonly scheduler: Scheduler;
   private readonly events = new EventEmitter();
   private readonly active = new Map<string, ActiveRun>();
+  /** Avoid spamming the user when many concurrent calls hit the same billing wall. */
+  private readonly balanceNotified = new Set<string>();
 
   constructor(config: RuntimeConfig, store: Store) {
     this.config = config;
@@ -81,7 +105,7 @@ export class Engine implements EngineApi {
   }
 
   /**
-   * Given the runs recovered at startup, re-invokes the orchestrator for each
+   * Given the runs recovered at startup, advances the state machine for each
    * still-active workstream that had an interrupted call, so work resumes
    * instead of stalling at the failed step. Returns the number resumed.
    */
@@ -100,13 +124,7 @@ export class Engine implements EngineApi {
     for (const [workstreamId, run] of repByWorkstream) {
       const ws = await this.store.getWorkstream(workstreamId);
       if (!ws || !Store.isActiveStatus(ws.status)) continue;
-      await this.spawnCall({
-        role: 'orchestrator',
-        description:
-          'The runtime restarted and an in-flight call for this workstream was interrupted. Review the current status with get_status and decide how to continue.',
-        workstreamId,
-        originMessageId: run.originMessageId,
-      });
+      await this.stepWorkstream(workstreamId, run.originMessageId);
       resumed += 1;
     }
     return resumed;
@@ -169,10 +187,57 @@ export class Engine implements EngineApi {
     return { runId: run.id, taskId };
   }
 
+  /**
+   * Create a workstream directly from a structured request, bypassing the
+   * communicator. Used by structured intake (the bench harness) to remove
+   * communicator variance and to allow a preflight clone before any agent
+   * runs. An inbound message is recorded so cost/usage still attribute to a
+   * single origin. With `autostart: false` the orchestrator is not spawned —
+   * the caller can clone into the workspace first, then call kickoffWorkstream.
+   */
+  async createDirectWorkstream(input: {
+    title: string;
+    goal: string;
+    repoUrl?: string;
+    baseCommit?: string;
+    autostart?: boolean;
+  }): Promise<{ workstream: Workstream; messageId: string }> {
+    const message = await this.store.appendMessage({
+      direction: 'inbound',
+      content: input.goal,
+    });
+    this.emit({ kind: 'message', at: message.createdAt, data: message });
+
+    const ws = await this.store.createWorkstream({
+      title: input.title,
+      goal: input.goal,
+      repoUrl: input.repoUrl,
+      baseCommit: input.baseCommit,
+      status: 'pending',
+    });
+    this.emit({ kind: 'workstream', at: ws.createdAt, data: ws });
+
+    if (input.autostart !== false) {
+      await this.kickoffWorkstream(ws.id, message.id);
+    }
+    return { workstream: ws, messageId: message.id };
+  }
+
+  /** Spawn the orchestrator for a workstream created via createDirectWorkstream. */
+  async kickoffWorkstream(
+    workstreamId: string,
+    originMessageId: string,
+  ): Promise<void> {
+    const ws = await this.store.getWorkstream(workstreamId);
+    if (!ws) throw new Error(`workstream ${workstreamId} not found`);
+    await this.stepWorkstream(workstreamId, originMessageId);
+  }
+
   async startWorkstream(input: {
     title: string;
     goal: string;
     repoUrl?: string;
+    baseCommit?: string;
     parentRunId?: string;
     originMessageId?: string;
   }): Promise<Workstream> {
@@ -180,17 +245,12 @@ export class Engine implements EngineApi {
       title: input.title,
       goal: input.goal,
       repoUrl: input.repoUrl,
+      baseCommit: input.baseCommit,
       status: 'pending',
     });
     this.emit({ kind: 'workstream', at: ws.createdAt, data: ws });
 
-    await this.spawnCall({
-      role: 'orchestrator',
-      description: `A new workstream was created. Goal: ${input.goal}. Get it planned and executed.`,
-      workstreamId: ws.id,
-      parentRunId: input.parentRunId,
-      originMessageId: input.originMessageId,
-    });
+    await this.stepWorkstream(ws.id, input.originMessageId, input.parentRunId);
     return ws;
   }
 
@@ -215,7 +275,43 @@ export class Engine implements EngineApi {
   setModelTiers(update: Partial<ModelTiers>): ModelTiers {
     this.config.models = { ...this.config.models, ...update };
     this.config.model = this.config.models.medium;
+    this.config.modelPresetId = 'custom';
     return this.getModelTiers();
+  }
+
+  /** Update which complexity tier one or more roles use. */
+  setRoleTiers(update: Partial<Record<RoleName, ModelTier>>): Record<
+    RoleName,
+    ModelTier
+  > {
+    this.config.roleTiers = { ...this.config.roleTiers, ...update };
+    this.config.modelPresetId = 'custom';
+    return { ...this.config.roleTiers };
+  }
+
+  getModelPresetId(): string {
+    return this.config.modelPresetId;
+  }
+
+  /** Apply a named preset (tiers + role map). Takes effect on subsequent runs. */
+  applyPreset(presetId: string): {
+    preset: ModelPreset;
+    tiers: ModelTiers;
+    roleTiers: Record<RoleName, ModelTier>;
+  } {
+    const preset = getPreset(presetId);
+    if (!preset) {
+      throw new Error(`Unknown model preset: ${presetId}`);
+    }
+    this.config.models = { ...preset.tiers };
+    this.config.model = preset.tiers.medium;
+    this.config.roleTiers = cloneRoleTiers(preset.roleTiers);
+    this.config.modelPresetId = preset.id;
+    return {
+      preset,
+      tiers: this.getModelTiers(),
+      roleTiers: { ...this.config.roleTiers },
+    };
   }
 
   /** Resolve the model id for a role, honoring an optional complexity override. */
@@ -265,7 +361,163 @@ export class Engine implements EngineApi {
     }
   }
 
-  /** After a child call finishes, re-invoke the workstream orchestrator. */
+  /** Workstream statuses from which no further work is dispatched. */
+  private static readonly FSM_TERMINAL = new Set<string>([
+    'done',
+    'blocked',
+    'failed',
+    'cancelled',
+  ]);
+
+  private static readonly STATUS_FOR_ROLE: Record<string, WorkstreamStatus> = {
+    planner: 'planning',
+    worker: 'in_progress',
+    reviewer: 'reviewing',
+  };
+
+  /**
+   * Advance a workstream one deterministic step: gather facts, ask the state
+   * machine for the next action, and execute it. This replaces the LLM
+   * orchestrator — routing is mechanical, so it lives in code.
+   */
+  private async stepWorkstream(
+    workstreamId: string,
+    originMessageId?: string,
+    parentRunId?: string,
+  ): Promise<void> {
+    const ws = await this.store.getWorkstream(workstreamId);
+    if (!ws || Engine.FSM_TERMINAL.has(ws.status)) return;
+
+    const action = nextWorkstreamAction(await this.computeFacts(ws));
+
+    switch (action.kind) {
+      case 'setup': {
+        const workspaceDir = this.store.layout.workstreamWorkspace(workstreamId);
+        try {
+          await cloneRepoIntoWorkspace(
+            workspaceDir,
+            ws.repoUrl ?? '',
+            ws.baseCommit,
+            buildGitEnv(this.config.github),
+          );
+        } catch (err) {
+          await this.blockWorkstream(
+            ws,
+            `setup_failed: could not clone ${ws.repoUrl} (${err instanceof Error ? err.message : String(err)})`,
+          );
+          return;
+        }
+        // Repo is ready now — continue without waiting for another tick.
+        await this.stepWorkstream(workstreamId, originMessageId, parentRunId);
+        return;
+      }
+      case 'dispatch': {
+        const status = Engine.STATUS_FOR_ROLE[action.role];
+        if (status && ws.status !== status) {
+          await this.store.updateWorkstream(workstreamId, { status });
+          await this.emitWorkstream(workstreamId);
+        }
+        await this.spawnCall({
+          role: action.role,
+          description: action.task,
+          workstreamId,
+          parentRunId,
+          originMessageId,
+        });
+        return;
+      }
+      case 'done':
+        await this.store.updateWorkstream(workstreamId, { status: 'done' });
+        await this.emitWorkstream(workstreamId);
+        await this.reply(`Workstream "${ws.title}" is complete.`, workstreamId);
+        return;
+      case 'blocked':
+        await this.blockWorkstream(ws, action.reason);
+        return;
+    }
+  }
+
+  /** Gather the facts the state machine transitions on. */
+  private async computeFacts(ws: Workstream): Promise<WorkstreamFacts> {
+    const workspaceDir = this.store.layout.workstreamWorkspace(ws.id);
+    const repoDir = await findGitRepo(workspaceDir);
+    const patchPresent = repoDir
+      ? await hasUncommittedChanges(repoDir)
+      : false;
+    const [plan, reviewsRaw, wsRuns] = await Promise.all([
+      this.store.readPlan(ws.id),
+      this.store.listReviews(ws.id),
+      this.store.listRunsForWorkstream(ws.id),
+    ]);
+    const reviews = [...reviewsRaw].sort((a, b) =>
+      a.createdAt.localeCompare(b.createdAt),
+    );
+    const lastReview = reviews.at(-1);
+    const workerRunsSinceReview = wsRuns
+      .filter(
+        (r) =>
+          r.role === 'worker' &&
+          r.status === 'done' &&
+          (!lastReview || r.createdAt > lastReview.createdAt),
+      )
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    const workSinceLastReview = workerRunsSinceReview.length;
+    // The worker reports its outcome via report_status (DONE / BLOCKED / …);
+    // treat a DONE(_WITH_CONCERNS) as "ready for review" so we don't review a
+    // half-finished large task.
+    const lastWorker = workerRunsSinceReview.at(-1);
+    const lastWorkerDone = lastWorker ? workerRunDone(lastWorker) : false;
+    const noProgressRepeats = countNoProgressRepeats(workerRunsSinceReview);
+    const ordered = [...wsRuns].sort((a, b) =>
+      a.createdAt.localeCompare(b.createdAt),
+    );
+    let consecutiveFailedRuns = 0;
+    for (let i = ordered.length - 1; i >= 0; i -= 1) {
+      if (ordered[i].status === 'failed') consecutiveFailedRuns += 1;
+      else break;
+    }
+    // When no plan exists, every completed planner run failed to produce one.
+    const plannerRunsWithoutPlan = plan
+      ? 0
+      : wsRuns.filter((r) => r.role === 'planner' && r.status === 'done').length;
+    return {
+      hasRepoUrl: Boolean(ws.repoUrl),
+      repoReady: repoDir !== undefined,
+      planWritten: Boolean(plan),
+      patchPresent,
+      reviewCount: reviews.length,
+      lastReviewApproved: lastReview?.approved,
+      workSinceLastReview,
+      lastWorkerDone,
+      consecutiveFailedRuns,
+      plannerRunsWithoutPlan,
+      noProgressRepeats,
+      totalRuns: wsRuns.length,
+      maxRuns: this.config.maxRunsPerWorkstream,
+    };
+  }
+
+  private async blockWorkstream(ws: Workstream, reason: string): Promise<void> {
+    await this.store.updateWorkstream(ws.id, {
+      status: 'blocked',
+      summary: `${ws.summary ?? ''}\n\n[System] ${reason}`.trim(),
+    });
+    await this.emitWorkstream(ws.id);
+    await this.reply(`Workstream "${ws.title}" paused: ${reason}`, ws.id);
+  }
+
+  private async emitWorkstream(workstreamId: string): Promise<void> {
+    const ws = await this.store.getWorkstream(workstreamId);
+    if (ws) {
+      this.emit({
+        kind: 'workstream',
+        at: ws.updatedAt ?? ws.createdAt,
+        data: ws,
+      });
+    }
+  }
+
+  /** After a work call finishes, advance the workstream state machine. */
   private async afterRun(run: RunRecord): Promise<void> {
     // The communicator's output is user-facing; if it answered in text without
     // ever using the reply tool, deliver that text so the message isn't lost.
@@ -276,46 +528,70 @@ export class Engine implements EngineApi {
     }
 
     if (run.taskId && run.workstreamId) {
+      const workerSummary =
+        run.role === 'worker' ? workerRunSummary(run) : undefined;
       await this.store.updateTask(run.workstreamId, run.taskId, {
         status: run.status === 'failed' ? 'failed' : 'done',
-        result: run.output ?? run.error,
+        result: workerSummary ?? run.output ?? run.error,
       });
     }
 
-    const reinvokes = (RUN_ROLES_THAT_REINVOKE as readonly string[]).includes(
-      run.role,
-    );
-    if (!reinvokes || !run.workstreamId) return;
-
-    const ws = await this.store.getWorkstream(run.workstreamId);
-    if (!ws || !Store.isActiveStatus(ws.status)) return;
-
-    const runCount = (await this.store.listRunsForWorkstream(run.workstreamId))
-      .length;
-    if (runCount >= this.config.maxRunsPerWorkstream) {
-      await this.store.updateWorkstream(run.workstreamId, {
-        status: 'blocked',
-        summary: `${ws.summary}\n\n[System] Hit the run cap (${this.config.maxRunsPerWorkstream}); pausing for human input.`.trim(),
-      });
-      await this.reply(
-        `Workstream "${ws.title}" hit its automatic work limit and is paused. Send a note if you want me to continue or adjust course.`,
-        run.workstreamId,
-      );
+    if (run.status === 'failed' && isInsufficientBalanceError(run.error)) {
+      await this.handleInsufficientBalance(run);
       return;
     }
 
-    const outcome =
-      run.status === 'failed'
-        ? `A ${run.role} call failed: ${run.error ?? 'unknown error'}.`
-        : `A ${run.role} call finished. Result:\n${run.output ?? '(no output)'}`;
+    // Only the generative work roles drive the state machine forward; the
+    // deterministic FSM decides what (if anything) happens next.
+    const isWork =
+      run.role === 'planner' ||
+      run.role === 'worker' ||
+      run.role === 'reviewer';
+    if (!isWork || !run.workstreamId) return;
 
-    await this.spawnCall({
-      role: 'orchestrator',
-      description: `${outcome}\n\nReview the workstream status and decide the next step.`,
-      workstreamId: run.workstreamId,
-      parentRunId: run.id,
-      originMessageId: run.originMessageId,
-    });
+    // A planner often writes its plan as prose in its final answer instead of
+    // calling write_plan (especially for long plans). Capture that text as the
+    // plan so its work isn't thrown away and the machine can advance to
+    // implementation, mirroring the communicator's reply fallback above.
+    if (run.role === 'planner' && run.status === 'done') {
+      const wrotePlan = run.toolCalls.some(
+        (t) => t.name === 'write_plan' && !t.error,
+      );
+      const text = run.output?.trim();
+      if (!wrotePlan && text && text.length > 200) {
+        const existing = await this.store.readPlan(run.workstreamId);
+        if (!existing) await this.store.writePlan(run.workstreamId, text);
+      }
+    }
+
+    await this.stepWorkstream(run.workstreamId, run.originMessageId, run.id);
+  }
+
+  /** Notify the user once and pause active work when billing blocks LLM calls. */
+  private async handleInsufficientBalance(run: RunRecord): Promise<void> {
+    const notifyKey = run.workstreamId ?? run.originMessageId ?? run.id;
+    if (this.balanceNotified.has(notifyKey)) return;
+    this.balanceNotified.add(notifyKey);
+
+    const model = run.model ?? this.config.model;
+    let workstreamTitle: string | undefined;
+
+    if (run.workstreamId) {
+      const ws = await this.store.getWorkstream(run.workstreamId);
+      workstreamTitle = ws?.title;
+      if (ws && Store.isActiveStatus(ws.status)) {
+        await this.store.updateWorkstream(run.workstreamId, {
+          status: 'blocked',
+          summary:
+            `${ws.summary}\n\n[System] Paused: LLM call failed due to insufficient API balance (model: ${model}).`.trim(),
+        });
+      }
+    }
+
+    await this.reply(
+      insufficientBalanceUserMessage({ model, workstreamTitle }),
+      run.workstreamId,
+    );
   }
 
   // --- State snapshot ---

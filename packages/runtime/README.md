@@ -1,6 +1,6 @@
 # @artificer/runtime
 
-A containerized agent runtime. It runs as a single web server that *is* an agent
+A containerized agent runtime. It runs as a single web server that _is_ an agent
 entity: you talk to it like a person (send it messages), it does work using its
 own credentials, and it persists everything as files on disk.
 
@@ -20,7 +20,7 @@ inbound message
  communicator ── reply ──▶ you
       │  (start / steer / status)
       ▼
- orchestrator ◀───────────────┐  (re-invoked after every child finishes)
+ orchestrator ◀────────────────┐  (re-invoked after every child finishes)
    │ invoke_call               │
    ├──▶ planner  ── plan.md ───┤
    ├──▶ worker   ── 1 file ────┤

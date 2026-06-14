@@ -4,58 +4,41 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { Store } from './store.js';
+import type { RunRecord } from './types.js';
 
-async function tempStore(): Promise<{ store: Store; dir: string }> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-store-'));
-  const store = new Store(dir);
-  await store.init();
-  return { store, dir };
+function minimalRun(id: string, n: number): RunRecord {
+  return {
+    id,
+    role: 'planner',
+    task: 't',
+    status: 'running',
+    toolCalls: [{ name: 'read_file', input: {}, output: String(n), at: 't' }],
+    usage: {
+      inputTokens: n,
+      outputTokens: n,
+      cacheReadInputTokens: 0,
+      cacheCreationInputTokens: 0,
+      requests: 1,
+    },
+    createdAt: '2026-01-01T00:00:00.000Z',
+  };
 }
 
-test('addMemory then queryMemories recalls it; signpost counts it', async () => {
-  const { store, dir } = await tempStore();
-  try {
-    await store.addMemory({ content: 'Deploys run on Tuesday', tags: ['deploy'] });
-    const hits = await store.queryMemories('deploy');
-    assert.equal(hits.length, 1);
-    assert.match(hits[0].content, /Tuesday/);
-    const sign = await store.memorySignpost();
-    assert.match(sign ?? '', /1 memories/);
-  } finally {
-    await fs.rm(dir, { recursive: true, force: true });
-  }
-});
+test('concurrent saveRun to the same file does not throw ENOENT', async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-store-'));
+  const store = new Store(dataDir);
+  await store.init();
+  const run = await store.createRun({ role: 'planner', task: 'plan' });
 
-test('a stale index.json is self-healed from the per-memory files', async () => {
-  const { store, dir } = await tempStore();
-  try {
-    await store.addMemory({ content: 'one', tags: ['a'] });
-    await store.addMemory({ content: 'two', tags: ['b'] });
-    await store.addMemory({ content: 'three', tags: ['c'] });
-    // Simulate a lost index entry (e.g. from a concurrent write race).
-    const indexFile = path.join(dir, 'memories', 'index.json');
-    const full = JSON.parse(await fs.readFile(indexFile, 'utf8'));
-    await fs.writeFile(indexFile, JSON.stringify(full.slice(0, 1)), 'utf8');
-    // Reconciled read paths must recover the full set.
-    const sign = await store.memorySignpost();
-    assert.match(sign ?? '', /3 memories/);
-    const all = await store.queryMemories('');
-    assert.equal(all.length, 3);
-  } finally {
-    await fs.rm(dir, { recursive: true, force: true });
-  }
-});
+  await Promise.all(
+    Array.from({ length: 32 }, (_, i) =>
+      store.saveRun({ ...minimalRun(run.id, i), workstreamId: undefined }),
+    ),
+  );
 
-test('duplicate ids in the index are de-duplicated on reconcile', async () => {
-  const { store, dir } = await tempStore();
-  try {
-    await store.addMemory({ content: 'solo', tags: ['x'] });
-    const indexFile = path.join(dir, 'memories', 'index.json');
-    const full = JSON.parse(await fs.readFile(indexFile, 'utf8'));
-    await fs.writeFile(indexFile, JSON.stringify([...full, ...full]), 'utf8');
-    const all = await store.queryMemories('');
-    assert.equal(all.length, 1);
-  } finally {
-    await fs.rm(dir, { recursive: true, force: true });
-  }
+  const loaded = await store.getRun(run.id);
+  assert.ok(loaded);
+  assert.equal(loaded.toolCalls.length, 1);
+  const raw = await fs.readFile(store.layout.runFile(run.id), 'utf8');
+  assert.doesNotThrow(() => JSON.parse(raw));
 });

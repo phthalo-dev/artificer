@@ -3,6 +3,7 @@ import { notifications } from '@mantine/notifications';
 import { IconSend } from '@tabler/icons-react';
 import { useState } from 'react';
 import { useSendMessage } from '../api/hooks';
+import { CLOUD_MODE } from '../api/client';
 
 export function MessageComposer() {
   const [content, setContent] = useState('');
@@ -15,7 +16,9 @@ export function MessageComposer() {
       onSuccess: () => {
         setContent('');
         notifications.show({
-          message: 'Message sent to the agent',
+          message: CLOUD_MODE
+            ? 'Message queued — agent will pick it up when ready'
+            : 'Message sent to the agent',
           color: 'green',
         });
       },

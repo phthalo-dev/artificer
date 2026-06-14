@@ -9,7 +9,19 @@ import {
   type ToolSet,
 } from 'ai';
 import { emptyUsage, type ToolInvocation } from '../storage/types.js';
+import { applyResultBudget } from '../storage/tool-results.js';
+import type { ToolResultConfig } from '../config.js';
+import type { Layout } from '../storage/layout.js';
 import type { CallResult, ToolDef } from './types.js';
+
+export interface ToolResultSpillContext {
+  layout: Layout;
+  runId: string;
+  config: ToolResultConfig;
+  onSpill?: (info: { tool: string; path: string; previewChars: number }) => void;
+  getRunCharTotal: () => number;
+  addRunChars: (n: number) => void;
+}
 
 export interface RunToolLoopOptions {
   /** A resolved AI SDK model (see resolveLanguageModel). */
@@ -19,9 +31,13 @@ export interface RunToolLoopOptions {
   userMessage: string;
   tools: ToolDef[];
   maxIterations: number;
+  /** Hard wall-clock cap (ms) for the whole call; aborts in-flight generation. */
+  maxRunMs?: number;
   maxTokens?: number;
   /** Called whenever a tool finishes, for live observability. */
   onToolCall?: (invocation: ToolInvocation) => void;
+  /** Spill large tool outputs to disk instead of feeding them to the model. */
+  toolResultSpill?: ToolResultSpillContext;
 }
 
 /** Cache-creation tokens live in provider metadata, not the normalized usage. */
@@ -46,11 +62,18 @@ export async function runToolLoop(
     userMessage,
     tools,
     maxIterations,
+    maxRunMs,
     maxTokens = 4096,
     onToolCall,
+    toolResultSpill,
   } = opts;
 
   const toolCalls: ToolInvocation[] = [];
+  let toolIndex = 0;
+
+  // Accumulated incrementally so an aborted (wall-clock) run still reports the
+  // tokens it spent.
+  const accUsage = emptyUsage();
 
   const sdkTools: ToolSet = {};
   for (const def of tools) {
@@ -61,12 +84,40 @@ export async function runToolLoop(
         const args = (input ?? {}) as Record<string, unknown>;
         const at = new Date().toISOString();
         try {
-          const output = await def.handler(args);
+          const rawOutput = await def.handler(args);
+          let output = rawOutput || '(no output)';
+          let spillPath: string | undefined;
+
+          if (toolResultSpill) {
+            const index = toolIndex++;
+            const budget = await applyResultBudget({
+              layout: toolResultSpill.layout,
+              runId: toolResultSpill.runId,
+              index,
+              toolName: def.name,
+              body: output,
+              maxPerInvocation: toolResultSpill.config.maxCharsPerInvocation,
+              maxPerRun: toolResultSpill.config.maxCharsPerRun,
+              runTotalChars: toolResultSpill.getRunCharTotal(),
+            });
+            output = budget.output;
+            spillPath = budget.spillPath;
+            toolResultSpill.addRunChars(budget.runTotalChars - toolResultSpill.getRunCharTotal());
+            if (spillPath) {
+              toolResultSpill.onSpill?.({
+                tool: def.name,
+                path: spillPath,
+                previewChars: output.length,
+              });
+            }
+          }
+
           const invocation: ToolInvocation = {
             name: def.name,
             input: args,
-            output: output || '(no output)',
+            output,
             at,
+            ...(spillPath ? { spillPath } : {}),
           };
           toolCalls.push(invocation);
           onToolCall?.(invocation);
@@ -91,15 +142,35 @@ export async function runToolLoop(
   }
 
   const messages: ModelMessage[] = [{ role: 'user', content: userMessage }];
+  const signal = maxRunMs ? AbortSignal.timeout(maxRunMs) : undefined;
 
-  const result = await generateText({
-    model,
-    system,
-    messages,
-    tools: tools.length > 0 ? sdkTools : undefined,
-    maxOutputTokens: maxTokens,
-    stopWhen: stepCountIs(maxIterations),
-  });
+  let result: Awaited<ReturnType<typeof generateText>> | undefined;
+  try {
+    result = await generateText({
+      model,
+      system,
+      messages,
+      tools: tools.length > 0 ? sdkTools : undefined,
+      maxOutputTokens: maxTokens,
+      stopWhen: stepCountIs(maxIterations),
+      abortSignal: signal,
+      onStepFinish: ({ usage: u, providerMetadata }) => {
+        const cr = u.cachedInputTokens ?? 0;
+        accUsage.inputTokens += Math.max(0, (u.inputTokens ?? 0) - cr);
+        accUsage.outputTokens += u.outputTokens ?? 0;
+        accUsage.cacheReadInputTokens += cr;
+        accUsage.cacheCreationInputTokens += cacheCreationTokens(providerMetadata);
+        accUsage.requests += 1;
+      },
+    });
+  } catch (err) {
+    // A wall-clock abort is expected: end the call as truncated with the work
+    // and tokens accumulated so far, rather than failing the run.
+    if (signal?.aborted) {
+      return { text: '', toolCalls, usage: accUsage, truncated: true };
+    }
+    throw err;
+  }
 
   const usage = emptyUsage();
   const cacheRead = result.totalUsage.cachedInputTokens ?? 0;

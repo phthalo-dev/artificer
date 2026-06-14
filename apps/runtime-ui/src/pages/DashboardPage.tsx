@@ -11,6 +11,7 @@ import {
 } from '@mantine/core';
 import { Link } from 'react-router-dom';
 import { useMessages, useRuntimeState, useUsage } from '../api/hooks';
+import { CLOUD_MODE } from '../api/client';
 import { MessageComposer } from '../components/MessageComposer';
 import { UsageStats } from '../components/UsageStats';
 import type { Message } from '../api/types';
@@ -60,9 +61,15 @@ export function DashboardPage() {
       <div>
         <Title order={3}>Dashboard</Title>
         <Group gap="xs" mt={4}>
-          <Badge variant="light" color={state.data?.busy ? 'blue' : 'gray'}>
-            {state.data?.busy ? 'working' : 'idle'}
-          </Badge>
+          {state.isError ? (
+            <Badge variant="light" color="orange">
+              {CLOUD_MODE ? 'hibernating or starting' : 'offline'}
+            </Badge>
+          ) : (
+            <Badge variant="light" color={state.data?.busy ? 'blue' : 'gray'}>
+              {state.data?.busy ? 'working' : 'idle'}
+            </Badge>
+          )}
           <Badge variant="light">
             {state.data?.queue.running ?? 0} running
           </Badge>

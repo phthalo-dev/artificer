@@ -58,3 +58,5 @@ cdk.out
 
 # Local debug dumps
 cost.json
+
+*.local

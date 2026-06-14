@@ -1,0 +1,11 @@
+{
+  "kind": "deepswe",
+  "name": "DeepSWE TypeScript mini (4 tasks)",
+  "description": "TypeScript-focused DeepSWE subset for local debugging (tsc/npm, runtime diagnostics). Includes one JavaScript repo (yjs) in the TS ecosystem.",
+  "instanceIds": [
+    "true-myth-iterable-collection-combinators",
+    "cliffy-config-file-parsing",
+    "happy-dom-abort-pending-body-reads",
+    "yjs-map-conflict-detection"
+  ]
+}

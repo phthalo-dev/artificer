@@ -1,0 +1,13 @@
+{
+  "kind": "deepswe",
+  "name": "DeepSWE mini (6 tasks)",
+  "description": "Curated subset of Datacurve DeepSWE long-horizon tasks across TypeScript, Go, JavaScript, and Rust.",
+  "instanceIds": [
+    "true-myth-iterable-collection-combinators",
+    "cliffy-config-file-parsing",
+    "happy-dom-abort-pending-body-reads",
+    "prometheus-typed-label-sorting",
+    "yjs-map-conflict-detection",
+    "wasmi-trap-coredumps"
+  ]
+}

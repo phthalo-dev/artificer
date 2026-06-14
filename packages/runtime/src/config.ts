@@ -1,11 +1,28 @@
 import path from 'node:path';
+import type { DiagnosticsConfig } from './diagnostics/types.js';
 import {
-  DEFAULT_ROLE_TIER,
   isModelTier,
   type ModelTier,
   type ModelTiers,
 } from './engine/models.js';
+import {
+  cloneRoleTiers,
+  DEFAULT_PRESET_ID,
+  getPreset,
+} from './engine/presets.js';
 import type { RoleName } from './storage/types.js';
+
+export interface ToolResultConfig {
+  maxCharsPerInvocation: number;
+  maxCharsPerRun: number;
+}
+
+export interface ContextBorrowingConfig {
+  microcompactEnabled: boolean;
+  fileCacheMaxEntries: number;
+  requireRipgrep: boolean;
+  toolResults: ToolResultConfig;
+}
 
 export interface RuntimeConfig {
   /** API key for the LLM gateway (an OpenCode Zen key, or a provider key). */
@@ -18,6 +35,8 @@ export interface RuntimeConfig {
   models: ModelTiers;
   /** Which complexity tier each role uses by default. */
   roleTiers: Record<RoleName, ModelTier>;
+  /** Which model preset seeded tiers/roleTiers (env MODEL_PRESET). */
+  modelPresetId: string;
   /** Root directory where all messages and work history are persisted. */
   dataDir: string;
   /** HTTP port for the runtime server. */
@@ -26,6 +45,10 @@ export interface RuntimeConfig {
   concurrency: number;
   /** Max tool-use iterations allowed within a single call before forcing a stop. */
   maxIterationsPerCall: number;
+  /** Tighter iteration cap for the planner, to force a decisive write_plan. */
+  maxPlannerIterations: number;
+  /** Hard wall-clock cap (ms) for a single call, aborting in-flight generation. */
+  maxRunMs: number;
   /** Safety cap on total LLM calls per workstream to prevent runaway loops. */
   maxRunsPerWorkstream: number;
   /** Whether to re-invoke the orchestrator for workstreams interrupted by a restart. */
@@ -38,6 +61,14 @@ export interface RuntimeConfig {
    * token is configured, in which case tools fall back to ambient credentials.
    */
   github?: GitHubConfig;
+  /**
+   * Post-edit diagnostics: after edit_file/write_file, run the relevant
+   * language checker and feed errors back to the model. Consumers can extend
+   * `providers` with their own languages/frameworks.
+   */
+  diagnostics: DiagnosticsConfig;
+  /** Context-economics settings (tool spill, microcompact, file cache, search). */
+  contextBorrowing: ContextBorrowingConfig;
 }
 
 /** The agent's GitHub identity, used to clone, push, and open/comment on PRs. */
@@ -62,23 +93,56 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     ? path.resolve(env.ARTIFICER_DATA_DIR)
     : path.resolve(process.cwd(), 'data');
 
-  // Tier model ids accept any Zen model id (LLM_MODEL* preferred; the legacy
-  // ANTHROPIC_MODEL* names still work for back-compat).
+  const presetId = env.MODEL_PRESET ?? DEFAULT_PRESET_ID;
+  const preset = getPreset(presetId) ?? getPreset(DEFAULT_PRESET_ID)!;
+
+  // Preset provides defaults; explicit LLM_MODEL* env vars override individual tiers.
   const models: ModelTiers = {
-    low: env.LLM_MODEL_LOW || env.ANTHROPIC_MODEL_LOW || 'claude-haiku-4-5',
-    medium: env.LLM_MODEL || env.ANTHROPIC_MODEL || 'claude-sonnet-4-6',
-    high: env.LLM_MODEL_HIGH || env.ANTHROPIC_MODEL_HIGH || 'claude-opus-4-8',
+    low:
+      env.LLM_MODEL_LOW ||
+      env.ANTHROPIC_MODEL_LOW ||
+      preset.tiers.low,
+    medium:
+      env.LLM_MODEL || env.ANTHROPIC_MODEL || preset.tiers.medium,
+    high:
+      env.LLM_MODEL_HIGH ||
+      env.ANTHROPIC_MODEL_HIGH ||
+      preset.tiers.high,
   };
 
-  // Per-role tier overrides, e.g. RUNTIME_TIER_WORKER=medium.
-  const roleTiers = { ...DEFAULT_ROLE_TIER };
+  const roleTiers = cloneRoleTiers(preset.roleTiers);
   for (const role of Object.keys(roleTiers) as RoleName[]) {
     const override = env[`RUNTIME_TIER_${role.toUpperCase()}`];
     if (isModelTier(override)) roleTiers[role] = override;
   }
 
+  const hasTierOverride = Boolean(
+    env.LLM_MODEL_LOW ||
+      env.LLM_MODEL ||
+      env.LLM_MODEL_HIGH ||
+      env.ANTHROPIC_MODEL_LOW ||
+      env.ANTHROPIC_MODEL ||
+      env.ANTHROPIC_MODEL_HIGH,
+  );
+  const hasRoleOverride = (Object.keys(roleTiers) as RoleName[]).some(
+    (role) => env[`RUNTIME_TIER_${role.toUpperCase()}`],
+  );
+  const modelPresetId =
+    hasTierOverride || hasRoleOverride ? 'custom' : preset.id;
+
   const apiKey =
     env.LLM_API_KEY || env.ZEN_API_KEY || env.ANTHROPIC_API_KEY;
+
+  const diagnostics: DiagnosticsConfig = {
+    enabled: env.RUNTIME_DIAGNOSTICS !== 'false',
+    timeoutMs: env.RUNTIME_DIAGNOSTICS_TIMEOUT_MS
+      ? Number(env.RUNTIME_DIAGNOSTICS_TIMEOUT_MS)
+      : 20_000,
+    maxPerFile: env.RUNTIME_DIAGNOSTICS_MAX_PER_FILE
+      ? Number(env.RUNTIME_DIAGNOSTICS_MAX_PER_FILE)
+      : 20,
+    typescript: env.RUNTIME_DIAGNOSTICS_TYPESCRIPT !== 'false',
+  };
 
   const githubToken = env.GITHUB_TOKEN || env.GH_TOKEN;
   const github: GitHubConfig | undefined = githubToken
@@ -89,23 +153,46 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
       }
     : undefined;
 
+  const contextBorrowing: ContextBorrowingConfig = {
+    microcompactEnabled: env.RUNTIME_MICROCOMPACT_ENABLED !== 'false',
+    fileCacheMaxEntries: env.RUNTIME_FILE_CACHE_MAX_ENTRIES
+      ? Number(env.RUNTIME_FILE_CACHE_MAX_ENTRIES)
+      : 64,
+    requireRipgrep: env.RUNTIME_REQUIRE_RG !== 'false',
+    toolResults: {
+      maxCharsPerInvocation: env.RUNTIME_TOOL_RESULT_MAX_CHARS
+        ? Number(env.RUNTIME_TOOL_RESULT_MAX_CHARS)
+        : 12_000,
+      maxCharsPerRun: env.RUNTIME_TOOL_RESULT_MAX_PER_RUN_CHARS
+        ? Number(env.RUNTIME_TOOL_RESULT_MAX_PER_RUN_CHARS)
+        : 80_000,
+    },
+  };
+
   return {
     apiKey: required('LLM_API_KEY (or ZEN_API_KEY / ANTHROPIC_API_KEY)', apiKey),
     baseURL: env.LLM_BASE_URL || 'https://opencode.ai/zen/v1',
     model: models.medium,
     models,
     roleTiers,
+    modelPresetId,
     dataDir,
     port: env.PORT ? Number(env.PORT) : 4100,
     concurrency: env.RUNTIME_CONCURRENCY ? Number(env.RUNTIME_CONCURRENCY) : 2,
     maxIterationsPerCall: env.RUNTIME_MAX_ITERATIONS
       ? Number(env.RUNTIME_MAX_ITERATIONS)
       : 24,
+    maxPlannerIterations: env.RUNTIME_MAX_PLANNER_ITERATIONS
+      ? Number(env.RUNTIME_MAX_PLANNER_ITERATIONS)
+      : 18,
+    maxRunMs: env.RUNTIME_MAX_RUN_MS ? Number(env.RUNTIME_MAX_RUN_MS) : 420_000,
     maxRunsPerWorkstream: env.RUNTIME_MAX_RUNS_PER_WORKSTREAM
       ? Number(env.RUNTIME_MAX_RUNS_PER_WORKSTREAM)
       : 60,
     resumeOnStartup: env.RUNTIME_RESUME_ON_STARTUP !== 'false',
     agentName: env.AGENT_NAME || 'Artificer',
     github,
+    diagnostics,
+    contextBorrowing,
   };
 }

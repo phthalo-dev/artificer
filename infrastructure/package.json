@@ -10,11 +10,14 @@
     "cdk:deploy": "cdk deploy --all",
     "cdk:destroy": "cdk destroy --all",
     "cdk:diff": "cdk diff --all",
-    "cdk:synth": "cdk synth --all"
+    "cdk:synth": "cdk synth --all",
+    "deploy:personal": "bash scripts/deploy-personal.sh",
+    "sync:runtime-env": "bash scripts/sync-runtime-env.sh"
   },
   "devDependencies": {
     "@types/node": "^20.11.5",
     "aws-cdk": "^2.150.0",
+    "esbuild": "^0.25.0",
     "tsx": "^4.7.0",
     "typescript": "^5.3.3"
   },

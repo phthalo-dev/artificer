@@ -13,17 +13,16 @@ export interface ModelTiers {
 }
 
 /**
- * Default complexity per role. Cheap/fast for the conversational and
- * coordination layers; powerful for the roles that actually reason about and
- * produce work.
+ * Default complexity per role — async-economy profile: cheap coordination and
+ * review, medium-tier workers, high reserved for orchestrator escalation.
  */
 export const DEFAULT_ROLE_TIER: Record<RoleName, ModelTier> = {
   communicator: 'low',
-  orchestrator: 'medium',
-  planner: 'high',
-  reviewer: 'medium',
-  worker: 'high',
-  librarian: 'medium',
+  orchestrator: 'low',
+  planner: 'medium',
+  reviewer: 'low',
+  worker: 'medium',
+  librarian: 'low',
 };
 
 export function isModelTier(value: unknown): value is ModelTier {
