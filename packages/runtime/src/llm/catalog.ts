@@ -1,9 +1,9 @@
 /**
- * Catalog of OpenCode Zen models. This is the single source of truth that maps
- * each model id to the AI SDK provider package that serves it on Zen, plus its
- * published pricing. See http://opencode.ai/docs/zen.
+ * Catalog of OpenCode Zen and Go models. Maps each model id to the AI SDK
+ * provider package that serves it, plus published pricing.
+ * See https://opencode.ai/docs/zen and https://opencode.ai/docs/go.
  *
- * Zen exposes four API shapes under the same base URL (`/zen/v1`):
+ * Zen (`/zen/v1`) and Go (`/zen/go/v1`) expose four API shapes under one base URL:
  *  - `@ai-sdk/anthropic`          -> `/messages`         (Claude*, Qwen*)
  *  - `@ai-sdk/openai` (Responses) -> `/responses`        (GPT*)
  *  - `@ai-sdk/google`             -> `/models/...`       (Gemini*)
@@ -91,13 +91,21 @@ const ENTRIES: CatalogEntry[] = [
   { id: 'gemini-3.1-pro', npm: '@ai-sdk/google', pricing: price(2, 12, 0.2) },
   { id: 'gemini-3-flash', npm: '@ai-sdk/google', pricing: price(0.5, 3, 0.05) },
 
-  // --- OpenAI-compatible chat completions: everything else ---
-  { id: 'minimax-m2.7', npm: '@ai-sdk/openai-compatible', pricing: price(0.3, 1.2, 0.06, 0.375) },
-  { id: 'minimax-m2.5', npm: '@ai-sdk/openai-compatible', pricing: price(0.3, 1.2, 0.06, 0.375) },
+  // --- Anthropic Messages shape on Go: MiniMax, Qwen3.7 ---
+  { id: 'minimax-m3', npm: '@ai-sdk/anthropic', pricing: price(0.6, 2.4, 0.12, 0.75) },
+  { id: 'minimax-m2.7', npm: '@ai-sdk/anthropic', pricing: price(0.3, 1.2, 0.06, 0.375) },
+  { id: 'minimax-m2.5', npm: '@ai-sdk/anthropic', pricing: price(0.3, 1.2, 0.06, 0.375) },
+  { id: 'qwen3.7-max', npm: '@ai-sdk/anthropic', pricing: price(2.5, 7.5, 0.5, 3.125) },
+
+  // --- OpenAI-compatible chat completions: GLM, Kimi, DeepSeek, MiMo, ... ---
   { id: 'glm-5.1', npm: '@ai-sdk/openai-compatible', pricing: price(1.4, 4.4, 0.26) },
   { id: 'glm-5', npm: '@ai-sdk/openai-compatible', pricing: price(1, 3.2, 0.2) },
   { id: 'kimi-k2.5', npm: '@ai-sdk/openai-compatible', pricing: price(0.6, 3, 0.1) },
   { id: 'kimi-k2.6', npm: '@ai-sdk/openai-compatible', pricing: price(0.95, 4, 0.16) },
+  { id: 'deepseek-v4-pro', npm: '@ai-sdk/openai-compatible', pricing: price(1.74, 3.48, 0.0145) },
+  { id: 'deepseek-v4-flash', npm: '@ai-sdk/openai-compatible', pricing: price(0.14, 0.28, 0.0028) },
+  { id: 'mimo-v2.5-pro', npm: '@ai-sdk/openai-compatible', pricing: price(1.74, 3.48, 0.0145) },
+  { id: 'mimo-v2.5', npm: '@ai-sdk/openai-compatible', pricing: price(0.14, 0.28, 0.0028) },
   { id: 'grok-build-0.1', npm: '@ai-sdk/openai-compatible', pricing: price(1, 2, 0.2) },
   { id: 'big-pickle', npm: '@ai-sdk/openai-compatible', pricing: FREE },
   { id: 'deepseek-v4-flash-free', npm: '@ai-sdk/openai-compatible', pricing: FREE },
@@ -119,7 +127,11 @@ export function inferPackage(modelId: string): LlmSdkPackage {
   if (id.startsWith('gpt-') || id.startsWith('o1') || id.startsWith('o3')) {
     return '@ai-sdk/openai';
   }
-  if (id.startsWith('claude-') || id.startsWith('qwen')) {
+  if (
+    id.startsWith('claude-') ||
+    id.startsWith('qwen') ||
+    id.startsWith('minimax-')
+  ) {
     return '@ai-sdk/anthropic';
   }
   if (id.startsWith('gemini')) {

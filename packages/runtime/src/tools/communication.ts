@@ -1,5 +1,10 @@
 import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
+import {
+  isRepoTaskMessage,
+  looksLikeRepoSource,
+  parseWorkstreamHeader,
+} from '../engine/task-intent.js';
 
 /** Reply to the outside world. Available to the communicator and orchestrator. */
 export function createReplyTool(ctx: ToolContext): ToolDef[] {
@@ -33,7 +38,7 @@ export function createCommunicatorTools(ctx: ToolContext): ToolDef[] {
     {
       name: 'start_workstream',
       description:
-        'Kick off a new body of work as its own workstream. This creates the workstream and hands it to an orchestrator call that will plan and execute it asynchronously.',
+        'Kick off a new body of work as its own workstream. This creates the workstream and hands it to an orchestrator call that will plan and execute it asynchronously. For repository fix/implement tasks, always pass repoUrl (and baseCommit when the task specifies one).',
       inputSchema: {
         type: 'object',
         properties: {
@@ -44,16 +49,35 @@ export function createCommunicatorTools(ctx: ToolContext): ToolDef[] {
           },
           repoUrl: {
             type: 'string',
-            description: 'Optional repository the work targets.',
+            description:
+              'Repository URL when the work targets a GitHub repo (required for clone/fix tasks).',
+          },
+          baseCommit: {
+            type: 'string',
+            description:
+              'Optional git commit to check out after cloning (bench / SWE tasks).',
           },
         },
         required: ['title', 'goal'],
       },
       handler: async (input) => {
+        let title = String(input.title);
+        let goal = String(input.goal);
+        let repoUrl = input.repoUrl ? String(input.repoUrl) : undefined;
+        let baseCommit = input.baseCommit ? String(input.baseCommit) : undefined;
+
+        const header = parseWorkstreamHeader(`${goal}\n\n${run.task}`);
+        if (header) {
+          if (header.title) title = header.title;
+          repoUrl ??= header.repoUrl;
+          baseCommit ??= header.baseCommit;
+        }
+
         const ws = await engine.startWorkstream({
-          title: String(input.title),
-          goal: String(input.goal),
-          repoUrl: input.repoUrl ? String(input.repoUrl) : undefined,
+          title,
+          goal,
+          repoUrl,
+          baseCommit,
           parentRunId: run.id,
           originMessageId: run.originMessageId,
         });
@@ -73,6 +97,12 @@ export function createCommunicatorTools(ctx: ToolContext): ToolDef[] {
         required: ['workstreamId', 'note'],
       },
       handler: async (input) => {
+        if (isRepoTaskMessage(run.task)) {
+          return (
+            'Error: Repo tasks are fully described in the inbound message. ' +
+            'Use start_workstream once, then reply — do not send_note during intake.'
+          );
+        }
         const workstreamId = String(input.workstreamId);
         const ws = await store.getWorkstream(workstreamId);
         if (!ws) return `Error: workstream ${workstreamId} not found.`;
@@ -110,6 +140,12 @@ export function createCommunicatorTools(ctx: ToolContext): ToolDef[] {
       },
       handler: async (input) => {
         const material = String(input.material);
+        if (
+          isRepoTaskMessage(run.task) ||
+          looksLikeRepoSource(material)
+        ) {
+          return 'Error: Use start_workstream for repo tasks; learn is for reference material only.';
+        }
         const focus = input.note ? `\nFocus: ${String(input.note)}` : '';
         const { runId } = await engine.spawnCall({
           role: 'librarian',

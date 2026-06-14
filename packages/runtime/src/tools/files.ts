@@ -2,9 +2,12 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
+import { FileCache } from '../engine/file-cache.js';
+import { clampFileContent } from './read-clamp.js';
+import { diagnoseEdited } from './diagnose.js';
 
 /** Resolve a user-supplied path inside the workspace, rejecting escapes. */
-function resolveScoped(workspaceDir: string, relative: string): string {
+export function resolveScoped(workspaceDir: string, relative: string): string {
   const resolved = path.resolve(workspaceDir, relative);
   const root = path.resolve(workspaceDir);
   if (resolved !== root && !resolved.startsWith(root + path.sep)) {
@@ -22,18 +25,46 @@ export function createFileTools(ctx: ToolContext): ToolDef[] {
     {
       name: 'read_file',
       description:
-        'Read the contents of a file within the workspace. Paths are relative to the workspace root.',
+        'Read a file within the workspace (paths relative to the workspace root). Returns up to ~500 lines; for a larger file use offset/limit to read a window, or grep to find specific content.',
       inputSchema: {
         type: 'object',
         properties: {
           path: { type: 'string', description: 'Workspace-relative file path.' },
+          offset: {
+            type: 'number',
+            description: '1-based line to start at (default 1).',
+          },
+          limit: {
+            type: 'number',
+            description: 'Max lines to return (default 500).',
+          },
         },
         required: ['path'],
       },
       handler: async (input) => {
-        const target = resolveScoped(workspaceDir, String(input.path));
+        const rel = String(input.path);
+        const target = resolveScoped(workspaceDir, rel);
         const content = await fs.readFile(target, 'utf8');
-        return content;
+        const offset =
+          input.offset !== undefined ? Number(input.offset) : undefined;
+        const limit =
+          input.limit !== undefined ? Number(input.limit) : undefined;
+        const clamped = clampFileContent(content, { offset, limit });
+        if (ctx.run.workstreamId) {
+          const stat = await fs.stat(target);
+          const lineCount = content.split('\n').length;
+          const cache = await FileCache.load(
+            ctx.engine.store.layout,
+            ctx.run.workstreamId,
+            ctx.engine.config.contextBorrowing.fileCacheMaxEntries,
+          );
+          cache.recordRead(rel, stat.mtimeMs, content, {
+            start: 1,
+            end: lineCount,
+          });
+          await cache.save();
+        }
+        return clamped;
       },
     },
     {
@@ -49,10 +80,11 @@ export function createFileTools(ctx: ToolContext): ToolDef[] {
         required: ['path', 'content'],
       },
       handler: async (input) => {
-        const target = resolveScoped(workspaceDir, String(input.path));
+        const rel = String(input.path);
+        const target = resolveScoped(workspaceDir, rel);
         await fs.mkdir(path.dirname(target), { recursive: true });
         await fs.writeFile(target, String(input.content ?? ''), 'utf8');
-        return `Wrote ${input.path}`;
+        return `Wrote ${rel}${await diagnoseEdited(ctx, [rel])}`;
       },
     },
     {

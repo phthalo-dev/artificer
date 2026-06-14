@@ -60,6 +60,14 @@ export class Layout {
     return path.join(this.reviewsDir(workstreamId), `${reviewId}.json`);
   }
 
+  findingsDir(workstreamId: string): string {
+    return path.join(this.workstreamDir(workstreamId), 'findings');
+  }
+
+  findingFile(workstreamId: string, findingId: string): string {
+    return path.join(this.findingsDir(workstreamId), `${findingId}.json`);
+  }
+
   runFile(id: string): string {
     return path.join(this.runsDir, `${id}.json`);
   }
@@ -75,5 +83,15 @@ export class Layout {
   /** Per-workstream workspace where repos are cloned and files are edited. */
   workstreamWorkspace(workstreamId: string): string {
     return path.join(this.workspaceDir, workstreamId);
+  }
+
+  /** Spilled tool-result bodies for a run (large outputs kept off the prompt). */
+  toolResultsDir(runId: string): string {
+    return path.join(this.root, 'tool-results', runId);
+  }
+
+  /** Per-workstream LRU of recently read files for context hints. */
+  workstreamFileCacheFile(workstreamId: string): string {
+    return path.join(this.workstreamDir(workstreamId), 'file-cache.json');
   }
 }

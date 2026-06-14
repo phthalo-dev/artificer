@@ -37,6 +37,8 @@ export interface Workstream {
   summary: string;
   /** Optional repository this workstream operates on. */
   repoUrl?: string;
+  /** Optional base commit to check out after cloning (bench / SWE tasks). */
+  baseCommit?: string;
   createdAt: string;
   updatedAt: string;
 }
@@ -76,6 +78,21 @@ export interface Review {
   createdAt: string;
 }
 
+/**
+ * A durable note one role records on the workstream blackboard so later roles
+ * read it instead of re-investigating: a root cause, a key file/symbol, the
+ * test command, a dead end, etc.
+ */
+export interface Finding {
+  id: string;
+  workstreamId: string;
+  role: RoleName;
+  /** The file or area the finding concerns, when applicable. */
+  file?: string;
+  note: string;
+  createdAt: string;
+}
+
 export type RunStatus = 'queued' | 'running' | 'done' | 'failed';
 
 export interface ToolInvocation {
@@ -84,6 +101,8 @@ export interface ToolInvocation {
   output: string;
   error?: string;
   at: string;
+  /** On-disk path when output was spilled to tool-results storage. */
+  spillPath?: string;
 }
 
 /** Token consumption for a single call, summed across its API requests. */

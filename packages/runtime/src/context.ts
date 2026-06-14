@@ -38,6 +38,7 @@ export interface EngineApi {
     title: string;
     goal: string;
     repoUrl?: string;
+    baseCommit?: string;
     parentRunId?: string;
     originMessageId?: string;
   }): Promise<Workstream>;

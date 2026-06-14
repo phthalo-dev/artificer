@@ -1,5 +1,12 @@
+import path from 'node:path';
 import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
+import { findGitRepo } from '../engine/git-repo.js';
+import { isRepoTaskMessage } from '../engine/task-intent.js';
+import {
+  plannerSpawnBlocked,
+  reviewerSpawnBlocked,
+} from '../engine/spawn-guards.js';
 import type { RoleName, WorkstreamStatus } from '../storage/types.js';
 import { isModelTier } from '../engine/models.js';
 
@@ -16,7 +23,25 @@ const WORKSTREAM_STATUSES: WorkstreamStatus[] = [
   'cancelled',
 ];
 
-/** Build a compact status snapshot for one workstream. */
+/** Most recent tasks/reviews surfaced in a status snapshot. */
+const MAX_STATUS_TASKS = 12;
+const MAX_STATUS_REVIEWS = 6;
+/** Per-field caps so the snapshot stays small as a workstream accumulates runs. */
+const MAX_RESULT_CHARS = 600;
+const MAX_NOTES_CHARS = 1_000;
+
+function clip(text: string | undefined, max: number): string | undefined {
+  if (text === undefined) return undefined;
+  if (text.length <= max) return text;
+  return `${text.slice(0, max)}… (${text.length - max} more chars)`;
+}
+
+/**
+ * Build a compact status snapshot for one workstream. Tasks and reviews are
+ * capped to the most recent few with truncated bodies so the orchestrator's
+ * context (and cost) does not grow without bound as the run count climbs — it
+ * has the running summary for the older history.
+ */
 async function workstreamStatus(
   ctx: ToolContext,
   workstreamId: string,
@@ -24,9 +49,15 @@ async function workstreamStatus(
   const { store } = ctx.engine;
   const ws = await store.getWorkstream(workstreamId);
   if (!ws) return `Workstream ${workstreamId} not found.`;
-  const tasks = await store.listTasks(workstreamId);
-  const reviews = await store.listReviews(workstreamId);
+  const allTasks = await store.listTasks(workstreamId);
+  const allReviews = await store.listReviews(workstreamId);
   const plan = await store.readPlan(workstreamId);
+  const workspaceDir = store.layout.workstreamWorkspace(workstreamId);
+  const localRepoPath = await findGitRepo(workspaceDir);
+
+  const tasks = allTasks.slice(-MAX_STATUS_TASKS);
+  const reviews = allReviews.slice(-MAX_STATUS_REVIEWS);
+
   return JSON.stringify(
     {
       id: ws.id,
@@ -34,20 +65,28 @@ async function workstreamStatus(
       goal: ws.goal,
       status: ws.status,
       summary: ws.summary,
+      repoUrl: ws.repoUrl,
+      baseCommit: ws.baseCommit,
+      localRepoReady: localRepoPath !== undefined,
+      cloneLocation: localRepoPath
+        ? path.relative(workspaceDir, localRepoPath) || '.'
+        : undefined,
       hasPlan: plan !== null,
+      taskCount: allTasks.length,
+      omittedTasks: Math.max(0, allTasks.length - tasks.length),
       tasks: tasks.map((t) => ({
         id: t.id,
         role: t.role,
         status: t.status,
-        description: t.description,
-        result: t.result,
+        description: clip(t.description, MAX_RESULT_CHARS),
+        result: clip(t.result, MAX_RESULT_CHARS),
       })),
       reviews: reviews.map((r) => ({
         target: r.target,
         approved: r.approved,
         stage: r.stage,
         severity: r.severity,
-        notes: r.notes,
+        notes: clip(r.notes, MAX_NOTES_CHARS),
       })),
     },
     null,
@@ -78,6 +117,12 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
         },
       },
       handler: async (input) => {
+        if (run.role === 'communicator' && isRepoTaskMessage(run.task)) {
+          return (
+            'Error: For repo/SWE tasks, call start_workstream once with repoUrl and baseCommit, ' +
+            'then reply. Do not poll get_status during intake.'
+          );
+        }
         if (input.workstreamId) {
           return workstreamStatus(ctx, String(input.workstreamId));
         }
@@ -135,6 +180,40 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
         const complexity = isModelTier(input.complexity)
           ? input.complexity
           : undefined;
+
+        if (workstreamId && role === 'planner') {
+          const blocked = await plannerSpawnBlocked(store, workstreamId);
+          if (blocked) return `Error: ${blocked}`;
+        }
+
+        if (workstreamId && role === 'reviewer') {
+          const stage =
+            String(input.description).toLowerCase().includes('plan')
+              ? 'plan'
+              : 'work';
+          const blocked = await reviewerSpawnBlocked(store, workstreamId, stage);
+          if (blocked) return `Error: ${blocked}`;
+        }
+
+        if (
+          workstreamId &&
+          (role === 'worker' || role === 'reviewer')
+        ) {
+          const ws = await store.getWorkstream(workstreamId);
+          if (ws?.repoUrl) {
+            const workspaceDir = store.layout.workstreamWorkspace(workstreamId);
+            const localRepo = await findGitRepo(workspaceDir);
+            if (!localRepo) {
+              return (
+                'Error: This workstream requires a local git repository in the workspace before ' +
+                `${role} work. Spawn a planner to clone ${ws.repoUrl}` +
+                (ws.baseCommit ? ` and checkout ${ws.baseCommit}` : '') +
+                ', then write_plan.'
+              );
+            }
+          }
+        }
+
         const result = await engine.spawnCall({
           role,
           description: String(input.description),
@@ -271,6 +350,40 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
           kind,
         });
         return `Saved to memory (${memory.id}).`;
+      },
+    },
+    {
+      name: 'record_finding',
+      description:
+        'Record a durable finding on the workstream blackboard so later roles ' +
+        'read it instead of re-investigating from scratch: a root cause, a key ' +
+        'file/symbol, the exact test command, or a confirmed dead end. One ' +
+        'concrete fact per call.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          note: {
+            type: 'string',
+            description: 'The finding — one concrete, durable fact.',
+          },
+          file: {
+            type: 'string',
+            description: 'The file or area it concerns, when applicable.',
+          },
+        },
+        required: ['note'],
+      },
+      handler: async (input) => {
+        if (!run.workstreamId) {
+          return 'Error: findings can only be recorded inside a workstream.';
+        }
+        const finding = await store.createFinding({
+          workstreamId: run.workstreamId,
+          role: run.role,
+          note: String(input.note),
+          file: input.file ? String(input.file) : undefined,
+        });
+        return `Recorded finding (${finding.id}).`;
       },
     },
   ];
