@@ -23,6 +23,8 @@ import {
   peakContext,
 } from '../components/BenchTrajectory';
 import { BreakdownTable } from '../components/BreakdownTable';
+import { TokenSpendByRole } from '../components/TokenSpendChart';
+import { ViewRawLink } from '../components/ViewRawLink';
 import { formatCost, formatDuration } from '../format';
 
 const VERIFIER_COLOR: Record<VerifierStatus, string> = {
@@ -147,8 +149,12 @@ export function BenchRunPage() {
       </div>
 
       <Paper withBorder radius="md" p="lg">
-        <SimpleGrid cols={{ base: 2, sm: 3, lg: 6 }} spacing="xl">
+        <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: 7 }} spacing="xl">
           <Metric label="Steps" value={steps !== null ? String(steps) : '—'} />
+          <Metric
+            label="Calls"
+            value={usage ? String(usage.runs) : '—'}
+          />
           <Metric label="Cost" value={usage ? formatCost(usage.costUsd) : '—'} />
           <Metric
             label="Input tok"
@@ -166,6 +172,10 @@ export function BenchRunPage() {
         </SimpleGrid>
       </Paper>
 
+      {data.byRole && Object.keys(data.byRole).length > 0 && (
+        <TokenSpendByRole byRole={data.byRole} />
+      )}
+
       <Tabs defaultValue="trajectory" keepMounted={false}>
         <Tabs.List>
           <Tabs.Tab value="trajectory">Trajectory</Tabs.Tab>
@@ -175,15 +185,18 @@ export function BenchRunPage() {
         </Tabs.List>
 
         <Tabs.Panel value="trajectory" pt="md">
-          <Group gap="xs" mb="sm">
-            <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
-              {data.modelName}
-            </Text>
-            {usage && (
-              <Text size="xs" c="dimmed">
-                · {usage.runs} runs · {formatCost(usage.costUsd)}
+          <Group justify="space-between" mb="sm">
+            <Group gap="xs">
+              <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
+                {data.modelName}
               </Text>
-            )}
+              {usage && (
+                <Text size="xs" c="dimmed">
+                  · {usage.runs} calls · {formatCost(usage.costUsd)}
+                </Text>
+              )}
+            </Group>
+            <ViewRawLink data={data} filename={`bench-${data.instanceId}.json`} />
           </Group>
           {data.trajectory ? (
             <BenchTrajectory tree={data.trajectory} />

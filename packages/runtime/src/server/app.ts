@@ -10,6 +10,8 @@ import {
   summarizeByRole,
 } from '../engine/cost.js';
 import type { Engine } from '../engine/engine.js';
+import { runGithubWatchOnce as defaultRunGithubWatchOnce } from '../engine/github-watch-runner.js';
+import type { GithubWatchState } from '../engine/github-watch.js';
 import { type LlmSdkPackage, MODEL_CATALOG } from '../llm/catalog.js';
 import { listPresets } from '../engine/presets.js';
 import { readBenchOverview, readBenchRun, readBenchSuites } from './bench.js';
@@ -63,10 +65,19 @@ const PROVIDER_LABEL: Record<LlmSdkPackage, string> = {
   '@ai-sdk/openai-compatible': 'OpenAI-compatible',
 };
 
+export interface AppDeps {
+  /** Runs one GitHub watch cycle and persists the resulting state. Overridable for tests. */
+  runGithubWatchOnce?: (
+    engine: Engine,
+    log?: (message: string) => void,
+  ) => Promise<GithubWatchState>;
+}
+
 /** Builds the Hono app exposing the agent's "person-like" HTTP surface. */
-export function createApp(engine: Engine): Hono {
+export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
   const app = new Hono();
   app.use('*', cors());
+  const runGithubWatchOnce = deps.runGithubWatchOnce ?? defaultRunGithubWatchOnce;
 
   app.get('/health', (c) => c.json({ ok: true, agent: engine.config.agentName }));
 
@@ -226,7 +237,15 @@ export function createApp(engine: Engine): Hono {
       byTask: groupBy(runs, (r) => r.taskId),
       byRole: summarizeByRole(runs),
     };
-    return c.json({ workstream, tasks, reviews, plan, runs, usage });
+    return c.json({
+      workstream,
+      tasks,
+      reviews,
+      plan,
+      runs,
+      usage,
+      tree: buildCallTree(runs),
+    });
   });
 
   // --- Memories ---
@@ -311,6 +330,23 @@ export function createApp(engine: Engine): Hono {
     const detail = await readBenchRun(c.req.param('instanceId'));
     if (!detail) return c.json({ error: 'not found' }, 404);
     return c.json(detail);
+  });
+
+  // --- GitHub activity watcher ---
+
+  // Runs one poll cycle (own PRs + notifications) on demand, feeding any
+  // findings into the engine via receiveMessage(). Lets an external cron
+  // (launchd/systemd timer/scheduled Action) drive the watcher instead of
+  // (or in addition to) the in-process interval.
+  app.post('/github/watch', async (c) => {
+    if (!engine.config.github) {
+      return c.json({ error: 'GitHub is not configured (set GITHUB_TOKEN)' }, 400);
+    }
+    const state = await runGithubWatchOnce(engine, (msg) =>
+      // eslint-disable-next-line no-console
+      console.log(`[github-watch] ${msg}`),
+    );
+    return c.json({ state });
   });
 
   // --- Live event stream ---

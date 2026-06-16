@@ -7,12 +7,12 @@ import {
   Paper,
   Stack,
   Text,
-  Tooltip,
   UnstyledButton,
 } from '@mantine/core';
 import { IconChevronDown, IconChevronRight } from '@tabler/icons-react';
 import { useState } from 'react';
 import type { RunNode, RunRecord, ToolInvocation } from '../api/types';
+import { TokenSpendTimeline } from './TokenSpendChart';
 
 const ROLE_COLOR: Record<string, string> = {
   communicator: 'grape',
@@ -27,10 +27,15 @@ function roleColor(role: string): string {
   return ROLE_COLOR[role] ?? 'gray';
 }
 
+function normalizeTree(tree: RunNode[] | null | undefined): RunNode[] {
+  return Array.isArray(tree) ? tree : [];
+}
+
 /** Depth-first, start-time-ordered flatten of the call tree into a step list. */
-function flatten(tree: RunNode[]): RunRecord[] {
+export function flattenRuns(tree: RunNode[] | null | undefined): RunRecord[] {
   const out: RunRecord[] = [];
-  const visit = (nodes: RunNode[]) => {
+  const visit = (nodes: RunNode[] | null | undefined) => {
+    if (!Array.isArray(nodes)) return;
     const ordered = [...nodes].sort((a, b) =>
       (a.run.startedAt ?? a.run.createdAt).localeCompare(
         b.run.startedAt ?? b.run.createdAt,
@@ -41,7 +46,7 @@ function flatten(tree: RunNode[]): RunRecord[] {
       visit(node.children);
     }
   };
-  visit(tree);
+  visit(normalizeTree(tree));
   return out;
 }
 
@@ -65,40 +70,6 @@ function toolHint(input: unknown): string {
   if (!key) return '';
   const value = String(obj[key]).replace(/\s+/g, ' ').trim();
   return value.length > 80 ? `${value.slice(0, 80)}…` : value;
-}
-
-/** Grayscale-ish barcode of steps, colored by role (DeepSWE-style timeline). */
-function Barcode({ runs }: { runs: RunRecord[] }) {
-  return (
-    <Group
-      gap={2}
-      wrap="nowrap"
-      style={{ overflowX: 'auto', padding: '6px 0' }}
-    >
-      {runs.map((run, i) => (
-        <Tooltip
-          key={run.id}
-          label={`#${i + 1} · ${run.role}${
-            run.toolCalls.length ? ` · ${run.toolCalls.length} tools` : ''
-          }`}
-          withArrow
-        >
-          <Box
-            style={{
-              width: 6,
-              height: 36,
-              flex: '0 0 auto',
-              borderRadius: 1,
-              opacity: run.status === 'failed' ? 0.5 : 1,
-              backgroundColor: `var(--mantine-color-${roleColor(run.role)}-${
-                run.status === 'failed' ? 4 : 6
-              })`,
-            }}
-          />
-        </Tooltip>
-      ))}
-    </Group>
-  );
 }
 
 function ToolCall({ call, index }: { call: ToolInvocation; index: number }) {
@@ -243,8 +214,12 @@ function Step({ run, index }: { run: RunRecord; index: number }) {
   );
 }
 
-export function BenchTrajectory({ tree }: { tree: RunNode[] }) {
-  const runs = flatten(tree);
+export function BenchTrajectory({
+  tree,
+}: {
+  tree: RunNode[] | null | undefined;
+}) {
+  const runs = flattenRuns(tree);
   if (runs.length === 0) {
     return (
       <Text c="dimmed" size="sm">
@@ -255,7 +230,7 @@ export function BenchTrajectory({ tree }: { tree: RunNode[] }) {
   }
   return (
     <Stack gap="xs">
-      <Barcode runs={runs} />
+      <TokenSpendTimeline runs={runs} />
       {runs.map((run, i) => (
         <Step key={run.id} run={run} index={i} />
       ))}
@@ -264,20 +239,21 @@ export function BenchTrajectory({ tree }: { tree: RunNode[] }) {
 }
 
 /** Total tool calls across the tree — the agent's "steps". */
-export function countSteps(tree: RunNode[]): number {
-  return flatten(tree).reduce((sum, r) => sum + r.toolCalls.length, 0);
+export function countSteps(tree: RunNode[] | null | undefined): number {
+  return flattenRuns(tree).reduce((sum, r) => sum + r.toolCalls.length, 0);
 }
 
 /** Largest single-run context (input + cache reads) reached in the tree. */
-export function peakContext(tree: RunNode[]): number {
+export function peakContext(tree: RunNode[] | null | undefined): number {
   let peak = 0;
-  const visit = (nodes: RunNode[]) => {
+  const visit = (nodes: RunNode[] | null | undefined) => {
+    if (!Array.isArray(nodes)) return;
     for (const n of nodes) {
-      const ctx = n.self.inputTokens + n.self.cacheReadInputTokens;
+      const ctx = (n.self?.inputTokens ?? 0) + (n.self?.cacheReadInputTokens ?? 0);
       if (ctx > peak) peak = ctx;
       visit(n.children);
     }
   };
-  visit(tree);
+  visit(normalizeTree(tree));
   return peak;
 }

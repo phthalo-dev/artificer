@@ -3,6 +3,7 @@ import { serve } from '@hono/node-server';
 import { pathToFileURL } from 'node:url';
 import { loadConfig } from './config.js';
 import { Engine } from './engine/engine.js';
+import { runGithubWatchOnce } from './engine/github-watch-runner.js';
 import { createApp } from './server/app.js';
 import { Store } from './storage/store.js';
 
@@ -46,6 +47,28 @@ export async function startRuntime(): Promise<void> {
     // eslint-disable-next-line no-console
     console.log(`[artificer-runtime] data dir: ${config.dataDir}`);
   });
+
+  const watchIntervalMs = config.github?.watchIntervalMs;
+  if (watchIntervalMs) {
+    const scheduleNextWatch = () => {
+      setTimeout(() => {
+        runGithubWatchOnce(engine, (msg) =>
+          // eslint-disable-next-line no-console
+          console.log(`[artificer-runtime] [github-watch] ${msg}`),
+        )
+          .catch((err) => {
+            // eslint-disable-next-line no-console
+            console.error('[artificer-runtime] github watch cycle failed:', err);
+          })
+          .finally(scheduleNextWatch);
+      }, watchIntervalMs);
+    };
+    scheduleNextWatch();
+    // eslint-disable-next-line no-console
+    console.log(
+      `[artificer-runtime] GitHub watcher enabled (every ${watchIntervalMs}ms)`,
+    );
+  }
 }
 
 // Start the server only when this file is executed directly.

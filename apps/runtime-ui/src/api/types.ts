@@ -152,6 +152,7 @@ export interface WorkstreamDetail {
   reviews: Review[];
   plan: string | null;
   runs: RunRecord[];
+  tree?: RunNode[];
   usage: {
     total: UsageSummary;
     byTask: Record<string, UsageSummary>;

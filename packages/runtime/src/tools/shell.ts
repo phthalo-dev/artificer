@@ -2,7 +2,11 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
-import { checkGitCloneInWorkspace, checkReviewerWrite } from './shell-policy.js';
+import {
+  checkGitCloneInWorkspace,
+  checkGitStash,
+  checkReviewerWrite,
+} from './shell-policy.js';
 import { buildGitEnv } from './git-env.js';
 
 const execAsync = promisify(exec);
@@ -94,6 +98,10 @@ export function createShellTool(ctx: ToolContext): ToolDef[] {
         const writeCheck = checkReviewerWrite(command, ctx.run.role);
         if (!writeCheck.allowed) {
           return `Error: ${writeCheck.reason}`;
+        }
+        const stashCheck = checkGitStash(command, ctx.run.role);
+        if (!stashCheck.allowed) {
+          return `Error: ${stashCheck.reason}`;
         }
         const { output } = await runShellCommand({ command, cwd, env });
         return truncate(output);

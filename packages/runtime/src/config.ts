@@ -79,6 +79,11 @@ export interface GitHubConfig {
   userName?: string;
   /** Commit author/committer email (recommend the account's noreply email). */
   userEmail?: string;
+  /**
+   * Interval (ms) for polling the agent's own PRs and notifications. Absent
+   * or 0 disables the watcher (default — no background GitHub activity).
+   */
+  watchIntervalMs?: number;
 }
 
 function required(name: string, value: string | undefined): string {
@@ -150,6 +155,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
         token: githubToken,
         userName: env.GITHUB_USER_NAME,
         userEmail: env.GITHUB_USER_EMAIL,
+        watchIntervalMs: env.GITHUB_WATCH_INTERVAL_MS
+          ? Number(env.GITHUB_WATCH_INTERVAL_MS)
+          : undefined,
       }
     : undefined;
 
