@@ -2,7 +2,11 @@ import assert from 'node:assert/strict';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { checkGitCloneInWorkspace, checkReviewerWrite } from './shell-policy.js';
+import {
+  checkGitCloneInWorkspace,
+  checkGitStash,
+  checkReviewerWrite,
+} from './shell-policy.js';
 
 const workspace = path.join(os.tmpdir(), 'artificer-ws-test');
 
@@ -88,4 +92,45 @@ for (const [command, label] of allowedForReviewer) {
 test('checkReviewerWrite allows mutations for non-reviewer roles', () => {
   assert.equal(checkReviewerWrite("sed -i 's/a/b/' f.py", 'worker').allowed, true);
   assert.equal(checkReviewerWrite('rm scratch.py', 'planner').allowed, true);
+});
+
+// --- git stash guard ---
+
+const blockedStashCommands: [string, string][] = [
+  ['git stash', 'bare git stash'],
+  ['git stash push', 'git stash push'],
+  ['git stash push -m "wip"', 'git stash push with message'],
+  ['git stash save "wip"', 'git stash save'],
+  ['git stash -u', 'git stash -u'],
+  ['git diff && git stash', 'chained bare git stash'],
+];
+
+for (const [command, label] of blockedStashCommands) {
+  for (const role of ['worker', 'planner'] as const) {
+    test(`checkGitStash blocks ${label} for ${role}`, () => {
+      const result = checkGitStash(command, role);
+      assert.equal(result.allowed, false, `expected blocked: ${command}`);
+      assert.match(result.reason ?? '', /git stash/i);
+    });
+  }
+}
+
+const allowedStashCommands: [string, string][] = [
+  ['git stash pop', 'git stash pop'],
+  ['git stash apply', 'git stash apply'],
+  ['git stash list', 'git stash list'],
+  ['git stash show', 'git stash show'],
+  ['git stash drop', 'git stash drop'],
+  ['git status', 'unrelated git command'],
+];
+
+for (const [command, label] of allowedStashCommands) {
+  test(`checkGitStash allows ${label} for worker`, () => {
+    const result = checkGitStash(command, 'worker');
+    assert.equal(result.allowed, true, `expected allowed: ${command}`);
+  });
+}
+
+test('checkGitStash is a no-op for reviewer (already blocked by checkReviewerWrite)', () => {
+  assert.equal(checkGitStash('git stash', 'reviewer').allowed, true);
 });

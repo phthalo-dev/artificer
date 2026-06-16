@@ -1,6 +1,7 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { emptyGithubWatchState, type GithubWatchState } from '../engine/github-watch.js';
 import { Layout } from './layout.js';
 import {
   rankMemories,
@@ -509,6 +510,17 @@ export class Store {
     );
     await writeJson(this.layout.memoryIndexFile(), rebuilt);
     return rebuilt;
+  }
+
+  // --- GitHub watch state ---
+
+  async readGithubWatchState(): Promise<GithubWatchState> {
+    const state = await readJson<GithubWatchState>(this.layout.githubWatchStateFile());
+    return state ?? emptyGithubWatchState();
+  }
+
+  async writeGithubWatchState(state: GithubWatchState): Promise<void> {
+    await writeJson(this.layout.githubWatchStateFile(), state);
   }
 
   // --- Status helpers ---

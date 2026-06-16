@@ -131,6 +131,43 @@ function detectMutation(segment: string): string | undefined {
 }
 
 /**
+ * Detect `git stash` invocations that would stash away the current working
+ * tree changes — bare `git stash`, `git stash push`, `git stash save`, and
+ * `git stash` with option flags (e.g. `-u`), all of which default to a push.
+ * `pop`, `apply`, `list`, `show`, `drop`, `clear`, and `branch` are read-only
+ * or restorative and are not flagged.
+ */
+function isStashingCommand(segment: string): boolean {
+  const m = segment.match(/\bgit\s+stash\b(?:\s+(\S+))?/);
+  if (!m) return false;
+  const sub = m[1];
+  if (!sub) return true;
+  return sub === 'push' || sub === 'save' || sub.startsWith('-');
+}
+
+/**
+ * Workers (and other non-reviewer roles) sometimes `git stash` their change to
+ * compare against the baseline, then forget to pop it back — stranding a
+ * working fix outside `git diff`/`git status` so it never reaches the patch.
+ * Block stashing outright; the reviewer is already fully blocked by
+ * `checkReviewerWrite`.
+ */
+export function checkGitStash(command: string, role: RoleName): ShellPolicyResult {
+  if (role === 'reviewer') return { allowed: true };
+  for (const segment of splitCommandSegments(command)) {
+    if (isStashingCommand(segment)) {
+      return {
+        allowed: false,
+        reason:
+          'git stash would hide your uncommitted changes from the patch — never use it to compare against baseline. ' +
+          'To inspect the original code use `git diff` or `git show HEAD:<path>`; for a separate checkout use `git worktree add`.',
+      };
+    }
+  }
+  return { allowed: true };
+}
+
+/**
  * The reviewer is read-only: it verifies, it does not change the workspace.
  * Its tool registry already withholds `write_file`/`edit_file`, but `run_shell`
  * could otherwise mutate files (`sed -i`, `patch`, `git checkout`, redirects).

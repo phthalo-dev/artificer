@@ -148,7 +148,16 @@ export async function runToolLoop(
   try {
     result = await generateText({
       model,
-      system,
+      system: {
+        role: 'system',
+        content: system,
+        // Anthropic caches the request prefix up to and including the last
+        // marked system block, covering both the tool definitions and the
+        // system prompt. Both are stable across steps within a call and
+        // across calls for the same role, so this turns repeated re-sends
+        // into cheap cache reads. Other providers ignore this namespace.
+        providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+      },
       messages,
       tools: tools.length > 0 ? sdkTools : undefined,
       maxOutputTokens: maxTokens,

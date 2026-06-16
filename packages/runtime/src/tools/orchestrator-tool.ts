@@ -327,7 +327,7 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
           },
           kind: {
             type: 'string',
-            enum: ['note', 'document'],
+            enum: ['note', 'document', 'preference'],
             description: 'Optional kind of memory.',
           },
         },
@@ -338,7 +338,9 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
           ? (input.tags as unknown[]).map(String)
           : [];
         const kind =
-          input.kind === 'document' || input.kind === 'note'
+          input.kind === 'document' ||
+          input.kind === 'note' ||
+          input.kind === 'preference'
             ? input.kind
             : undefined;
         const memory = await store.addMemory({

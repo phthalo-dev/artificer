@@ -158,6 +158,6 @@ export interface Memory {
   summary?: string;
   /** Where this came from: a URL, or "conversation". */
   source?: string;
-  kind?: 'note' | 'document';
+  kind?: 'note' | 'document' | 'preference';
   updatedAt?: string;
 }

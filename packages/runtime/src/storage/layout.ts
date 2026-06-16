@@ -94,4 +94,9 @@ export class Layout {
   workstreamFileCacheFile(workstreamId: string): string {
     return path.join(this.workstreamDir(workstreamId), 'file-cache.json');
   }
+
+  /** Cursor/state for the GitHub activity watcher (own PRs + notifications). */
+  githubWatchStateFile(): string {
+    return path.join(this.root, 'github-watch-state.json');
+  }
 }
