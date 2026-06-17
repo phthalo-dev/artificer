@@ -1,5 +1,6 @@
 import {
   Alert,
+  Anchor,
   Badge,
   Card,
   Code,
@@ -12,7 +13,7 @@ import {
   Table,
   Text,
   Title,
-} from '@mantine/core';
+} from '../ds';
 import { IconFlask } from '@tabler/icons-react';
 import { Link } from 'react-router-dom';
 import { useBenchRuns, useBenchSuites } from '../api/hooks';
@@ -30,7 +31,7 @@ function Stat({
   sub?: string;
 }) {
   return (
-    <Paper withBorder p="md" radius="md">
+    <Paper p="md">
       <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={4}>
         {label}
       </Text>
@@ -49,18 +50,18 @@ function Stat({
 function Verdict({ row }: { row: BenchInstanceSummary }) {
   if (row.resolved === true)
     return (
-      <Badge color="green" variant="filled" radius="sm">
+      <Badge color="green" variant="filled">
         PASS
       </Badge>
     );
   if (row.resolved === false)
     return (
-      <Badge color="red" variant="light" radius="sm">
+      <Badge color="red" variant="light">
         FAIL
       </Badge>
     );
   return (
-    <Badge color="gray" variant="light" radius="sm">
+    <Badge color="gray" variant="light">
       ungraded
     </Badge>
   );
@@ -78,7 +79,7 @@ export function BenchPage() {
         <Title order={3}>Benchmark</Title>
         <Alert color="gray" title="No benchmark results yet" icon={<IconFlask size={18} />}>
           Run a suite from <Code>packages/runtime</Code>:
-          <Stack gap={6} mt="xs">
+          <Stack gap={6} mt={4}>
             {(suites ?? [
               {
                 id: 'mini-suite',
@@ -123,7 +124,7 @@ export function BenchPage() {
             </Badge>
           )}
           {modelName && (
-            <Badge variant="light" color="blue" radius="sm">
+            <Badge variant="light" color="blue">
               {modelName}
             </Badge>
           )}
@@ -153,8 +154,8 @@ export function BenchPage() {
       </div>
 
       {suites && suites.length > 0 && (
-        <Card withBorder radius="md" padding="md">
-          <Text fw={600} size="sm" mb="xs">
+        <Card padding="md">
+          <Text fw={600} size="sm" style={{ marginBottom: 'var(--nb-space-xs)' }}>
             Available suites
           </Text>
           <Stack gap="sm">
@@ -188,8 +189,8 @@ export function BenchPage() {
         </Card>
       )}
 
-      <Card withBorder radius="md" padding="lg">
-        <Group justify="space-between" align="flex-end" mb="sm">
+      <Card padding="lg">
+        <Group justify="space-between" align="flex-end" style={{ marginBottom: 'var(--nb-space-sm)' }}>
           <div>
             <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
               Pass@1
@@ -207,7 +208,6 @@ export function BenchPage() {
         <Progress
           value={passPct ?? 0}
           color={passPct && passPct >= 50 ? 'green' : 'blue'}
-          radius="xl"
           size="lg"
         />
       </Card>
@@ -253,7 +253,7 @@ export function BenchPage() {
       </SimpleGrid>
 
       <Table.ScrollContainer minWidth={760}>
-        <Table striped highlightOnHover withTableBorder verticalSpacing="sm">
+        <Table striped highlightOnHover withTableBorder>
           <Table.Thead>
             <Table.Tr>
               <Table.Th>Verdict</Table.Th>
@@ -273,15 +273,13 @@ export function BenchPage() {
                   <Verdict row={row} />
                 </Table.Td>
                 <Table.Td>
-                  <Text
+                  <Anchor
                     component={Link}
                     to={`/bench/${encodeURIComponent(row.instanceId)}`}
                     size="sm"
-                    fw={600}
-                    c="blue"
                   >
                     {row.instanceId}
-                  </Text>
+                  </Anchor>
                   {row.hasTrajectory && (
                     <Badge size="xs" variant="dot" color="cyan" ml={6}>
                       trajectory

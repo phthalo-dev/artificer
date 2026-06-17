@@ -1,5 +1,5 @@
-import { Button, Group, Textarea } from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+import { Button, Group, Textarea } from '../ds';
+import { notifications } from '../ds/notifications';
 import { IconSend } from '@tabler/icons-react';
 import { useState } from 'react';
 import { useSendMessage } from '../api/hooks';
@@ -45,13 +45,13 @@ export function MessageComposer() {
           if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submit();
         }}
       />
-      <Group justify="space-between" mt="xs">
+      <Group justify="space-between" style={{ marginTop: 'var(--nb-space-xs)' }}>
         <span style={{ fontSize: 12, opacity: 0.6 }}>⌘/Ctrl + Enter to send</span>
         <Button
           leftSection={<IconSend size={16} />}
-          onClick={submit}
+          onPress={submit}
           loading={send.isPending}
-          disabled={!content.trim()}
+          isDisabled={!content.trim()}
         >
           Send
         </Button>

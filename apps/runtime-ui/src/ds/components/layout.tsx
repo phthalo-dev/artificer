@@ -66,16 +66,20 @@ export type StackProps = HTMLAttributes<HTMLDivElement> & {
   gap?: GapKey | number;
   align?: CSSProperties['alignItems'];
   justify?: CSSProperties['justifyContent'];
+  mt?: number | string;
+  mb?: number | string;
 };
 
 export const Stack = forwardRef<HTMLDivElement, StackProps>(function Stack(
-  { gap = 'md', align, justify, className, style, ...props },
+  { gap = 'md', align, justify, mt, mb, className, style, ...props },
   ref,
 ) {
   const s: CSSProperties = {
     ...(typeof gap === 'number' ? { gap: `${gap}px` } : {}),
     ...(align ? { alignItems: align } : {}),
     ...(justify ? { justifyContent: justify } : {}),
+    ...(mt !== undefined ? { marginTop: px(mt) } : {}),
+    ...(mb !== undefined ? { marginBottom: px(mb) } : {}),
     ...style,
   };
   const gapCls = typeof gap === 'string' ? stackCls({ gap }) : stackCls({ gap: 'md' });
@@ -111,10 +115,13 @@ export type GroupProps = HTMLAttributes<HTMLDivElement> & {
   justify?: CSSProperties['justifyContent'];
   wrap?: CSSProperties['flexWrap'];
   grow?: boolean;
+  mt?: number | string;
+  mb?: number | string;
+  w?: number | string;
 };
 
 export const Group = forwardRef<HTMLDivElement, GroupProps>(function Group(
-  { gap = 'sm', align, justify, wrap, grow, className, style, ...props },
+  { gap = 'sm', align, justify, wrap, grow, mt, mb, w, className, style, ...props },
   ref,
 ) {
   const s: CSSProperties = {
@@ -122,6 +129,9 @@ export const Group = forwardRef<HTMLDivElement, GroupProps>(function Group(
     ...(align ? { alignItems: align } : {}),
     ...(justify ? { justifyContent: justify } : {}),
     ...(wrap ? { flexWrap: wrap } : {}),
+    ...(mt !== undefined ? { marginTop: px(mt) } : {}),
+    ...(mb !== undefined ? { marginBottom: px(mb) } : {}),
+    ...(w !== undefined ? { width: px(w) } : {}),
     ...style,
   };
   const gapCls = typeof gap === 'string' ? groupCls({ gap }) : groupCls({ gap: 'sm' });

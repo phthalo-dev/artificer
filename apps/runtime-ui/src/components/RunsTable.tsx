@@ -1,4 +1,4 @@
-import { Code, Table, Text } from '@mantine/core';
+import { Code, Table, Text } from '../ds';
 import type { RunRecord } from '../api/types';
 import { formatCost, formatTokens, relativeTime } from '../format';
 import { costForRun } from '../cost';

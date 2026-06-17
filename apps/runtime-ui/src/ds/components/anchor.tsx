@@ -30,6 +30,7 @@ export type AnchorProps = AnchorHTMLAttributes<HTMLAnchorElement> & {
   size?: 'xs' | 'sm' | 'md';
   c?: 'dimmed' | 'inherit';
   download?: string;
+  to?: string;
 };
 
 export const Anchor = forwardRef<HTMLAnchorElement, AnchorProps>(function Anchor(

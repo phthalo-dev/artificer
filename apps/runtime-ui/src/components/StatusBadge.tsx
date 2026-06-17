@@ -1,7 +1,7 @@
-import { Badge } from '@mantine/core';
+import { Badge, type BadgeColor } from '../ds';
 import type { RunStatus, WorkstreamStatus } from '../api/types';
 
-const WORKSTREAM_COLORS: Record<WorkstreamStatus, string> = {
+const WORKSTREAM_COLORS: Record<WorkstreamStatus, BadgeColor> = {
   pending: 'gray',
   planning: 'blue',
   reviewing: 'violet',
@@ -12,7 +12,7 @@ const WORKSTREAM_COLORS: Record<WorkstreamStatus, string> = {
   cancelled: 'gray',
 };
 
-const RUN_COLORS: Record<RunStatus, string> = {
+const RUN_COLORS: Record<RunStatus, BadgeColor> = {
   queued: 'gray',
   running: 'blue',
   done: 'green',
@@ -29,7 +29,7 @@ export function StatusBadge({
     RUN_COLORS[status as RunStatus] ??
     'gray';
   return (
-    <Badge color={color} variant="light" radius="sm">
+    <Badge color={color} variant="light">
       {status.replace(/_/g, ' ')}
     </Badge>
   );

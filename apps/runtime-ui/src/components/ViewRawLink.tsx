@@ -1,4 +1,4 @@
-import { Anchor } from '@mantine/core';
+import { Anchor } from '../ds';
 import { IconExternalLink } from '@tabler/icons-react';
 import { useEffect, useMemo } from 'react';
 

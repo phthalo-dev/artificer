@@ -1,4 +1,4 @@
-import { Box, Code, Collapse, Group, Paper, Text, UnstyledButton } from '@mantine/core';
+import { Box, Code, Collapse, Group, Paper, Text, UnstyledButton } from '../ds';
 import { IconChevronDown, IconChevronRight } from '@tabler/icons-react';
 import { useState } from 'react';
 import type { RunNode } from '../api/types';
@@ -12,11 +12,11 @@ function CallNode({ node, depth }: { node: RunNode; depth: number }) {
 
   return (
     <Box style={{ marginLeft: depth * 16 }}>
-      <Paper withBorder radius="md" p="xs" mb={6}>
+      <Paper p="xs" style={{ marginBottom: 6 }}>
         <Group justify="space-between" wrap="nowrap" gap="xs">
           <Group gap={6} wrap="nowrap" style={{ minWidth: 0 }}>
             {hasChildren ? (
-              <UnstyledButton onClick={() => setOpen((o) => !o)}>
+              <UnstyledButton onPress={() => setOpen((o) => !o)}>
                 {open ? (
                   <IconChevronDown size={16} />
                 ) : (
@@ -46,11 +46,11 @@ function CallNode({ node, depth }: { node: RunNode; depth: number }) {
             </Text>
           </Group>
         </Group>
-        <Text size="xs" c="dimmed" lineClamp={2} mt={4} ml={22}>
+        <Text size="xs" c="dimmed" lineClamp={2} mt={4} style={{ marginLeft: 22 }}>
           {run.task}
         </Text>
         {run.error && (
-          <Text size="xs" c="red" ml={22} mt={2}>
+          <Text size="xs" c="red" mt={2} style={{ marginLeft: 22 }}>
             {run.error}
           </Text>
         )}

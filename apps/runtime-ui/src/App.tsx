@@ -1,4 +1,4 @@
-import { AppShell, Badge, Group, NavLink, Text, Title } from '@mantine/core';
+import { AppShell, Badge, Group, NavLink, Text, Title } from './ds';
 import {
   IconActivity,
   IconBook,
@@ -44,15 +44,15 @@ export function App() {
       padding="md"
     >
       <AppShell.Header>
-        <Group h="100%" px="md" justify="space-between">
+        <Group style={{ height: '100%', padding: '0 var(--nb-space-md)' }} justify="space-between">
           <Title order={4}>{state?.agentName ?? 'Artificer'} Runtime</Title>
           <Group gap="xs">
             {state?.busy ? (
-              <Badge color="blue" variant="dot">
+              <Badge color="blue" variant="light">
                 working · {state.queue.running} running / {state.queue.pending} queued
               </Badge>
             ) : (
-              <Badge color="gray" variant="dot">
+              <Badge color="gray" variant="light">
                 idle
               </Badge>
             )}
@@ -77,7 +77,7 @@ export function App() {
             />
           );
         })}
-        <Text size="xs" c="dimmed" mt="md" px="sm">
+        <Text size="xs" c="dimmed" style={{ marginTop: 'var(--nb-space-md)', padding: '0 var(--nb-space-sm)' }}>
           {state?.workstreams.length ?? 0} workstream(s)
         </Text>
       </AppShell.Navbar>

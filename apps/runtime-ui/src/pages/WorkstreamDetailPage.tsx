@@ -2,6 +2,7 @@ import {
   Alert,
   Anchor,
   Badge,
+  type BadgeColor,
   Box,
   Card,
   Code,
@@ -14,7 +15,7 @@ import {
   Tabs,
   Text,
   Title,
-} from '@mantine/core';
+} from '../ds';
 import { IconArrowLeft } from '@tabler/icons-react';
 import { Link, useParams } from 'react-router-dom';
 import { useWorkstream } from '../api/hooks';
@@ -31,7 +32,7 @@ import { TokenSpendByRole } from '../components/TokenSpendChart';
 import { ViewRawLink } from '../components/ViewRawLink';
 import { formatCost, formatDuration, formatTime } from '../format';
 
-const SEVERITY_COLORS: Record<ReviewSeverity, string> = {
+const SEVERITY_COLORS: Record<ReviewSeverity, BadgeColor> = {
   critical: 'red',
   important: 'orange',
   minor: 'yellow',
@@ -135,8 +136,8 @@ export function WorkstreamDetailPage() {
         )}
       </div>
 
-      <Paper withBorder radius="md" p="lg">
-        <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: 7 }} spacing="xl">
+      <Paper p="lg">
+        <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: 7 }}>
           <Metric label="Steps" value={String(steps)} />
           <Metric label="Calls" value={String(usage.total.runs)} />
           <Metric label="Cost" value={formatCost(usage.total.costUsd)} />
@@ -159,7 +160,7 @@ export function WorkstreamDetailPage() {
       {runs.length > 0 && <TokenSpendByRole byRole={usage.byRole} />}
 
       {ws.summary && (
-        <Card withBorder radius="md" padding="md">
+        <Card padding="md">
           <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={4}>
             Summary
           </Text>
@@ -179,7 +180,7 @@ export function WorkstreamDetailPage() {
         </Tabs.List>
 
         <Tabs.Panel value="trajectory" pt="md">
-          <Group justify="space-between" mb="sm">
+          <Group justify="space-between" style={{ marginBottom: 'var(--nb-space-sm)' }}>
             <Group gap="xs">
               <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
                 {model ?? 'sub-agents'}
@@ -196,7 +197,7 @@ export function WorkstreamDetailPage() {
           {runs.length > 0 ? (
             <BenchTrajectory tree={tree} />
           ) : (
-            <Alert color="gray" variant="light">
+            <Alert color="gray">
               No agent calls recorded for this workstream yet.
             </Alert>
           )}
@@ -204,7 +205,7 @@ export function WorkstreamDetailPage() {
 
         <Tabs.Panel value="plan" pt="md">
           {plan ? (
-            <Paper withBorder radius="md" p="sm">
+            <Paper p="sm">
               <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
                 {plan}
               </Text>
@@ -265,14 +266,14 @@ export function WorkstreamDetailPage() {
           ) : (
             <Stack gap="sm">
               {reviews.map((r) => (
-                <Card key={r.id} withBorder radius="md" padding="sm">
+                <Card key={r.id} padding="sm">
                   <Group justify="space-between" mb={4}>
                     <Group gap="xs">
                       <Text size="sm" fw={600}>
                         {r.target}
                       </Text>
                       {r.stage ? (
-                        <Badge color="gray" variant="light" size="sm">
+                        <Badge color="gray" size="sm">
                           {r.stage}
                         </Badge>
                       ) : null}
@@ -281,7 +282,6 @@ export function WorkstreamDetailPage() {
                       {r.severity && r.severity !== 'none' ? (
                         <Badge
                           color={SEVERITY_COLORS[r.severity]}
-                          variant="light"
                           size="sm"
                         >
                           {r.severity}
@@ -289,7 +289,6 @@ export function WorkstreamDetailPage() {
                       ) : null}
                       <Badge
                         color={r.approved ? 'green' : 'orange'}
-                        variant="light"
                       >
                         {r.approved ? 'approved' : 'changes requested'}
                       </Badge>
@@ -309,7 +308,7 @@ export function WorkstreamDetailPage() {
 
         <Tabs.Panel value="metrics" pt="md">
           <Stack gap="lg">
-            <SimpleGrid cols={{ base: 2, sm: 4 }} spacing="md">
+            <SimpleGrid cols={{ base: 2, sm: 4 }}>
               <Metric
                 label="Requests"
                 value={String(usage.total.requests)}

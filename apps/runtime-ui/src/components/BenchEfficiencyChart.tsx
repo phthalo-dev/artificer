@@ -1,4 +1,4 @@
-import { Box, Group, Paper, Text } from '@mantine/core';
+import { Box, Group, Paper, Text } from '../ds';
 import type { BenchEfficiencyPoint } from '../api/types';
 import { formatCost } from '../format';
 
@@ -26,12 +26,10 @@ function scale(
 
 function pointColor(p: BenchEfficiencyPoint): string {
   if (p.kind === 'run')
-    return p.isCurrent
-      ? 'var(--mantine-color-blue-6)'
-      : 'var(--mantine-color-gray-6)';
-  if (p.resolved === true) return 'var(--mantine-color-green-6)';
-  if (p.resolved === false) return 'var(--mantine-color-red-5)';
-  return 'var(--mantine-color-gray-5)';
+    return p.isCurrent ? '#2563eb' : '#6b7280';
+  if (p.resolved === true) return '#16a34a';
+  if (p.resolved === false) return '#ef4444';
+  return '#9ca3af';
 }
 
 export function BenchEfficiencyChart({
@@ -49,11 +47,11 @@ export function BenchEfficiencyChart({
 }) {
   if (points.length === 0) {
     return (
-      <Paper withBorder radius="md" p="md">
+      <Paper p="md">
         <Text fw={600} size="sm">
           {title}
         </Text>
-        <Text c="dimmed" size="sm" mt="xs">
+        <Text c="dimmed" size="sm" mt={4}>
           No data yet.
         </Text>
       </Paper>
@@ -66,8 +64,8 @@ export function BenchEfficiencyChart({
   const ticks = [0, 0.25, 0.5, 0.75, 1].map((t) => t * maxCost);
 
   return (
-    <Paper withBorder radius="md" p="md">
-      <Group justify="space-between" align="flex-start" mb="sm">
+    <Paper p="md">
+      <Group justify="space-between" align="flex-start" style={{ marginBottom: 'var(--nb-space-sm)' }}>
         <div>
           <Text fw={600} size="sm">
             {title}
@@ -94,7 +92,7 @@ export function BenchEfficiencyChart({
                   x2={W - PAD.right}
                   y1={yy}
                   y2={yy}
-                  stroke="var(--mantine-color-gray-3)"
+                  stroke="#e5e7eb"
                   strokeDasharray="4 4"
                 />
                 <text
@@ -102,7 +100,7 @@ export function BenchEfficiencyChart({
                   y={yy + 4}
                   textAnchor="end"
                   fontSize={10}
-                  fill="var(--mantine-color-dimmed)"
+                  fill="#888888"
                 >
                   {pct}%
                 </text>
@@ -117,7 +115,7 @@ export function BenchEfficiencyChart({
               y={H - 8}
               textAnchor="middle"
               fontSize={10}
-              fill="var(--mantine-color-dimmed)"
+              fill="#888888"
             >
               {formatCost(t)}
             </text>
@@ -128,7 +126,7 @@ export function BenchEfficiencyChart({
             y={H - 0}
             textAnchor="middle"
             fontSize={11}
-            fill="var(--mantine-color-dimmed)"
+            fill="#888888"
           >
             {xLabel}
           </text>
@@ -137,7 +135,7 @@ export function BenchEfficiencyChart({
             y={H / 2}
             textAnchor="middle"
             fontSize={11}
-            fill="var(--mantine-color-dimmed)"
+            fill="#888888"
             transform={`rotate(-90 12 ${H / 2})`}
           >
             {yLabel}
@@ -151,7 +149,7 @@ export function BenchEfficiencyChart({
                 cy={y(p.scorePct)}
                 r={p.isCurrent ? 7 : 5}
                 fill={pointColor(p)}
-                stroke={p.isCurrent ? 'var(--mantine-color-blue-9)' : 'white'}
+                stroke={p.isCurrent ? '#1e40af' : 'white'}
                 strokeWidth={p.isCurrent ? 2 : 1}
               />
             </g>

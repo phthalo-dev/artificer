@@ -47,8 +47,10 @@ const badgeCls = styles.component('nb-badge', {
   defaultVariants: { color: 'gray', variant: 'light', size: 'sm' },
 });
 
+export type BadgeColor = 'gray' | 'blue' | 'green' | 'red' | 'orange' | 'cyan' | 'violet' | 'indigo' | 'teal' | 'grape' | 'yellow';
+
 export type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
-  color?: 'gray' | 'blue' | 'green' | 'red' | 'orange' | 'cyan' | 'violet' | 'indigo' | 'teal' | 'grape' | 'yellow';
+  color?: BadgeColor;
   variant?: 'filled' | 'light' | 'outline' | 'dot';
   size?: 'xs' | 'sm' | 'md' | 'lg';
   radius?: string;

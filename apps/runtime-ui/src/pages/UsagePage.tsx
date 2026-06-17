@@ -1,4 +1,4 @@
-import { Loader, Stack, Text, Title } from '@mantine/core';
+import { Loader, Stack, Text, Title } from '../ds';
 import { useUsage, useWorkstreams } from '../api/hooks';
 import { BreakdownTable } from '../components/BreakdownTable';
 import { UsageStats } from '../components/UsageStats';
@@ -17,28 +17,28 @@ export function UsagePage() {
       <Title order={3}>Usage &amp; cost</Title>
 
       <div>
-        <Text fw={600} mb="xs">
+        <Text fw={600} mb={4}>
           Grand total
         </Text>
         <UsageStats usage={data.total} />
       </div>
 
       <div>
-        <Title order={5} mb="sm">
+        <Title order={5} style={{ marginBottom: 'var(--nb-space-sm)' }}>
           By model
         </Title>
         <BreakdownTable label="Model" data={data.byModel} />
       </div>
 
       <div>
-        <Title order={5} mb="sm">
+        <Title order={5} style={{ marginBottom: 'var(--nb-space-sm)' }}>
           By role
         </Title>
         <BreakdownTable label="Role" data={data.byRole} />
       </div>
 
       <div>
-        <Title order={5} mb="sm">
+        <Title order={5} style={{ marginBottom: 'var(--nb-space-sm)' }}>
           By workstream
         </Title>
         <BreakdownTable
@@ -52,7 +52,7 @@ export function UsagePage() {
       </div>
 
       <div>
-        <Title order={5} mb="sm">
+        <Title order={5} style={{ marginBottom: 'var(--nb-space-sm)' }}>
           By message
         </Title>
         <BreakdownTable

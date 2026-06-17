@@ -1,4 +1,4 @@
-import { Anchor, Table, Text } from '@mantine/core';
+import { Anchor, Table, Text } from '../ds';
 import { Link } from 'react-router-dom';
 import type { UsageSummary } from '../api/types';
 import { formatCost, formatTokens } from '../format';
