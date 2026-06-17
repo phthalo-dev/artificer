@@ -1,10 +1,9 @@
-import { type ReactNode, forwardRef } from 'react';
+import { type ReactNode } from 'react';
 import {
   TextField as AriaTextField,
   Input as AriaInput,
   TextArea as AriaTextArea,
   Label,
-  FieldError,
 } from 'react-aria-components';
 import { styles, cx } from 'typestyles';
 import { color, font, space } from '../tokens';
