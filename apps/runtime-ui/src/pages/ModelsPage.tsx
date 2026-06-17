@@ -10,8 +10,8 @@ import {
   Table,
   Text,
   Title,
-} from '@mantine/core';
-import { notifications } from '@mantine/notifications';
+} from '../ds';
+import { notifications } from '../ds/notifications';
 import { IconCheck, IconDeviceFloppy, IconRefresh } from '@tabler/icons-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useApplyPreset, useModelConfig, useUpdateModels } from '../api/hooks';
@@ -55,12 +55,10 @@ function PresetCard({
 }) {
   return (
     <Card
-      withBorder
-      radius="md"
       padding="md"
       style={{
-        borderColor: active ? 'var(--mantine-color-blue-6)' : undefined,
-        background: active ? 'var(--mantine-color-blue-0)' : undefined,
+        border: active ? '2px solid #2563eb' : '2px solid #000',
+        background: active ? '#dbeafe' : undefined,
       }}
     >
       <Group justify="space-between" align="flex-start" mb={6}>
@@ -83,8 +81,8 @@ function PresetCard({
           size="xs"
           variant={active ? 'light' : 'filled'}
           loading={loading}
-          disabled={active}
-          onClick={onApply}
+          isDisabled={active}
+          onPress={onApply}
         >
           {active ? 'Active' : 'Apply'}
         </Button>
@@ -196,7 +194,7 @@ export function ModelsPage() {
       </div>
 
       <div>
-        <Text fw={600} size="sm" mb="sm">
+        <Text fw={600} size="sm" style={{ marginBottom: 'var(--nb-space-sm)' }}>
           Presets
         </Text>
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
@@ -211,7 +209,7 @@ export function ModelsPage() {
           ))}
         </SimpleGrid>
         {data.activePresetId === 'custom' && (
-          <Text size="xs" c="dimmed" mt="xs">
+          <Text size="xs" c="dimmed" mt={4}>
             Custom configuration (manual tier edits).
           </Text>
         )}
@@ -225,23 +223,23 @@ export function ModelsPage() {
           <Button
             variant="default"
             leftSection={<IconRefresh size={16} />}
-            disabled={!tiersDirty || update.isPending}
-            onClick={() => setDraft(data.tiers)}
+            isDisabled={!tiersDirty || update.isPending}
+            onPress={() => setDraft(data.tiers)}
           >
             Reset
           </Button>
           <Button
             leftSection={<IconDeviceFloppy size={16} />}
             loading={update.isPending}
-            disabled={!tiersDirty}
-            onClick={saveTiers}
+            isDisabled={!tiersDirty}
+            onPress={saveTiers}
           >
             Save tiers
           </Button>
         </Group>
       </Group>
 
-      <Table verticalSpacing="md" horizontalSpacing="lg" highlightOnHover>
+      <Table highlightOnHover>
         <Table.Thead>
           <Table.Tr>
             <Table.Th>Tier</Table.Th>

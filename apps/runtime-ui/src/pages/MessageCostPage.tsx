@@ -7,7 +7,7 @@ import {
   Stack,
   Text,
   Title,
-} from '@mantine/core';
+} from '../ds';
 import { IconArrowLeft } from '@tabler/icons-react';
 import { Link, useParams } from 'react-router-dom';
 import { useMessageCost, useWorkstreams } from '../api/hooks';
@@ -43,7 +43,7 @@ export function MessageCostPage() {
 
       <div>
         <Title order={3}>Message cost</Title>
-        <Card withBorder radius="md" padding="sm" mt="xs">
+        <Card padding="sm" style={{ marginTop: 'var(--nb-space-xs)' }}>
           <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
             {data.message.content}
           </Text>
@@ -54,13 +54,13 @@ export function MessageCostPage() {
       </div>
 
       <div>
-        <Text fw={600} mb="xs">
+        <Text fw={600} mb={4}>
           Total
         </Text>
         <UsageStats usage={data.total} />
       </div>
 
-      <Group align="flex-start" grow wrap="wrap">
+      <Group align="flex-start" wrap="wrap">
         <div>
           <Text fw={600} size="sm" mb={4}>
             By role
@@ -83,10 +83,10 @@ export function MessageCostPage() {
       </Group>
 
       <div>
-        <Title order={5} mb="sm">
+        <Title order={5} style={{ marginBottom: 'var(--nb-space-sm)' }}>
           Call tree
         </Title>
-        <Text size="xs" c="dimmed" mb="sm">
+        <Text size="xs" c="dimmed" mb={8}>
           Each call shows its own (self) cost and the cumulative cost (Σ) of its
           whole subtree.
         </Text>

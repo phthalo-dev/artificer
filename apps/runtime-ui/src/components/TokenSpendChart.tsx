@@ -1,15 +1,22 @@
-import { Box, Group, Paper, Stack, Text, Tooltip } from '@mantine/core';
+import { Box, Group, Paper, Stack, Text } from '../ds';
 import type { RunRecord, TokenUsage, UsageSummary } from '../api/types';
 import { costForRun } from '../cost';
 import { formatCost, formatTokens } from '../format';
 
 const ROLE_COLOR: Record<string, string> = {
-  communicator: 'grape',
-  orchestrator: 'indigo',
-  planner: 'blue',
-  worker: 'teal',
-  reviewer: 'violet',
-  librarian: 'orange',
+  communicator: '#9333ea',
+  orchestrator: '#4338ca',
+  planner: '#2563eb',
+  worker: '#0f766e',
+  reviewer: '#7c3aed',
+  librarian: '#ea580c',
+};
+
+const LAYER_COLORS: Record<string, string> = {
+  blue: '#2563eb',
+  teal: '#0f766e',
+  gray: '#6b7280',
+  orange: '#ea580c',
 };
 
 const TOKEN_LAYERS = [
@@ -23,8 +30,8 @@ const TOKEN_LAYERS = [
   },
 ];
 
-function roleColor(role: string): string {
-  return ROLE_COLOR[role] ?? 'gray';
+function colorForRole(role: string): string {
+  return ROLE_COLOR[role] ?? '#6b7280';
 }
 
 function totalTokens(u: TokenUsage): number {
@@ -92,7 +99,7 @@ function Legend() {
             h={10}
             style={{
               borderRadius: 2,
-              backgroundColor: `var(--mantine-color-${layer.color}-6)`,
+              backgroundColor: LAYER_COLORS[layer.color],
             }}
           />
           <Text size="xs" c="dimmed">
@@ -133,27 +140,23 @@ export function TokenSpendByRole({
           height: 28,
           borderRadius: 4,
           overflow: 'hidden',
-          backgroundColor: 'var(--mantine-color-gray-1)',
+          backgroundColor: '#f3f4f6',
         }}
       >
         {rows.map(({ role, usage, tokens }) => {
           const pct = (tokens / grandTotal) * 100;
           return (
-            <Tooltip
+            <div
               key={role}
-              label={`${role} · ${formatTokens(tokens)} tok · ${formatCost(usage.costUsd)}`}
-              withArrow
-            >
-              <Box
-                style={{
-                  width: `${pct}%`,
-                  minWidth: pct > 0 ? 4 : 0,
-                  height: '100%',
-                  backgroundColor: `var(--mantine-color-${roleColor(role)}-6)`,
-                  opacity: 0.9,
-                }}
-              />
-            </Tooltip>
+              title={`${role} · ${formatTokens(tokens)} tok · ${formatCost(usage.costUsd)}`}
+              style={{
+                width: `${pct}%`,
+                minWidth: pct > 0 ? 4 : 0,
+                height: '100%',
+                backgroundColor: colorForRole(role),
+                opacity: 0.9,
+              }}
+            />
           );
         })}
       </Box>
@@ -165,7 +168,7 @@ export function TokenSpendByRole({
               h={8}
               style={{
                 borderRadius: 2,
-                backgroundColor: `var(--mantine-color-${roleColor(role)}-6)`,
+                backgroundColor: colorForRole(role),
               }}
             />
             <Text size="xs" c="dimmed">
@@ -199,7 +202,7 @@ function StackedBar({
           height,
           flex: '0 0 auto',
           borderRadius: 2,
-          backgroundColor: 'var(--mantine-color-gray-3)',
+          backgroundColor: '#e5e7eb',
           opacity,
         }}
       />
@@ -229,7 +232,7 @@ function StackedBar({
             style={{
               height: `${pct}%`,
               minHeight: pct > 0 ? 1 : 0,
-              backgroundColor: `var(--mantine-color-${layer.color}-6)`,
+              backgroundColor: LAYER_COLORS[layer.color],
             }}
           />
         );
@@ -268,42 +271,30 @@ export function TokenSpendTimeline({ runs }: { runs: RunRecord[] }) {
           const width =
             tokens === 0
               ? minW
-              : minW +
-                ((tokens / maxTokens) * (maxW - minW));
+              : minW + (tokens / maxTokens) * (maxW - minW);
           const layers = TOKEN_LAYERS.map((layer) => ({
             ...layer,
             value: run.usage[layer.key],
           })).filter((l) => l.value > 0);
 
+          const layerLines = layers
+            .map((l) => `${l.label}: ${formatTokens(l.value)}`)
+            .join('\n');
+          const toolLine =
+            run.toolCalls.length > 0
+              ? `\n${run.toolCalls.length} tool calls`
+              : '';
+          const tooltipTitle = `#${i + 1} · ${run.role}\n${formatTokens(tokens)} tokens\n${layerLines}${toolLine}`;
+
           return (
-            <Tooltip
-              key={run.id}
-              withArrow
-              multiline
-              label={
-                <Stack gap={2}>
-                  <Text size="xs">
-                    #{i + 1} · {run.role}
-                  </Text>
-                  <Text size="xs">{formatTokens(tokens)} tokens</Text>
-                  {layers.map((l) => (
-                    <Text key={l.key} size="xs">
-                      {l.label}: {formatTokens(l.value)}
-                    </Text>
-                  ))}
-                  {run.toolCalls.length > 0 && (
-                    <Text size="xs">{run.toolCalls.length} tool calls</Text>
-                  )}
-                </Stack>
-              }
-            >
+            <div key={run.id} title={tooltipTitle}>
               <StackedBar
                 usage={run.usage}
                 height={40}
                 width={width}
                 opacity={run.status === 'failed' ? 0.45 : 1}
               />
-            </Tooltip>
+            </div>
           );
         })}
       </Group>

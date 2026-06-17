@@ -12,8 +12,8 @@ import {
   Text,
   TextInput,
   Title,
-} from '@mantine/core';
-import { useDebouncedValue, useDisclosure } from '@mantine/hooks';
+} from '../ds';
+import { useDebouncedValue, useDisclosure } from '../ds/hooks';
 import { IconSearch } from '@tabler/icons-react';
 import { useState } from 'react';
 import { useMemories } from '../api/hooks';
@@ -57,8 +57,6 @@ function MemoryCard({
 }) {
   return (
     <Card
-      withBorder
-      radius="md"
       padding="md"
       role="button"
       tabIndex={0}
@@ -71,7 +69,7 @@ function MemoryCard({
         }
       }}
     >
-      <Group justify="space-between" mb={4} wrap="nowrap">
+      <Group justify="space-between" style={{ marginBottom: 4 }} wrap="nowrap">
         <Text fw={600} lineClamp={1}>
           {memory.title ?? memory.content.slice(0, 60)}
         </Text>
@@ -87,7 +85,7 @@ function MemoryCard({
       <Text size="sm" lineClamp={3} style={{ whiteSpace: 'pre-wrap' }}>
         {memory.content}
       </Text>
-      <Group gap="xs" mt="sm">
+      <Group gap="xs" style={{ marginTop: 8 }}>
         {memory.tags.map((t) => (
           <Badge key={t} variant="light" radius="sm">
             {t}
@@ -107,7 +105,7 @@ function MemoryDetail({ memory }: { memory: Memory }) {
           {memory.summary}
         </Text>
       )}
-      <ScrollArea.Autosize mah={420} type="auto">
+      <ScrollArea.Autosize mah={420}>
         <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
           {memory.content}
         </Text>
@@ -195,7 +193,7 @@ export function MemoriesPage() {
         leftSection={<IconSearch size={16} />}
         placeholder="Search memories…"
         value={query}
-        onChange={(e) => setQuery(e.currentTarget.value)}
+        onChange={(value) => setQuery(value)}
       />
       {isLoading && <Loader size="sm" />}
       {data?.length === 0 && (

@@ -1,5 +1,6 @@
 import {
   Badge,
+  type BadgeProps,
   Box,
   Code,
   Collapse,
@@ -8,13 +9,15 @@ import {
   Stack,
   Text,
   UnstyledButton,
-} from '@mantine/core';
+} from '../ds';
 import { IconChevronDown, IconChevronRight } from '@tabler/icons-react';
 import { useState } from 'react';
 import type { RunNode, RunRecord, ToolInvocation } from '../api/types';
 import { TokenSpendTimeline } from './TokenSpendChart';
 
-const ROLE_COLOR: Record<string, string> = {
+type BadgeColor = NonNullable<BadgeProps['color']>;
+
+const ROLE_COLOR: Record<string, BadgeColor> = {
   communicator: 'grape',
   orchestrator: 'indigo',
   planner: 'blue',
@@ -23,7 +26,7 @@ const ROLE_COLOR: Record<string, string> = {
   librarian: 'orange',
 };
 
-function roleColor(role: string): string {
+function roleColor(role: string): BadgeColor {
   return ROLE_COLOR[role] ?? 'gray';
 }
 
@@ -78,7 +81,7 @@ function ToolCall({ call, index }: { call: ToolInvocation; index: number }) {
   return (
     <Box>
       <UnstyledButton
-        onClick={() => setOpen((o) => !o)}
+        onPress={() => setOpen((o) => !o)}
         style={{ width: '100%' }}
       >
         <Group gap={6} wrap="nowrap" align="center">
@@ -104,11 +107,11 @@ function ToolCall({ call, index }: { call: ToolInvocation; index: number }) {
         </Group>
       </UnstyledButton>
       <Collapse in={open}>
-        <Box ml={37} my={6}>
+        <Box ml={37} mt={6} mb={6}>
           <Text size="xs" c="dimmed" fw={600} mb={2}>
             Input
           </Text>
-          <Code block style={{ fontSize: 11, whiteSpace: 'pre-wrap' }}>
+          <Code block style={{ fontSize: 11 }}>
             {typeof call.input === 'string'
               ? call.input
               : JSON.stringify(call.input, null, 2)}
@@ -118,7 +121,7 @@ function ToolCall({ call, index }: { call: ToolInvocation; index: number }) {
           </Text>
           <Code
             block
-            style={{ fontSize: 11, whiteSpace: 'pre-wrap', maxHeight: 280, overflow: 'auto' }}
+            style={{ fontSize: 11, maxHeight: 280, overflow: 'auto' }}
           >
             {call.error ? `${call.error}\n${call.output}` : call.output || '—'}
           </Code>
@@ -132,8 +135,8 @@ function Step({ run, index }: { run: RunRecord; index: number }) {
   const [open, setOpen] = useState(index < 6);
   const dur = runDurationMs(run);
   return (
-    <Paper withBorder radius="md" p="sm">
-      <UnstyledButton onClick={() => setOpen((o) => !o)} style={{ width: '100%' }}>
+    <Paper p="sm">
+      <UnstyledButton onPress={() => setOpen((o) => !o)} style={{ width: '100%' }}>
         <Group justify="space-between" wrap="nowrap">
           <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
             {open ? (
@@ -144,11 +147,11 @@ function Step({ run, index }: { run: RunRecord; index: number }) {
             <Text size="sm" c="dimmed" w={28} ta="right">
               #{index + 1}
             </Text>
-            <Badge color={roleColor(run.role)} variant="light" radius="sm">
+            <Badge color={roleColor(run.role)} variant="light">
               {run.role}
             </Badge>
             {run.model && (
-              <Code style={{ fontSize: 11 }} c="dimmed">
+              <Code style={{ fontSize: 11 }}>
                 {run.model}
               </Code>
             )}
@@ -178,14 +181,14 @@ function Step({ run, index }: { run: RunRecord; index: number }) {
               <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={2}>
                 Task
               </Text>
-              <Text size="sm" mb="sm" style={{ whiteSpace: 'pre-wrap' }}>
+              <Text size="sm" mb={8} style={{ whiteSpace: 'pre-wrap' }}>
                 {run.task}
               </Text>
             </>
           )}
 
           {run.toolCalls.length > 0 && (
-            <Stack gap={2} mb="sm">
+            <Stack gap={2} style={{ marginBottom: 8 }}>
               {run.toolCalls.map((call, i) => (
                 <ToolCall key={`${run.id}-${i}`} call={call} index={i} />
               ))}

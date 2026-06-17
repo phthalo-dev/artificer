@@ -1,4 +1,4 @@
-import { Card, Group, Loader, SimpleGrid, Stack, Text, Title } from '@mantine/core';
+import { Card, Group, Loader, SimpleGrid, Stack, Text, Title } from '../ds';
 import { Link } from 'react-router-dom';
 import { useWorkstreams } from '../api/hooks';
 import { StatusBadge } from '../components/StatusBadge';
@@ -27,7 +27,7 @@ export function WorkstreamsPage() {
             component={Link}
             to={`/workstreams/${ws.id}`}
           >
-            <Group justify="space-between" mb="xs" wrap="nowrap">
+            <Group justify="space-between" style={{ marginBottom: 'var(--nb-space-xs)' }} wrap="nowrap">
               <Text fw={600} lineClamp={1}>
                 {ws.title}
               </Text>
@@ -36,7 +36,7 @@ export function WorkstreamsPage() {
             <Text size="sm" c="dimmed" lineClamp={3}>
               {ws.summary || ws.goal}
             </Text>
-            <Text size="xs" c="dimmed" mt="sm">
+            <Text size="xs" c="dimmed" mt={8}>
               Updated {relativeTime(ws.updatedAt)}
             </Text>
           </Card>

@@ -30,6 +30,7 @@ export type PaperProps = HTMLAttributes<HTMLDivElement> & {
   bg?: string;
   maw?: number | string;
   component?: React.ElementType;
+  to?: string;
 };
 
 export const Paper = forwardRef<HTMLDivElement, PaperProps>(function Paper(

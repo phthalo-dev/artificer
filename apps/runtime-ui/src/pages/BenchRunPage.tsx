@@ -2,6 +2,7 @@ import {
   Alert,
   Anchor,
   Badge,
+  type BadgeColor,
   Box,
   Code,
   Group,
@@ -12,7 +13,7 @@ import {
   Tabs,
   Text,
   Title,
-} from '@mantine/core';
+} from '../ds';
 import { IconArrowLeft } from '@tabler/icons-react';
 import { Link, useParams } from 'react-router-dom';
 import { useBenchRun } from '../api/hooks';
@@ -27,7 +28,7 @@ import { TokenSpendByRole } from '../components/TokenSpendChart';
 import { ViewRawLink } from '../components/ViewRawLink';
 import { formatCost, formatDuration } from '../format';
 
-const VERIFIER_COLOR: Record<VerifierStatus, string> = {
+const VERIFIER_COLOR: Record<VerifierStatus, BadgeColor> = {
   resolved: 'green',
   unresolved: 'red',
   empty_patch: 'orange',
@@ -51,18 +52,18 @@ function Metric({ label, value }: { label: string; value: string }) {
 function VerdictBadge({ run }: { run: BenchRunDetail }) {
   if (run.resolved === true)
     return (
-      <Badge color="green" variant="filled" radius="sm" size="lg">
+      <Badge color="green" variant="filled" size="lg">
         PASS
       </Badge>
     );
   if (run.resolved === false)
     return (
-      <Badge color="red" variant="light" radius="sm" size="lg">
+      <Badge color="red" variant="light" size="lg">
         FAIL
       </Badge>
     );
   return (
-    <Badge color="gray" variant="light" radius="sm" size="lg">
+    <Badge color="gray" variant="light" size="lg">
       UNGRADED
     </Badge>
   );
@@ -71,7 +72,7 @@ function VerdictBadge({ run }: { run: BenchRunDetail }) {
 function PatchView({ patch }: { patch: string }) {
   const lines = patch.split('\n');
   return (
-    <Paper withBorder radius="md" p="sm" style={{ overflowX: 'auto' }}>
+    <Paper p="sm" style={{ overflowX: 'auto' }}>
       <Box
         component="pre"
         style={{ margin: 0, fontSize: 12, fontFamily: 'monospace', lineHeight: 1.5 }}
@@ -79,21 +80,21 @@ function PatchView({ patch }: { patch: string }) {
         {lines.map((line, i) => {
           let color: string | undefined;
           if (line.startsWith('+') && !line.startsWith('+++'))
-            color = 'var(--mantine-color-green-7)';
+            color = '#15803d';
           else if (line.startsWith('-') && !line.startsWith('---'))
-            color = 'var(--mantine-color-red-7)';
+            color = '#b91c1c';
           else if (line.startsWith('@@'))
-            color = 'var(--mantine-color-blue-6)';
+            color = '#2563eb';
           else if (
             line.startsWith('diff ') ||
             line.startsWith('index ') ||
             line.startsWith('+++') ||
             line.startsWith('---')
           )
-            color = 'var(--mantine-color-dimmed)';
+            color = '#888888';
           return (
             <div key={i} style={{ color, whiteSpace: 'pre-wrap' }}>
-              {line || '\u00a0'}
+              {line || ' '}
             </div>
           );
         })}
@@ -139,7 +140,7 @@ export function BenchRunPage() {
         <Group gap="sm" align="center">
           <Title order={2}>{data.modelName ?? 'runtime'}</Title>
           <VerdictBadge run={data} />
-          <Badge variant="light" color="gray" radius="sm">
+          <Badge variant="light" color="gray">
             {data.outcome.replace(/_/g, ' ')}
           </Badge>
         </Group>
@@ -148,8 +149,8 @@ export function BenchRunPage() {
         </Text>
       </div>
 
-      <Paper withBorder radius="md" p="lg">
-        <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: 7 }} spacing="xl">
+      <Paper p="lg">
+        <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: 7 }}>
           <Metric label="Steps" value={steps !== null ? String(steps) : '—'} />
           <Metric
             label="Calls"
@@ -185,7 +186,7 @@ export function BenchRunPage() {
         </Tabs.List>
 
         <Tabs.Panel value="trajectory" pt="md">
-          <Group justify="space-between" mb="sm">
+          <Group justify="space-between" mb={8}>
             <Group gap="xs">
               <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
                 {data.modelName}
@@ -201,7 +202,7 @@ export function BenchRunPage() {
           {data.trajectory ? (
             <BenchTrajectory tree={data.trajectory} />
           ) : (
-            <Alert color="gray" variant="light">
+            <Alert color="gray">
               No trajectory captured for this instance yet. Re-run{' '}
               <Code>pnpm bench</Code> to record the agent's step-by-step call
               tree.
@@ -210,7 +211,7 @@ export function BenchRunPage() {
         </Tabs.Panel>
 
         <Tabs.Panel value="verifier" pt="md">
-          <Group gap="sm" mb="sm">
+          <Group gap="sm" mb={8}>
             <Badge color={VERIFIER_COLOR[data.verifier.status]} variant="light">
               {data.verifier.status.replace(/_/g, ' ')}
             </Badge>
@@ -246,7 +247,7 @@ export function BenchRunPage() {
                 <Text fw={600} size="sm" mb={6}>
                   Problem statement
                 </Text>
-                <Paper withBorder radius="md" p="sm">
+                <Paper p="sm">
                   <Text
                     size="sm"
                     style={{ whiteSpace: 'pre-wrap' }}
