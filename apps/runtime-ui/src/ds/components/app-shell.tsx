@@ -124,6 +124,7 @@ const navLinkCls = styles.component('nb-navlink', {
         fontWeight: font.w700,
         '&:hover': { background: '#222' },
       },
+      false: {},
     },
   },
   defaultVariants: { active: 'false' },
