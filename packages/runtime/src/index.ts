@@ -15,6 +15,8 @@ export type * from './storage/types.js';
 export { defineConfig } from './api/define-config.js';
 export { defineTool } from './api/define-tool.js';
 export { ToolRegistry } from './api/tool-registry.js';
+export { createRuntime } from './api/create-runtime.js';
+export type { RuntimeOptions, ArtificerRuntime } from './api/types.js';
 export { scanAgentDirectory, type AgentManifest, type ModuleRef } from './discover/discover.js';
 export { loadSkillsFromDisk, loadInstructionsFromDisk } from './discover/loader.js';
 export { defineChannel } from './api/define-channel.js';
