@@ -7,11 +7,13 @@ import { runGithubWatchOnce } from './engine/github-watch-runner.js';
 import { createApp } from './server/app.js';
 import { Store } from './storage/store.js';
 
-export { loadConfig } from './config.js';
+export { loadConfig, mergeWithDefinition } from './config.js';
 export { Engine } from './engine/engine.js';
 export { Store } from './storage/store.js';
 export { createApp } from './server/app.js';
 export type * from './storage/types.js';
+export { defineConfig } from './api/define-config.js';
+export type { ArtificerConfig, IdentityConfig } from './api/types.js';
 
 export async function startRuntime(): Promise<void> {
   const config = loadConfig();

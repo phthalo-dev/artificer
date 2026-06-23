@@ -1,4 +1,5 @@
 import path from 'node:path';
+import type { ArtificerConfig } from './api/types.js';
 import type { DiagnosticsConfig } from './diagnostics/types.js';
 import {
   isModelTier,
@@ -209,5 +210,55 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     diagnostics,
     contextBorrowing,
     identityDir,
+  };
+}
+
+function parseInterval(s: string): number | undefined {
+  const m = s.match(/^(\d+)(ms|s|m|h)$/);
+  if (!m) return undefined;
+  const n = Number(m[1]);
+  switch (m[2]) {
+    case 'ms': return n;
+    case 's': return n * 1000;
+    case 'm': return n * 60_000;
+    case 'h': return n * 3_600_000;
+    default: return undefined;
+  }
+}
+
+export function mergeWithDefinition(
+  definition: ArtificerConfig,
+  env: NodeJS.ProcessEnv = process.env,
+): RuntimeConfig {
+  const base = loadConfig(env);
+
+  return {
+    ...base,
+    agentName: env.AGENT_NAME ?? definition.name ?? base.agentName,
+    models: {
+      low: env.LLM_MODEL_LOW ?? definition.models?.low ?? base.models.low,
+      medium: env.LLM_MODEL ?? definition.models?.medium ?? base.models.medium,
+      high: env.LLM_MODEL_HIGH ?? definition.models?.high ?? base.models.high,
+    },
+    roleTiers: {
+      ...base.roleTiers,
+      ...definition.roleTiers,
+    },
+    concurrency: env.RUNTIME_CONCURRENCY
+      ? Number(env.RUNTIME_CONCURRENCY)
+      : definition.concurrency ?? base.concurrency,
+    maxIterationsPerCall: env.RUNTIME_MAX_ITERATIONS
+      ? Number(env.RUNTIME_MAX_ITERATIONS)
+      : definition.maxIterationsPerCall ?? base.maxIterationsPerCall,
+    port: env.PORT ? Number(env.PORT) : definition.port ?? base.port,
+    github: base.github
+      ? {
+          ...base.github,
+          watchIntervalMs: base.github.watchIntervalMs ??
+            (definition.github?.watchInterval
+              ? parseInterval(definition.github.watchInterval)
+              : undefined),
+        }
+      : undefined,
   };
 }
