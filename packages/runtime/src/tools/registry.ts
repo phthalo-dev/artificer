@@ -1,3 +1,4 @@
+import type { ToolRegistry } from '../api/tool-registry.js';
 import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
 import type { RoleName } from '../storage/types.js';
@@ -25,7 +26,11 @@ function byName(tools: ToolDef[], names: string[]): ToolDef[] {
  * orchestrator tool (get_status / invoke_call / update_status / memories) is
  * shared widely so any level can query the system and spawn new calls.
  */
-export function toolsForRole(role: RoleName, ctx: ToolContext): ToolDef[] {
+export function toolsForRole(
+  role: RoleName,
+  ctx: ToolContext,
+  customRegistry?: ToolRegistry,
+): ToolDef[] {
   const orchestrator = createOrchestratorTools(ctx);
   const reply = createReplyTool(ctx);
   const communicator = createCommunicatorTools(ctx);
@@ -39,16 +44,18 @@ export function toolsForRole(role: RoleName, ctx: ToolContext): ToolDef[] {
   const searchAll = createSearchTools(ctx);
   const searchGrepOnly = createSearchTools(ctx, { includeGlob: false });
 
+  let result: ToolDef[];
   switch (role) {
     case 'communicator':
-      return [
+      result = [
         ...reply,
         ...communicator,
         ...byName(orchestrator, ['get_status', 'query_memories', 'add_memory']),
       ];
+      break;
 
     case 'orchestrator':
-      return [
+      result = [
         ...orchestrator,
         ...reply,
         ...searchGrepOnly,
@@ -56,9 +63,10 @@ export function toolsForRole(role: RoleName, ctx: ToolContext): ToolDef[] {
         ...byName(artifacts, ['read_plan']),
         ...byName(files, ['read_file', 'list_files']),
       ];
+      break;
 
     case 'planner':
-      return [
+      result = [
         ...files,
         ...edit,
         ...searchAll,
@@ -73,9 +81,10 @@ export function toolsForRole(role: RoleName, ctx: ToolContext): ToolDef[] {
           'record_finding',
         ]),
       ];
+      break;
 
     case 'reviewer':
-      return [
+      result = [
         ...byName(files, ['read_file', 'list_files']),
         ...searchAll,
         ...toolResultRead,
@@ -84,9 +93,10 @@ export function toolsForRole(role: RoleName, ctx: ToolContext): ToolDef[] {
         ...byName(artifacts, ['read_plan', 'submit_review']),
         ...byName(orchestrator, ['get_status', 'query_memories', 'record_finding']),
       ];
+      break;
 
     case 'worker':
-      return [
+      result = [
         ...files,
         ...edit,
         ...searchAll,
@@ -101,15 +111,23 @@ export function toolsForRole(role: RoleName, ctx: ToolContext): ToolDef[] {
           'record_finding',
         ]),
       ];
+      break;
 
     case 'librarian':
-      return [
+      result = [
         ...fetchTools,
         ...reply,
         ...byName(orchestrator, ['query_memories', 'add_memory']),
       ];
+      break;
 
     default:
-      return [];
+      result = [];
   }
+
+  if (customRegistry) {
+    const custom = customRegistry.toolsForRole(role).map((t) => t.toToolDef(ctx));
+    result.push(...custom);
+  }
+  return result;
 }
