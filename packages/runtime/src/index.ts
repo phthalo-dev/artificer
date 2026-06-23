@@ -13,7 +13,9 @@ export { Store } from './storage/store.js';
 export { createApp } from './server/app.js';
 export type * from './storage/types.js';
 export { defineConfig } from './api/define-config.js';
-export type { ArtificerConfig, IdentityConfig } from './api/types.js';
+export { defineTool } from './api/define-tool.js';
+export { ToolRegistry } from './api/tool-registry.js';
+export type { ArtificerConfig, IdentityConfig, ToolDefinition, ArtificerTool } from './api/types.js';
 
 export async function startRuntime(): Promise<void> {
   const config = loadConfig();
