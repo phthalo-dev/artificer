@@ -15,6 +15,8 @@ export type * from './storage/types.js';
 export { defineConfig } from './api/define-config.js';
 export { defineTool } from './api/define-tool.js';
 export { ToolRegistry } from './api/tool-registry.js';
+export { scanAgentDirectory, type AgentManifest, type ModuleRef } from './discover/discover.js';
+export { loadSkillsFromDisk, loadInstructionsFromDisk } from './discover/loader.js';
 export { defineChannel } from './api/define-channel.js';
 export { defineSkill } from './api/define-skill.js';
 export type {
