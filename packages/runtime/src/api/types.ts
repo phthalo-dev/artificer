@@ -1,7 +1,12 @@
+import type { Hono } from 'hono';
+import type { RuntimeConfig } from '../config.js';
 import type { ToolContext } from '../context.js';
+import type { Engine } from '../engine/engine.js';
 import type { ModelTier, ModelTiers } from '../engine/models.js';
 import type { JsonSchema, ToolDef } from '../llm/types.js';
+import type { IdentityStore } from '../storage/identity-store.js';
 import type { RoleName } from '../storage/types.js';
+import type { ToolRegistry } from './tool-registry.js';
 
 export interface IdentityConfig {
   autoCommit?: boolean;
@@ -78,4 +83,20 @@ export interface ArtificerSkill {
   readonly name: string;
   readonly description: string;
   readonly content: string;
+}
+
+export interface RuntimeOptions {
+  rootDir: string;
+  config?: Partial<RuntimeConfig>;
+}
+
+export interface ArtificerRuntime {
+  readonly engine: Engine;
+  readonly app: Hono;
+  readonly config: RuntimeConfig;
+  readonly identity: IdentityStore;
+  readonly tools: ToolRegistry;
+  readonly skills: ArtificerSkill[];
+  readonly instructions: string | null;
+  start(port?: number): Promise<void>;
 }
