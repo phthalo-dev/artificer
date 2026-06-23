@@ -41,3 +41,41 @@ export interface ArtificerTool<TInput = Record<string, unknown>> {
   readonly definition: ToolDefinition<TInput>;
   toToolDef(ctx: ToolContext): ToolDef;
 }
+
+export interface ChannelMessage {
+  content: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ChannelOutput {
+  content: string;
+  workstreamId?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ChannelDefinition {
+  name: string;
+  description: string;
+  verify?: (headers: Record<string, string>, body: string) => Promise<boolean> | boolean;
+  receive: (payload: Record<string, unknown>) => Promise<ChannelMessage>;
+  format: (output: ChannelOutput) => Promise<Record<string, unknown>> | Record<string, unknown>;
+}
+
+export interface ArtificerChannel {
+  readonly name: string;
+  readonly definition: ChannelDefinition;
+  receive(payload: Record<string, unknown>): Promise<ChannelMessage>;
+  format(output: ChannelOutput): Promise<Record<string, unknown>>;
+}
+
+export interface SkillDefinition {
+  name: string;
+  description: string;
+  content: string;
+}
+
+export interface ArtificerSkill {
+  readonly name: string;
+  readonly description: string;
+  readonly content: string;
+}
