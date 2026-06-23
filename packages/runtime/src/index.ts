@@ -15,7 +15,20 @@ export type * from './storage/types.js';
 export { defineConfig } from './api/define-config.js';
 export { defineTool } from './api/define-tool.js';
 export { ToolRegistry } from './api/tool-registry.js';
-export type { ArtificerConfig, IdentityConfig, ToolDefinition, ArtificerTool } from './api/types.js';
+export { defineChannel } from './api/define-channel.js';
+export { defineSkill } from './api/define-skill.js';
+export type {
+  ArtificerConfig,
+  IdentityConfig,
+  ToolDefinition,
+  ArtificerTool,
+  ChannelDefinition,
+  ArtificerChannel,
+  ChannelMessage,
+  ChannelOutput,
+  SkillDefinition,
+  ArtificerSkill,
+} from './api/types.js';
 
 export async function startRuntime(): Promise<void> {
   const config = loadConfig();
