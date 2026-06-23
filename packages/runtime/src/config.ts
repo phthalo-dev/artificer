@@ -69,6 +69,8 @@ export interface RuntimeConfig {
   diagnostics: DiagnosticsConfig;
   /** Context-economics settings (tool spill, microcompact, file cache, search). */
   contextBorrowing: ContextBorrowingConfig;
+  /** Root directory of the agent identity repo (config, tools, memories). */
+  identityDir: string;
 }
 
 /** The agent's GitHub identity, used to clone, push, and open/comment on PRs. */
@@ -177,6 +179,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     },
   };
 
+  const identityDir = env.ARTIFICER_IDENTITY_DIR
+    ? path.resolve(env.ARTIFICER_IDENTITY_DIR)
+    : path.resolve(process.cwd());
+
   return {
     apiKey: required('LLM_API_KEY (or ZEN_API_KEY / ANTHROPIC_API_KEY)', apiKey),
     baseURL: env.LLM_BASE_URL || 'https://opencode.ai/zen/v1',
@@ -202,5 +208,6 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     github,
     diagnostics,
     contextBorrowing,
+    identityDir,
   };
 }
