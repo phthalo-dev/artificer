@@ -48,18 +48,22 @@ export interface MessageCost {
 export class RuntimeClient {
   constructor(public readonly baseUrl: string) {}
 
+  private get apiBase(): string {
+    return `${this.baseUrl}/api`;
+  }
+
   private async get<T>(path: string): Promise<T> {
-    const res = await fetch(`${this.baseUrl}${path}`);
+    const res = await fetch(`${this.apiBase}${path}`);
     if (!res.ok) {
       throw new Error(`GET ${path} -> ${res.status} ${res.statusText}`);
     }
     return (await res.json()) as T;
   }
 
-  /** True once the server answers /health. */
+  /** True once the server answers /api/health. */
   async health(): Promise<boolean> {
     try {
-      const res = await fetch(`${this.baseUrl}/health`);
+      const res = await fetch(`${this.apiBase}/health`);
       return res.ok;
     } catch {
       return false;
@@ -68,7 +72,7 @@ export class RuntimeClient {
 
   /** Send an inbound message; returns the persisted message (with its id). */
   async sendMessage(content: string): Promise<Message> {
-    const res = await fetch(`${this.baseUrl}/messages`, {
+    const res = await fetch(`${this.apiBase}/messages`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify({ content }),
@@ -92,7 +96,7 @@ export class RuntimeClient {
     baseCommit?: string;
     autostart?: boolean;
   }): Promise<{ workstreamId: string; messageId: string }> {
-    const res = await fetch(`${this.baseUrl}/workstreams`, {
+    const res = await fetch(`${this.apiBase}/workstreams`, {
       method: 'POST',
       headers: { 'content-type': 'application/json' },
       body: JSON.stringify(input),
@@ -109,7 +113,7 @@ export class RuntimeClient {
     messageId: string,
   ): Promise<void> {
     const res = await fetch(
-      `${this.baseUrl}/workstreams/${workstreamId}/start`,
+      `${this.apiBase}/workstreams/${workstreamId}/start`,
       {
         method: 'POST',
         headers: { 'content-type': 'application/json' },

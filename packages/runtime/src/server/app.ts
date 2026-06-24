@@ -1,3 +1,4 @@
+import path from 'node:path';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { streamSSE } from 'hono/streaming';
@@ -15,6 +16,7 @@ import type { GithubWatchState } from '../engine/github-watch.js';
 import { type LlmSdkPackage, MODEL_CATALOG } from '../llm/catalog.js';
 import { listPresets } from '../engine/presets.js';
 import { readBenchOverview, readBenchRun, readBenchSuites } from './bench.js';
+import { serveUI } from './static.js';
 
 const sendMessageSchema = z.object({
   content: z.string().min(1, 'content is required'),
@@ -71,6 +73,8 @@ export interface AppDeps {
     engine: Engine,
     log?: (message: string) => void,
   ) => Promise<GithubWatchState>;
+  /** Directory containing pre-built runtime-ui assets. When set, the UI SPA is served at /. */
+  uiDistDir?: string;
 }
 
 /** Builds the Hono app exposing the agent's "person-like" HTTP surface. */
@@ -79,13 +83,35 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
   app.use('*', cors());
   const runGithubWatchOnce = deps.runGithubWatchOnce ?? defaultRunGithubWatchOnce;
 
-  app.get('/health', (c) => c.json({ ok: true, agent: engine.config.agentName }));
+  // --- Live event stream (at root level, not under /api) ---
 
-  // --- Model configuration ---
+  app.get('/events', (c) =>
+    streamSSE(c, async (stream) => {
+      let open = true;
+      const unsubscribe = engine.subscribe((event) => {
+        void stream.writeSSE({
+          event: event.kind,
+          data: JSON.stringify(event),
+        });
+      });
+      stream.onAbort(() => {
+        open = false;
+        unsubscribe();
+      });
+      while (open) {
+        await stream.writeSSE({ event: 'ping', data: String(Date.now()) });
+        await stream.sleep(15_000);
+      }
+    }),
+  );
 
-  // Current tier models, role->tier mapping, and the full model catalog with
-  // pricing so the UI can let you test different configurations.
-  app.get('/config/models', (c) => {
+  // --- API routes (all under /api) ---
+
+  const api = new Hono();
+
+  api.get('/health', (c) => c.json({ ok: true, agent: engine.config.agentName }));
+
+  api.get('/config/models', (c) => {
     const catalog = Object.values(MODEL_CATALOG).map((entry) => ({
       id: entry.id,
       provider: PROVIDER_LABEL[entry.npm],
@@ -106,8 +132,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     });
   });
 
-  // Update the model used by one or more tiers. Applies to subsequent runs.
-  app.put('/config/models', async (c) => {
+  api.put('/config/models', async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const parsed = updateModelsSchema.safeParse(body);
     if (!parsed.success) {
@@ -121,7 +146,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     });
   });
 
-  app.put('/config/role-tiers', async (c) => {
+  api.put('/config/role-tiers', async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const parsed = updateRoleTiersSchema.safeParse(body);
     if (!parsed.success) {
@@ -135,7 +160,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     });
   });
 
-  app.put('/config/preset', async (c) => {
+  api.put('/config/preset', async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const parsed = applyPresetSchema.safeParse(body);
     if (!parsed.success) {
@@ -158,9 +183,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     }
   });
 
-  // --- Messages: talk to the agent ---
-
-  app.post('/messages', async (c) => {
+  api.post('/messages', async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const parsed = sendMessageSchema.safeParse(body);
     if (!parsed.success) {
@@ -170,24 +193,17 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     return c.json({ message }, 202);
   });
 
-  app.get('/messages', async (c) => {
+  api.get('/messages', async (c) => {
     const messages = await engine.store.listMessages();
     return c.json({ messages });
   });
 
-  // --- State ---
-
-  app.get('/state', async (c) => {
+  api.get('/state', async (c) => {
     const state = await engine.getState();
     return c.json(state);
   });
 
-  // --- Workstreams ---
-
-  // Structured intake: create a workstream directly, bypassing the
-  // communicator. With autostart=false the orchestrator is held so the caller
-  // (e.g. the bench harness) can preflight-clone into the workspace first.
-  app.post('/workstreams', async (c) => {
+  api.post('/workstreams', async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const parsed = createWorkstreamSchema.safeParse(body);
     if (!parsed.success) {
@@ -198,8 +214,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     return c.json({ workstreamId: workstream.id, messageId }, 202);
   });
 
-  // Spawn the orchestrator for a workstream created with autostart=false.
-  app.post('/workstreams/:id/start', async (c) => {
+  api.post('/workstreams/:id/start', async (c) => {
     const id = c.req.param('id');
     const body = await c.req.json().catch(() => ({}));
     const parsed = startWorkstreamSchema.safeParse(body);
@@ -217,12 +232,12 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     return c.json({ ok: true }, 202);
   });
 
-  app.get('/workstreams', async (c) => {
+  api.get('/workstreams', async (c) => {
     const workstreams = await engine.store.listWorkstreams();
     return c.json({ workstreams });
   });
 
-  app.get('/workstreams/:id', async (c) => {
+  api.get('/workstreams/:id', async (c) => {
     const id = c.req.param('id');
     const workstream = await engine.store.getWorkstream(id);
     if (!workstream) return c.json({ error: 'not found' }, 404);
@@ -248,9 +263,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     });
   });
 
-  // --- Memories ---
-
-  app.get('/memories', async (c) => {
+  api.get('/memories', async (c) => {
     const q = c.req.query('q')?.trim();
     if (q) {
       const memories = await engine.store.queryMemories(q, {
@@ -264,10 +277,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     return c.json({ memories });
   });
 
-  // --- Observability: tokens and cost ---
-
-  // Overall usage with breakdowns by inbound message, workstream, and role.
-  app.get('/usage', async (c) => {
+  api.get('/usage', async (c) => {
     const [runs, messages] = await Promise.all([
       engine.store.listRuns(),
       engine.store.listMessages(),
@@ -291,8 +301,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     });
   });
 
-  // Cost of a single inbound message, including the full nested call tree.
-  app.get('/messages/:id/cost', async (c) => {
+  api.get('/messages/:id/cost', async (c) => {
     const id = c.req.param('id');
     const messages = await engine.store.listMessages();
     const message = messages.find((m) => m.id === id);
@@ -309,10 +318,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     });
   });
 
-  // --- Benchmark results (SWE-bench-style harness output) ---
-
-  // Suite-level summary plus one row per instance, read from bench/results.
-  app.get('/bench/runs', async (c) => {
+  api.get('/bench/runs', async (c) => {
     const overview = await readBenchOverview();
     if (!overview) {
       return c.json({ error: 'no benchmark results (run `pnpm bench`)' }, 404);
@@ -320,25 +326,18 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     return c.json(overview);
   });
 
-  app.get('/bench/suites', async (c) => {
+  api.get('/bench/suites', async (c) => {
     const suites = await readBenchSuites();
     return c.json({ suites });
   });
 
-  // Detail for a single instance: metrics, patch, verifier verdict, trajectory.
-  app.get('/bench/runs/:instanceId', async (c) => {
+  api.get('/bench/runs/:instanceId', async (c) => {
     const detail = await readBenchRun(c.req.param('instanceId'));
     if (!detail) return c.json({ error: 'not found' }, 404);
     return c.json(detail);
   });
 
-  // --- GitHub activity watcher ---
-
-  // Runs one poll cycle (own PRs + notifications) on demand, feeding any
-  // findings into the engine via receiveMessage(). Lets an external cron
-  // (launchd/systemd timer/scheduled Action) drive the watcher instead of
-  // (or in addition to) the in-process interval.
-  app.post('/github/watch', async (c) => {
+  api.post('/github/watch', async (c) => {
     if (!engine.config.github) {
       return c.json({ error: 'GitHub is not configured (set GITHUB_TOKEN)' }, 400);
     }
@@ -349,28 +348,13 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     return c.json({ state });
   });
 
-  // --- Live event stream ---
+  app.route('/api', api);
 
-  app.get('/events', (c) =>
-    streamSSE(c, async (stream) => {
-      let open = true;
-      const unsubscribe = engine.subscribe((event) => {
-        void stream.writeSSE({
-          event: event.kind,
-          data: JSON.stringify(event),
-        });
-      });
-      stream.onAbort(() => {
-        open = false;
-        unsubscribe();
-      });
-      // Heartbeat keeps the connection alive until the client disconnects.
-      while (open) {
-        await stream.writeSSE({ event: 'ping', data: String(Date.now()) });
-        await stream.sleep(15_000);
-      }
-    }),
-  );
+  // --- Static UI serving ---
+
+  const uiDistDir =
+    deps.uiDistDir ?? path.resolve(import.meta.dirname, '../../ui-dist');
+  app.use('*', serveUI(uiDistDir));
 
   return app;
 }
