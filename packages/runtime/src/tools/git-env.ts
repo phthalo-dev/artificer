@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { GitHubConfig } from '../config.js';
 
 /**
@@ -13,12 +14,23 @@ import type { GitHubConfig } from '../config.js';
  * - `git` HTTPS uses a credential helper supplied via `GIT_CONFIG_*` env keys,
  *   which keeps the token out of remote URLs (and thus out of tool output).
  * - Commit identity comes from `GIT_AUTHOR_*`/`GIT_COMMITTER_*`.
+ *
+ * When `workspaceDir` is provided, `GIT_CEILING_DIRECTORIES` is set to its
+ * parent directory so git commands inside the workspace cannot walk up into
+ * the agent identity repo.
  */
 export function buildGitEnv(
   github: GitHubConfig | undefined,
   base: NodeJS.ProcessEnv = process.env,
+  workspaceDir?: string,
 ): NodeJS.ProcessEnv {
-  if (!github) return base;
+  if (!github && !workspaceDir) return base;
+
+  if (!github) {
+    return workspaceDir
+      ? { ...base, GIT_CEILING_DIRECTORIES: path.dirname(workspaceDir) }
+      : base;
+  }
 
   const env: NodeJS.ProcessEnv = {
     ...base,
@@ -50,6 +62,10 @@ export function buildGitEnv(
     env[`GIT_CONFIG_KEY_${i}`] = key;
     env[`GIT_CONFIG_VALUE_${i}`] = value;
   });
+
+  if (workspaceDir) {
+    env.GIT_CEILING_DIRECTORIES = path.dirname(workspaceDir);
+  }
 
   return env;
 }

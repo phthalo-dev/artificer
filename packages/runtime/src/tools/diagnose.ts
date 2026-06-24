@@ -13,7 +13,7 @@ export async function diagnoseEdited(
 ): Promise<string> {
   const config = ctx.engine.config.diagnostics;
   if (!config?.enabled) return '';
-  const env = buildGitEnv(ctx.engine.config.github);
+  const env = buildGitEnv(ctx.engine.config.github, process.env, ctx.workspaceDir);
   const report = await runDiagnostics(config, {
     workspaceDir: ctx.workspaceDir,
     env,
