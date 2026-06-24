@@ -67,7 +67,7 @@ export async function runShellCommand(opts: {
 
 export function createShellTool(ctx: ToolContext): ToolDef[] {
   const { workspaceDir } = ctx;
-  const env = buildGitEnv(ctx.engine.config.github);
+  const env = buildGitEnv(ctx.engine.config.github, process.env, workspaceDir);
 
   return [
     {
