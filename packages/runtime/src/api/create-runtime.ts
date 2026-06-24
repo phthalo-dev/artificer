@@ -8,7 +8,8 @@ import { IdentityStore } from '../storage/identity-store.js';
 import { ToolRegistry } from './tool-registry.js';
 import { scanAgentDirectory } from '../discover/discover.js';
 import { loadSkillsFromDisk, loadInstructionsFromDisk } from '../discover/loader.js';
-import type { ArtificerRuntime, ArtificerSkill, RuntimeOptions } from './types.js';
+import { mountChannels } from '../channels/mount.js';
+import type { ArtificerRuntime, ArtificerChannel, ArtificerSkill, RuntimeOptions } from './types.js';
 
 export async function createRuntime(
   options: RuntimeOptions,
@@ -43,8 +44,14 @@ export async function createRuntime(
 
   const tools = new ToolRegistry();
 
+  const channels: ArtificerChannel[] = [];
+
   const engine = new Engine(config, store);
   const app = createApp(engine);
+
+  if (channels.length > 0) {
+    mountChannels(app, channels, engine);
+  }
 
   return {
     engine,
