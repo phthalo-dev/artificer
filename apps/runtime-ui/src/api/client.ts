@@ -1,5 +1,6 @@
-export const RUNTIME_URL =
-  import.meta.env.VITE_RUNTIME_URL ?? 'http://localhost:4100';
+const baseOrigin =
+  import.meta.env.VITE_RUNTIME_URL ?? window.location.origin;
+export const RUNTIME_URL = `${baseOrigin.replace(/\/$/, '')}/api`;
 
 /** When set, outbound messages go through the wake API (queue + start EC2). */
 export const WAKE_API_URL = import.meta.env.VITE_WAKE_API_URL as

@@ -23,15 +23,15 @@ async function buildApp(env: NodeJS.ProcessEnv = {}) {
   return { engine, store };
 }
 
-test('POST /github/watch returns 400 when GitHub is not configured', async () => {
+test('POST /api/github/watch returns 400 when GitHub is not configured', async () => {
   const { engine } = await buildApp();
   const app = createApp(engine);
 
-  const res = await app.request('/github/watch', { method: 'POST' });
+  const res = await app.request('/api/github/watch', { method: 'POST' });
   assert.equal(res.status, 400);
 });
 
-test('POST /github/watch runs one cycle and returns the resulting state', async () => {
+test('POST /api/github/watch runs one cycle and returns the resulting state', async () => {
   const { engine } = await buildApp({ GITHUB_TOKEN: 'gh-token' });
 
   const updated: GithubWatchState = {
@@ -46,9 +46,19 @@ test('POST /github/watch runs one cycle and returns the resulting state', async 
     },
   });
 
-  const res = await app.request('/github/watch', { method: 'POST' });
+  const res = await app.request('/api/github/watch', { method: 'POST' });
   assert.equal(res.status, 200);
   const body = (await res.json()) as { state: GithubWatchState };
   assert.deepEqual(body.state, updated);
   assert.equal(called, 1);
+});
+
+test('GET /api/health returns agent name', async () => {
+  const { engine } = await buildApp();
+  const app = createApp(engine);
+
+  const res = await app.request('/api/health');
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as { ok: boolean; agent: string };
+  assert.equal(body.ok, true);
 });

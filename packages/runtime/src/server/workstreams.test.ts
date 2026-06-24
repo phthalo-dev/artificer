@@ -24,7 +24,7 @@ async function buildApp() {
 test('POST /workstreams with autostart=false creates a held workstream and no runs', async () => {
   const { app, store } = await buildApp();
 
-  const res = await app.request('/workstreams', {
+  const res = await app.request('/api/workstreams', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({
@@ -58,7 +58,7 @@ test('POST /workstreams with autostart=false creates a held workstream and no ru
 
 test('POST /workstreams/:id/start rejects an unknown workstream', async () => {
   const { app } = await buildApp();
-  const res = await app.request('/workstreams/ws_does_not_exist/start', {
+  const res = await app.request('/api/workstreams/ws_does_not_exist/start', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ messageId: 'msg_x' }),
@@ -68,7 +68,7 @@ test('POST /workstreams/:id/start rejects an unknown workstream', async () => {
 
 test('POST /workstreams rejects a request missing title/goal', async () => {
   const { app } = await buildApp();
-  const res = await app.request('/workstreams', {
+  const res = await app.request('/api/workstreams', {
     method: 'POST',
     headers: { 'content-type': 'application/json' },
     body: JSON.stringify({ goal: 'no title' }),
