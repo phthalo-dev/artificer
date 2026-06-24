@@ -33,6 +33,9 @@ export type {
   SkillDefinition,
   ArtificerSkill,
 } from './api/types.js';
+export { slackChannel, postSlackReply, updateSlackStatus } from './channels/adapters/slack.js';
+export { discordChannel, editDiscordResponse } from './channels/adapters/discord.js';
+export { verifySlackSignature, verifyDiscordSignature } from './channels/adapters/verify.js';
 
 export async function startRuntime(): Promise<void> {
   const config = loadConfig();
