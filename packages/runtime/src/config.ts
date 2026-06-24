@@ -72,6 +72,8 @@ export interface RuntimeConfig {
   contextBorrowing: ContextBorrowingConfig;
   /** Root directory of the agent identity repo (config, tools, memories). */
   identityDir: string;
+  /** Bearer token for API authentication. Absent = no auth (local dev). */
+  apiAuthKey?: string;
 }
 
 /** The agent's GitHub identity, used to clone, push, and open/comment on PRs. */
@@ -210,6 +212,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     diagnostics,
     contextBorrowing,
     identityDir,
+    apiAuthKey: env.ARTIFICER_API_KEY || undefined,
   };
 }
 

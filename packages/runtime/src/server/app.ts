@@ -16,6 +16,7 @@ import type { GithubWatchState } from '../engine/github-watch.js';
 import { type LlmSdkPackage, MODEL_CATALOG } from '../llm/catalog.js';
 import { listPresets } from '../engine/presets.js';
 import { readBenchOverview, readBenchRun, readBenchSuites } from './bench.js';
+import { bearerAuth } from './auth.js';
 import { serveUI } from './static.js';
 
 const sendMessageSchema = z.object({
@@ -108,6 +109,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
   // --- API routes (all under /api) ---
 
   const api = new Hono();
+  api.use('*', bearerAuth(engine.config.apiAuthKey));
 
   api.get('/health', (c) => c.json({ ok: true, agent: engine.config.agentName }));
 
