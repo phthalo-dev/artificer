@@ -33,6 +33,8 @@ export type {
   SkillDefinition,
   ArtificerSkill,
 } from './api/types.js';
+export { defineConnection } from './api/define-connection.js';
+export type { ConnectionDefinition, ConnectionAuth, ArtificerConnection } from './api/types.js';
 export { slackChannel, postSlackReply, updateSlackStatus } from './channels/adapters/slack.js';
 export { discordChannel, editDiscordResponse } from './channels/adapters/discord.js';
 export { verifySlackSignature, verifyDiscordSignature } from './channels/adapters/verify.js';
