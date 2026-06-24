@@ -85,6 +85,28 @@ export interface ArtificerSkill {
   readonly content: string;
 }
 
+export interface ConnectionAuth {
+  type: 'bearer' | 'basic' | 'header';
+  envVar: string;
+  name?: string;
+}
+
+export interface ConnectionDefinition {
+  type: 'mcp' | 'openapi';
+  name: string;
+  description: string;
+  url: string;
+  specUrl?: string;
+  auth?: ConnectionAuth;
+  operations?: { allow: string[] } | { block: string[] };
+  roles?: RoleName[];
+}
+
+export interface ArtificerConnection {
+  readonly name: string;
+  readonly definition: ConnectionDefinition;
+}
+
 export interface RuntimeOptions {
   rootDir: string;
   config?: Partial<RuntimeConfig>;
