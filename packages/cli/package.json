@@ -3,11 +3,12 @@
   "version": "0.1.0",
   "type": "module",
   "bin": {
-    "artificer": "./dist/index.js"
+    "artificer": "./bin/artificer.js"
   },
   "scripts": {
     "build": "tsc",
-    "dev": "tsx src/index.ts"
+    "dev": "tsx src/index.ts",
+    "link:global": "pnpm link --global"
   },
   "dependencies": {
     "@artificer/runtime": "workspace:*"
