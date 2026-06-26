@@ -1,8 +1,10 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import {
+  IMPLEMENT_TASK,
   MAX_REVIEW_CYCLES,
   MAX_WORKER_RUNS_BEFORE_REVIEW,
+  PLAN_TASK,
   type WorkstreamFacts,
   nextWorkstreamAction,
 } from './workstream-machine.js';
@@ -28,6 +30,32 @@ function facts(overrides: Partial<WorkstreamFacts> = {}): WorkstreamFacts {
     ...overrides,
   };
 }
+
+test('PLAN_TASK covers both bug-fix and new-feature/new-package cases', () => {
+  // The planner timed out on P3.25 (a greenfield package) because PLAN_TASK
+  // only described "find the root-cause file" — a framing that has no natural
+  // stopping point when the task is to create something new.
+  assert.match(PLAN_TASK, /bug fix|existing code/i, 'should still guide bug-fix work');
+  assert.match(PLAN_TASK, /new feature|new package/i, 'should also guide new-feature/package work');
+});
+
+test('review is forced after 3 worker runs without done (reduced from 5)', () => {
+  // MAX_WORKER_RUNS_BEFORE_REVIEW was lowered from 5 to 3 to limit aimless
+  // re-runs when workers get stuck in analysis loops without reporting done.
+  const a = nextWorkstreamAction(
+    facts({ patchPresent: true, reviewCount: 0, workSinceLastReview: 3, lastWorkerDone: false }),
+  );
+  assert.equal((a as { role: string }).role, 'reviewer');
+});
+
+test('IMPLEMENT_TASK explicitly prohibits git remote operations and PR creation', () => {
+  // Workers executing IMPLEMENT_TASK must not push branches or open PRs —
+  // that belongs exclusively to SUBMIT_TASK. Without an explicit guard,
+  // planner-generated plans that include PR creation steps cause implement
+  // workers to attempt gh pr create before the branch is pushed, which fails
+  // and sends the workstream into a rejected-review loop.
+  assert.match(IMPLEMENT_TASK, /do not push|do not.*pull request|no git remote/i);
+});
 
 test('planner that keeps finishing without a plan falls through to a direct worker', () => {
   const a = nextWorkstreamAction(
@@ -221,6 +249,44 @@ test('approved review + clean working tree + PR not yet submitted -> re-dispatch
   assert.equal(a.kind, 'dispatch');
   assert.equal((a as { role: string }).role, 'worker');
   assert.match((a as { task: string }).task, /pull request/i);
+});
+
+test('fix worker committed its changes (clean tree) with workSinceLastReview > 0 -> re-review not re-implement', () => {
+  // Regression: after a fix worker commits the patch (making patchPresent=false)
+  // the machine was incorrectly routing to IMPLEMENT_TASK because the
+  // !patchPresent check fired before workSinceLastReview was consulted.
+  // The correct behaviour: since workSinceLastReview=1, route to reviewer.
+  const a = nextWorkstreamAction(
+    facts({
+      patchPresent: false,
+      reviewCount: 2,
+      lastReviewApproved: false,
+      workSinceLastReview: 1,
+      lastWorkerDone: true,
+    }),
+  );
+  assert.equal(a.kind, 'dispatch');
+  assert.equal((a as { role: string }).role, 'reviewer');
+});
+
+test('rejected review + committed patch (clean tree, no workers since review) -> fix worker not re-implement', () => {
+  // Regression: when the initial implement worker commits its change (making
+  // patchPresent=false) and the reviewer rejects, the next engine tick has
+  // patchPresent=false AND workSinceLastReview=0. The machine was routing to
+  // IMPLEMENT_TASK because !patchPresent && workSinceLastReview===0 fired before
+  // the review-rejection was consulted. MAX_REVIEW_CYCLES was therefore
+  // unreachable and the workstream looped indefinitely.
+  const a = nextWorkstreamAction(
+    facts({
+      patchPresent: false,
+      reviewCount: 1,
+      lastReviewApproved: false,
+      workSinceLastReview: 0,
+    }),
+  );
+  assert.equal(a.kind, 'dispatch');
+  assert.equal((a as { role: string }).role, 'worker');
+  assert.match((a as { task: string }).task, /review rejected/i);
 });
 
 test('full happy path converges to done without an orchestrator', () => {

@@ -1,5 +1,11 @@
+import { execFile } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
+import { promisify } from 'node:util';
 import { EventEmitter } from 'node:events';
 import type { RuntimeConfig } from '../config.js';
+
+const exec = promisify(execFile);
 import type { EngineApi, RuntimeEvent, SpawnCallInput } from '../context.js';
 import { resolveLanguageModel } from '../llm/provider.js';
 import { Store } from '../storage/store.js';
@@ -18,6 +24,7 @@ import {
 } from './workstream-machine.js';
 import { workerRunDone, workerRunSummary } from './worker-report.js';
 import { countNoProgressRepeats } from './worker-progress.js';
+import { buildPriorWorkContext } from './prior-work-context.js';
 import { buildGitEnv } from '../tools/git-env.js';
 import {
   insufficientBalanceUserMessage,
@@ -319,6 +326,79 @@ export class Engine implements EngineApi {
     };
   }
 
+  /**
+   * Write the current model config back to artificer.config.json and commit it.
+   * No-op if identityDir has no config file and no git repo. Commit only runs
+   * when identity.autoCommit is true.
+   */
+  async persistConfig(): Promise<void> {
+    const configPath = path.join(this.config.identityDir, 'artificer.config.json');
+
+    let existing: Record<string, unknown> = {};
+    try {
+      existing = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as Record<string, unknown>;
+    } catch { /* file may not exist yet */ }
+
+    const presetId = this.config.modelPresetId;
+    let updated: Record<string, unknown>;
+    if (presetId !== 'custom') {
+      const { models: _m, roleTiers: _r, ...rest } = existing;
+      updated = { ...rest, preset: presetId };
+    } else {
+      const { preset: _p, ...rest } = existing;
+      updated = { ...rest, models: { ...this.config.models }, roleTiers: { ...this.config.roleTiers } };
+    }
+
+    try {
+      fs.writeFileSync(configPath, JSON.stringify(updated, null, 2) + '\n');
+    } catch (err) {
+      console.error('[engine] failed to write artificer.config.json:', err);
+      return;
+    }
+
+    if (!this.config.identity?.autoCommit) return;
+
+    const dir = this.config.identityDir;
+    const env = buildGitEnv(this.config.github);
+    const prefix = this.config.identity.commitPrefix ?? 'config:';
+    const label = presetId !== 'custom' ? `preset to ${presetId}` : 'models (custom)';
+    const message = `${prefix} update ${label}`;
+
+    try {
+      await exec('git', ['-C', dir, 'add', 'artificer.config.json'], { env });
+    } catch (err) {
+      console.error('[engine] git add config failed:', err);
+      return;
+    }
+
+    try {
+      await exec('git', ['-C', dir, 'commit', '-m', message], { env });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes('nothing to commit') && !msg.includes('nothing added')) {
+        console.error('[engine] git commit config failed:', err);
+      }
+      return;
+    }
+
+    if (!this.config.identity.autoPush) return;
+
+    try {
+      const remote = this.config.identity.remote ?? 'origin';
+      const pushArgs = ['push', remote];
+      if (this.config.identity.branch) {
+        pushArgs.push(this.config.identity.branch);
+      } else {
+        const { stdout } = await exec('git', ['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD'], { env });
+        const branch = stdout.trim();
+        if (branch && branch !== 'HEAD') pushArgs.push(branch);
+      }
+      await exec('git', ['-C', dir, ...pushArgs], { env });
+    } catch (err) {
+      console.error('[engine] git push config failed:', err);
+    }
+  }
+
   /** Resolve the model id for a role, honoring an optional complexity override. */
   private modelFor(role: RunRecord['role'], complexity?: ModelTier): string {
     return pickModel(
@@ -393,7 +473,8 @@ export class Engine implements EngineApi {
     const ws = await this.store.getWorkstream(workstreamId);
     if (!ws || Engine.FSM_TERMINAL.has(ws.status)) return;
 
-    const action = nextWorkstreamAction(await this.computeFacts(ws));
+    const { facts, workerRunsSinceReview } = await this.computeFacts(ws);
+    const action = nextWorkstreamAction(facts);
 
     switch (action.kind) {
       case 'setup': {
@@ -422,9 +503,14 @@ export class Engine implements EngineApi {
           await this.store.updateWorkstream(workstreamId, { status });
           await this.emitWorkstream(workstreamId);
         }
+        let task = action.task;
+        if (action.role === 'worker' && workerRunsSinceReview.length > 0) {
+          const priorContext = buildPriorWorkContext(workerRunsSinceReview);
+          if (priorContext) task = `${task}\n\n${priorContext}`;
+        }
         await this.spawnCall({
           role: action.role,
-          description: action.task,
+          description: task,
           workstreamId,
           parentRunId,
           originMessageId,
@@ -434,8 +520,11 @@ export class Engine implements EngineApi {
       case 'done': {
         await this.store.updateWorkstream(workstreamId, { status: 'done' });
         await this.emitWorkstream(workstreamId);
-        await this.reply(`Workstream "${ws.title}" is complete.`, workstreamId);
         const doneWs = await this.store.getWorkstream(workstreamId);
+        const doneMsg = doneWs?.summary
+          ? `Workstream "${ws.title}" is complete.\n\n${doneWs.summary}`
+          : `Workstream "${ws.title}" is complete.`;
+        await this.reply(doneMsg, workstreamId);
         if (doneWs) void this.memoryService?.onTerminal(doneWs);
         return;
       }
@@ -446,7 +535,9 @@ export class Engine implements EngineApi {
   }
 
   /** Gather the facts the state machine transitions on. */
-  private async computeFacts(ws: Workstream): Promise<WorkstreamFacts> {
+  private async computeFacts(
+    ws: Workstream,
+  ): Promise<{ facts: WorkstreamFacts; workerRunsSinceReview: RunRecord[] }> {
     const workspaceDir = this.store.layout.workstreamWorkspace(ws.id);
     const repoDir = await findGitRepo(workspaceDir);
     const patchPresent = repoDir
@@ -506,20 +597,23 @@ export class Engine implements EngineApi {
       );
 
     return {
-      hasRepoUrl: Boolean(ws.repoUrl),
-      repoReady: repoDir !== undefined,
-      planWritten: Boolean(plan),
-      patchPresent,
-      reviewCount: reviews.length,
-      lastReviewApproved: lastReview?.approved,
-      workSinceLastReview,
-      lastWorkerDone,
-      consecutiveFailedRuns,
-      plannerRunsWithoutPlan,
-      noProgressRepeats,
-      prSubmitted,
-      totalRuns: wsRuns.length,
-      maxRuns: this.config.maxRunsPerWorkstream,
+      facts: {
+        hasRepoUrl: Boolean(ws.repoUrl),
+        repoReady: repoDir !== undefined,
+        planWritten: Boolean(plan),
+        patchPresent,
+        reviewCount: reviews.length,
+        lastReviewApproved: lastReview?.approved,
+        workSinceLastReview,
+        lastWorkerDone,
+        consecutiveFailedRuns,
+        plannerRunsWithoutPlan,
+        noProgressRepeats,
+        prSubmitted,
+        totalRuns: wsRuns.length,
+        maxRuns: this.config.maxRunsPerWorkstream,
+      },
+      workerRunsSinceReview,
     };
   }
 

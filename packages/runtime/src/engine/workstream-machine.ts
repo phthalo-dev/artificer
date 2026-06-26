@@ -17,8 +17,9 @@ export const MAX_REVIEW_CYCLES = 3;
  * Worker runs allowed since the last review before forcing a review, even if
  * the worker never reports DONE. Lets a large task accumulate implementation
  * across several worker runs instead of being reviewed after its first edit.
+ * Kept at 3 to limit aimless re-runs when workers get stuck in analysis loops.
  */
-export const MAX_WORKER_RUNS_BEFORE_REVIEW = 5;
+export const MAX_WORKER_RUNS_BEFORE_REVIEW = 3;
 
 /**
  * Consecutive failed runs before the workstream is blocked. Guards against a
@@ -37,21 +38,30 @@ export const MAX_PLANNER_ATTEMPTS = 3;
 
 export const PLAN_TASK =
   'Write the implementation plan for this goal and call write_plan in THIS run. ' +
-  'Do minimal investigation first — read the file(s) the issue points to and ' +
+  'First determine what kind of task this is:\n' +
+  '- Bug fix or change to existing code: read the file(s) the issue points to, ' +
   'grep the relevant symbol (a few calls), then write a short plan naming the ' +
-  'root-cause file and lines, the exact change, and the command to verify the ' +
-  'fix. Do not do git-history archaeology or read unrelated files. Record the ' +
-  'root cause and the verify command with record_finding so the worker need ' +
-  'not re-investigate.';
+  'root-cause file and lines, the exact change, and the command to verify the fix. ' +
+  'Record the root cause and the verify command with record_finding so the worker ' +
+  'need not re-investigate.\n' +
+  '- New feature or new package: identify each file to create, its purpose, ' +
+  'the key APIs and their signatures, dependencies on existing packages (check ' +
+  'pnpm-workspace.yaml or package.json), and the build/test command to verify. ' +
+  'List concrete file paths and what each file must export — no placeholders.\n' +
+  'In both cases: do not do git-history archaeology or read unrelated files beyond ' +
+  'what is needed to understand the task. Call write_plan immediately once you ' +
+  'know enough — a run without write_plan is wasted.';
 
 export const IMPLEMENT_TASK =
   'Read the recorded findings first and trust them — do not re-investigate what ' +
   'they already establish. Implement the plan by editing the repository source ' +
   'in the workspace, making the issue’s FULL described behaviour correct: cover ' +
-  'every case the issue mentions (including asides like “also”/“as well” and ' +
+  'every case the issue mentions (including asides like “also”/”as well” and ' +
   'related code paths), not just the headline. Run the plan’s test command to ' +
   'check your work. Do not modify or add test files. Record any new fact with ' +
-  'record_finding. Report BLOCKED if stuck.';
+  'record_finding. Report BLOCKED if stuck. Do not push branches, open pull ' +
+  'requests, or perform any other git remote operations — those are handled in ' +
+  'a separate submit step after the review approves.';
 
 /** Task when planning could not produce a plan: the worker does it all. */
 export const IMPLEMENT_DIRECT_TASK =
@@ -72,7 +82,9 @@ export const SUBMIT_TASK =
   '   b. Push to the fork remote instead (usually named "origin" after forking, with upstream renamed).\n' +
   '4. Open a pull request with `gh pr create` — include a summary of what changed and why.\n' +
   '   When working from a fork, `gh pr create` automatically targets the upstream repo.\n' +
-  '5. Report the PR URL in report_status so it can be tracked.\n' +
+  '5. Call update_status with the PR URL and a one-sentence summary of what was changed, e.g.\n' +
+  '   "Opened PR https://github.com/owner/repo/pull/42: fixed the login redirect bug."\n' +
+  '6. Report the PR URL in report_status so it can be tracked.\n' +
   'Do not modify any files. Only create the branch, commit, push, and open the PR.';
 
 export const FIX_TASK =
@@ -164,8 +176,11 @@ export function nextWorkstreamAction(f: WorkstreamFacts): WorkstreamAction {
   }
 
   // Implement until there is a candidate patch — from the plan if we have one,
-  // otherwise directly from the goal.
-  if (!f.patchPresent) {
+  // otherwise directly from the goal. Only skip this gate when there is no
+  // recent worker output: if a fix worker committed its changes (making the
+  // working tree clean) we must NOT fall into this branch, because
+  // workSinceLastReview > 0 means there is work pending re-review.
+  if (!f.patchPresent && f.workSinceLastReview === 0 && f.lastReviewApproved !== false) {
     return {
       kind: 'dispatch',
       role: 'worker',
