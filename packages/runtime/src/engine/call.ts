@@ -10,9 +10,11 @@ import { formatCallError } from '../llm/errors.js';
 import { runToolLoop } from '../llm/loop.js';
 import type { Store } from '../storage/store.js';
 import type { RunRecord } from '../storage/types.js';
+import { emptyUsage } from '../storage/types.js';
 import { toolsForRole } from '../tools/registry.js';
 import { findGitRepo } from './git-repo.js';
 import { getRole } from './roles.js';
+import type { WorkerExecutor } from './executor.js';
 
 const execAsync = promisify(exec);
 
@@ -87,6 +89,7 @@ export interface ExecuteCallDeps {
   config: RuntimeConfig;
   store: Store;
   engine: EngineApi;
+  executor?: WorkerExecutor;
 }
 
 /** Compose the context a call sees: its task plus a summary of its workstream. */
@@ -221,61 +224,76 @@ export async function executeCall(
 
   try {
     const userMessage = await buildContext(store, run, workspaceDir, config);
-    let runCharTotal = 0;
 
-    // The planner gets a tighter iteration cap so it commits to write_plan
-    // instead of investigating until the wall-clock/instance timeout.
-    const maxIterations =
-      run.role === 'planner'
-        ? Math.min(config.maxPlannerIterations, config.maxIterationsPerCall)
-        : config.maxIterationsPerCall;
+    let resultText: string;
+    let resultUsage: RunRecord['usage'];
 
-    const result = await runToolLoop({
-      model: resolveModel(run.model ?? config.model),
-      system: role.system(config.agentName),
-      userMessage,
-      tools,
-      maxIterations,
-      maxRunMs: config.maxRunMs,
-      // The planner may emit a long plan in one response; give it room so the
-      // plan isn't truncated mid-write.
-      maxTokens: run.role === 'planner' ? 8192 : 4096,
-      toolResultSpill: {
-        layout: store.layout,
-        runId: run.id,
-        config: config.contextBorrowing.toolResults,
-        getRunCharTotal: () => runCharTotal,
-        addRunChars: (n) => {
-          runCharTotal += n;
+    if (deps.executor && WORK_ROLES.has(run.role)) {
+      const execResult = await deps.executor.execute({ context: userMessage, workspaceDir, run });
+      resultText = execResult.text;
+      resultUsage = {
+        ...emptyUsage(),
+        ...(execResult.usage ?? {}),
+      };
+    } else {
+      let runCharTotal = 0;
+
+      // The planner gets a tighter iteration cap so it commits to write_plan
+      // instead of investigating until the wall-clock/instance timeout.
+      const maxIterations =
+        run.role === 'planner'
+          ? Math.min(config.maxPlannerIterations, config.maxIterationsPerCall)
+          : config.maxIterationsPerCall;
+
+      const result = await runToolLoop({
+        model: resolveModel(run.model ?? config.model),
+        system: role.system(config.agentName),
+        userMessage,
+        tools,
+        maxIterations,
+        maxRunMs: config.maxRunMs,
+        // The planner may emit a long plan in one response; give it room so the
+        // plan isn't truncated mid-write.
+        maxTokens: run.role === 'planner' ? 8192 : 4096,
+        toolResultSpill: {
+          layout: store.layout,
+          runId: run.id,
+          config: config.contextBorrowing.toolResults,
+          getRunCharTotal: () => runCharTotal,
+          addRunChars: (n) => {
+            runCharTotal += n;
+          },
+          onSpill: (info) => {
+            engine.emit({
+              kind: 'tool',
+              at: new Date().toISOString(),
+              data: {
+                runId: run.id,
+                name: info.tool,
+                input: {},
+                output: `[tool_result_spilled: ${info.path}]`,
+                at: new Date().toISOString(),
+                spillPath: info.path,
+              },
+            });
+          },
         },
-        onSpill: (info) => {
+        onToolCall: (invocation) => {
+          run.toolCalls.push(invocation);
           engine.emit({
             kind: 'tool',
-            at: new Date().toISOString(),
-            data: {
-              runId: run.id,
-              name: info.tool,
-              input: {},
-              output: `[tool_result_spilled: ${info.path}]`,
-              at: new Date().toISOString(),
-              spillPath: info.path,
-            },
+            at: invocation.at,
+            data: { ...invocation, runId: run.id },
           });
+          void store.saveRun(run);
         },
-      },
-      onToolCall: (invocation) => {
-        run.toolCalls.push(invocation);
-        engine.emit({
-          kind: 'tool',
-          at: invocation.at,
-          data: { ...invocation, runId: run.id },
-        });
-        void store.saveRun(run);
-      },
-    });
+      });
+      resultText = result.text;
+      resultUsage = result.usage;
+    }
 
-    run.output = result.text;
-    run.usage = result.usage;
+    run.output = resultText;
+    run.usage = resultUsage;
     run.status = 'done';
     run.finishedAt = new Date().toISOString();
     await store.saveRun(run);

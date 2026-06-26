@@ -22,6 +22,11 @@ export interface GitHubShorthand {
   watchInterval?: string;
 }
 
+export type ExecutorConfig =
+  | 'llm'
+  | 'cursor-agent'
+  | { type: 'cursor-agent'; model?: string };
+
 export interface ArtificerConfig {
   name: string;
   description?: string;
@@ -32,8 +37,9 @@ export interface ArtificerConfig {
   concurrency?: number;
   maxIterationsPerCall?: number;
   port?: number;
-  dataDir?: string;
+  execDir?: string;
   identity?: IdentityConfig;
+  executor?: ExecutorConfig;
 }
 
 export interface ToolDefinition<TInput = Record<string, unknown>> {

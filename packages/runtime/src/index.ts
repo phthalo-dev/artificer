@@ -12,7 +12,6 @@ export { Engine } from './engine/engine.js';
 export { Store } from './storage/store.js';
 export { createApp } from './server/app.js';
 export type * from './storage/types.js';
-export { defineConfig } from './api/define-config.js';
 export { defineTool } from './api/define-tool.js';
 export { ToolRegistry } from './api/tool-registry.js';
 export { createRuntime } from './api/create-runtime.js';
@@ -23,6 +22,7 @@ export { defineChannel } from './api/define-channel.js';
 export { defineSkill } from './api/define-skill.js';
 export type {
   ArtificerConfig,
+  ExecutorConfig,
   IdentityConfig,
   ToolDefinition,
   ArtificerTool,
@@ -33,6 +33,7 @@ export type {
   SkillDefinition,
   ArtificerSkill,
 } from './api/types.js';
+export type { WorkerExecutor, ExecutorResult } from './engine/executor.js';
 export { defineConnection } from './api/define-connection.js';
 export type { ConnectionDefinition, ConnectionAuth, ArtificerConnection } from './api/types.js';
 export { slackChannel, postSlackReply, updateSlackStatus } from './channels/adapters/slack.js';
@@ -41,7 +42,7 @@ export { verifySlackSignature, verifyDiscordSignature } from './channels/adapter
 
 export async function startRuntime(): Promise<void> {
   const config = loadConfig();
-  const store = new Store(config.dataDir);
+  const store = new Store(config.execDir);
   await store.init();
 
   const engine = new Engine(config, store);
@@ -71,7 +72,7 @@ export async function startRuntime(): Promise<void> {
       `[artificer-runtime] ${config.agentName} listening on http://localhost:${info.port}`,
     );
     // eslint-disable-next-line no-console
-    console.log(`[artificer-runtime] data dir: ${config.dataDir}`);
+    console.log(`[artificer-runtime] exec dir: ${config.execDir}`);
   });
 
   const watchIntervalMs = config.github?.watchIntervalMs;

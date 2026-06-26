@@ -1,0 +1,160 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$id": "https://artificer.dev/schemas/artificer.config.schema.json",
+  "title": "Artificer Agent Config",
+  "description": "Configuration for an Artificer agent (artificer.config.json).",
+  "type": "object",
+  "required": ["name"],
+  "additionalProperties": false,
+  "properties": {
+    "$schema": {
+      "type": "string"
+    },
+    "name": {
+      "type": "string",
+      "description": "Human-facing name of the agent. Used in logs, the runtime UI, and as the default exec-dir subfolder."
+    },
+    "description": {
+      "type": "string",
+      "description": "Short description of what this agent does."
+    },
+    "preset": {
+      "type": "string",
+      "description": "Named model preset that seeds the three complexity tiers and the per-role tier map. Overridden by explicit 'models' or LLM_MODEL* env vars.",
+      "enum": [
+        "async-economy",
+        "ultra-budget",
+        "async-slow",
+        "quality-first",
+        "bench-budget",
+        "go-economy",
+        "go-flash",
+        "go-mimo",
+        "go-quality",
+        "go-minimax"
+      ]
+    },
+    "models": {
+      "type": "object",
+      "description": "Override individual tier model IDs. Any tier not listed falls back to the active preset.",
+      "additionalProperties": false,
+      "properties": {
+        "low": {
+          "type": "string",
+          "description": "Model ID for the low-complexity tier (routing, comms, lightweight review)."
+        },
+        "medium": {
+          "type": "string",
+          "description": "Model ID for the medium-complexity tier (planning, implementation)."
+        },
+        "high": {
+          "type": "string",
+          "description": "Model ID for the high-complexity tier (orchestrator escalation only)."
+        }
+      }
+    },
+    "roleTiers": {
+      "type": "object",
+      "description": "Override which complexity tier each role uses. Any role not listed falls back to the preset's role map.",
+      "additionalProperties": false,
+      "properties": {
+        "communicator": { "$ref": "#/$defs/modelTier" },
+        "orchestrator": { "$ref": "#/$defs/modelTier" },
+        "planner": { "$ref": "#/$defs/modelTier" },
+        "reviewer": { "$ref": "#/$defs/modelTier" },
+        "worker": { "$ref": "#/$defs/modelTier" },
+        "librarian": { "$ref": "#/$defs/modelTier" }
+      }
+    },
+    "concurrency": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Max concurrent in-flight LLM calls across all workstreams. Defaults to 2."
+    },
+    "maxIterationsPerCall": {
+      "type": "integer",
+      "minimum": 1,
+      "description": "Max tool-use iterations allowed within a single LLM call before forcing a stop. Defaults to 24."
+    },
+    "port": {
+      "type": "integer",
+      "minimum": 1,
+      "maximum": 65535,
+      "description": "HTTP port for the runtime server. Defaults to 4100."
+    },
+    "execDir": {
+      "type": "string",
+      "description": "Root directory where runs, workstreams, and workspace artifacts are persisted. Defaults to ~/.artificer/<name>."
+    },
+    "github": {
+      "type": "object",
+      "description": "Agent GitHub identity settings.",
+      "additionalProperties": false,
+      "properties": {
+        "watchInterval": {
+          "type": "string",
+          "pattern": "^\\d+(ms|s|m|h)$",
+          "description": "Polling interval for the agent's own PRs and notifications (e.g. '5m', '30s'). Omit to disable."
+        }
+      }
+    },
+    "executor": {
+      "description": "Worker executor backend for work roles (planner, worker, reviewer). Defaults to 'llm' (internal tool-use loop). Set to 'cursor-agent' to delegate work to the cursor agent CLI instead.",
+      "oneOf": [
+        {
+          "type": "string",
+          "enum": ["llm", "cursor-agent"]
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type"],
+          "properties": {
+            "type": {
+              "type": "string",
+              "enum": ["cursor-agent"]
+            },
+            "model": {
+              "type": "string",
+              "description": "Model to pass to cursor agent via --model (e.g. 'claude-sonnet-4-5')."
+            }
+          }
+        }
+      ]
+    },
+    "identity": {
+      "type": "object",
+      "description": "Identity git sync settings — controls automatic commit/push of memories and config changes.",
+      "additionalProperties": false,
+      "properties": {
+        "autoCommit": {
+          "type": "boolean",
+          "description": "Commit changes to the identity repo automatically (memories, config updates). Default: false."
+        },
+        "autoPush": {
+          "type": "boolean",
+          "description": "Push commits to the remote after each autoCommit. Requires autoCommit: true. Default: false."
+        },
+        "commitPrefix": {
+          "type": "string",
+          "description": "Prefix for auto-generated commit messages. Default: 'memory:' for memories, 'config:' for config changes."
+        },
+        "remote": {
+          "type": "string",
+          "description": "Git remote name to push to. Default: 'origin'."
+        },
+        "branch": {
+          "type": "string",
+          "description": "Branch to push to. Default: the current branch."
+        }
+      }
+    }
+  },
+  "$defs": {
+    "modelTier": {
+      "type": "string",
+      "enum": ["low", "medium", "high"],
+      "description": "Complexity tier: low (cheap/fast), medium (balanced), high (most capable)."
+    }
+  }
+}
