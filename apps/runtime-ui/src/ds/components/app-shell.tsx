@@ -11,6 +11,17 @@ const shellCls = {
     height: '100%',
     minHeight: '100vh',
   }),
+  aside: styles.class('nb-shell-aside', {
+    gridArea: 'aside',
+    borderLeft: `2px solid ${color.border}`,
+    background: color.surface,
+    overflowY: 'hidden',
+    position: 'sticky',
+    top: '56px',
+    height: 'calc(100vh - 56px)',
+    display: 'flex',
+    flexDirection: 'column',
+  }),
   header: styles.class('nb-shell-header', {
     gridArea: 'header',
     display: 'flex',
@@ -74,16 +85,38 @@ function ShellMain({ children, className, style, ...props }: ShellMainProps) {
   );
 }
 
+type ShellAsideProps = HTMLAttributes<HTMLElement> & { p?: string };
+function ShellAside({ p = space.sm, children, className, style, ...props }: ShellAsideProps) {
+  return (
+    <aside
+      className={cx(shellCls.aside, className)}
+      style={{ padding: p, ...style }}
+      {...props}
+    >
+      {children}
+    </aside>
+  );
+}
+
 export type AppShellProps = HTMLAttributes<HTMLDivElement> & {
   header?: { height: number };
   navbar?: { width: number; breakpoint: string };
+  aside?: { width: number; open: boolean };
   padding?: string;
   children: ReactNode;
 };
 
-function AppShellRoot({ header, navbar, padding, children, className, ...props }: AppShellProps) {
+function AppShellRoot({ header, navbar, aside, padding, children, className, style, ...props }: AppShellProps) {
+  const gridCols = aside?.open ? `220px 1fr ${aside.width}px` : '220px 1fr';
+  const gridAreas = aside?.open
+    ? '"header header header" "navbar main aside"'
+    : '"header header" "navbar main"';
   return (
-    <div className={cx(shellCls.root, className)} {...props}>
+    <div
+      className={cx(shellCls.root, className)}
+      style={{ gridTemplateColumns: gridCols, gridTemplateAreas: gridAreas, ...style }}
+      {...props}
+    >
       {children}
     </div>
   );
@@ -93,6 +126,7 @@ export const AppShell = Object.assign(AppShellRoot, {
   Header: ShellHeader,
   Navbar: ShellNavbar,
   Main: ShellMain,
+  Aside: ShellAside,
 });
 
 // ── NavLink ────────────────────────────────────────────────────────────
@@ -122,7 +156,7 @@ const navLinkCls = styles.component('nb-navlink', {
         color: color.bg,
         borderColor: color.border,
         fontWeight: font.w700,
-        '&:hover': { background: '#222' },
+        '&:hover': { background: color.grayBg },
       },
       false: {},
     },

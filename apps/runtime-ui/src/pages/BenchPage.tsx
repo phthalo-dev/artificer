@@ -216,14 +216,14 @@ export function BenchPage() {
         <BenchEfficiencyChart
           title="Score vs. cost per run"
           subtitle="Archived benchmark runs (avg cost per instance vs pass rate)"
-          points={data.runEfficiency}
+          points={data.runEfficiency ?? []}
           xLabel="Avg cost per instance"
           yLabel="Pass@1"
         />
         <BenchEfficiencyChart
           title="Score vs. cost per instance"
           subtitle="Current run — green pass, red fail"
-          points={data.instanceEfficiency}
+          points={data.instanceEfficiency ?? []}
           xLabel="Instance cost"
           yLabel="Pass / fail"
         />

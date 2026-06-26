@@ -57,8 +57,10 @@ function PresetCard({
     <Card
       padding="md"
       style={{
-        border: active ? '2px solid #2563eb' : '2px solid #000',
-        background: active ? '#dbeafe' : undefined,
+        border: active
+          ? '2px solid var(--nb-color-blue)'
+          : '2px solid var(--nb-color-border)',
+        background: active ? 'var(--nb-color-blueLight)' : undefined,
       }}
     >
       <Group justify="space-between" align="flex-start" mb={6}>
@@ -198,7 +200,7 @@ export function ModelsPage() {
           Presets
         </Text>
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
-          {data.presets.map((preset) => (
+          {(data.presets ?? []).map((preset) => (
             <PresetCard
               key={preset.id}
               preset={preset}

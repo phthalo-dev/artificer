@@ -1,4 +1,5 @@
-import { AppShell, Badge, Group, NavLink, Text, Title } from './ds';
+import { useState } from 'react';
+import { AppShell, Badge, Button, Group, NavLink, Text, ThemeToggle, Title } from './ds';
 import {
   IconActivity,
   IconBook,
@@ -6,6 +7,8 @@ import {
   IconCpu,
   IconFlask,
   IconLayoutDashboard,
+  IconLayoutSidebarRight,
+  IconLayoutSidebarRightCollapse,
 } from '@tabler/icons-react';
 import {
   NavLink as RouterNavLink,
@@ -14,6 +17,7 @@ import {
   useLocation,
 } from 'react-router-dom';
 import { useRuntimeState } from './api/hooks';
+import { ActivityFeed } from './components/ActivityFeed';
 import { BenchPage } from './pages/BenchPage';
 import { BenchRunPage } from './pages/BenchRunPage';
 import { DashboardPage } from './pages/DashboardPage';
@@ -36,17 +40,30 @@ const NAV = [
 export function App() {
   const { data: state } = useRuntimeState();
   const location = useLocation();
+  const [asideOpen, setAsideOpen] = useState(true);
 
   return (
     <AppShell
       header={{ height: 56 }}
       navbar={{ width: 220, breakpoint: 'sm' }}
+      aside={{ width: 260, open: asideOpen }}
       padding="md"
     >
       <AppShell.Header>
         <Group style={{ height: '100%', padding: '0 var(--nb-space-md)' }} justify="space-between">
           <Title order={4}>{state?.agentName ?? 'Artificer'} Runtime</Title>
           <Group gap="xs">
+            <Button
+              variant="subtle"
+              size="sm"
+              onPress={() => setAsideOpen((o) => !o)}
+              aria-label={asideOpen ? 'Hide activity' : 'Show activity'}
+            >
+              {asideOpen
+                ? <IconLayoutSidebarRightCollapse size={18} />
+                : <IconLayoutSidebarRight size={18} />}
+            </Button>
+            <ThemeToggle />
             {state?.busy ? (
               <Badge color="blue" variant="light">
                 working · {state.queue.running} running / {state.queue.pending} queued
@@ -95,6 +112,12 @@ export function App() {
           <Route path="/messages/:id/cost" element={<MessageCostPage />} />
         </Routes>
       </AppShell.Main>
+
+      {asideOpen && (
+        <AppShell.Aside>
+          <ActivityFeed />
+        </AppShell.Aside>
+      )}
     </AppShell>
   );
 }

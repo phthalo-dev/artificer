@@ -4,6 +4,7 @@ import {
   Badge,
   type BadgeColor,
   Box,
+  Button,
   Card,
   Code,
   Group,
@@ -18,7 +19,7 @@ import {
 } from '../ds';
 import { IconArrowLeft } from '@tabler/icons-react';
 import { Link, useParams } from 'react-router-dom';
-import { useWorkstream } from '../api/hooks';
+import { useCancelWorkstream, useWorkstream } from '../api/hooks';
 import type { ReviewSeverity, RunRecord, Workstream } from '../api/types';
 import {
   BenchTrajectory,
@@ -82,9 +83,12 @@ function primaryModel(runs: RunRecord[]): string | null {
   return best;
 }
 
+const TERMINAL_STATUSES = new Set(['done', 'failed', 'cancelled']);
+
 export function WorkstreamDetailPage() {
   const { id } = useParams();
   const { data, isLoading, error } = useWorkstream(id);
+  const cancel = useCancelWorkstream(id);
 
   if (isLoading) return <Loader size="sm" />;
   if (error || !data) {
@@ -125,6 +129,17 @@ export function WorkstreamDetailPage() {
         <Group gap="sm" align="center">
           <Title order={2}>{ws.title}</Title>
           <StatusBadge status={ws.status} />
+          {!TERMINAL_STATUSES.has(ws.status) && (
+            <Button
+              variant="outline"
+              size="sm"
+              loading={cancel.isPending}
+              onPress={() => cancel.mutate()}
+              style={{ color: 'var(--nb-color-red)', borderColor: 'var(--nb-color-red)' }}
+            >
+              Stop
+            </Button>
+          )}
         </Group>
         <Text c="dimmed" size="sm" mt={4} style={{ whiteSpace: 'pre-wrap' }}>
           {ws.goal}

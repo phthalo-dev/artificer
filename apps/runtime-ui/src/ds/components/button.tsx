@@ -34,7 +34,7 @@ const btnCls = styles.component('nb-button', {
       filled:  {
         background: color.border,
         color: color.bg,
-        '&[data-hovered]': { background: '#222' },
+        '&[data-hovered]': { background: color.grayBg },
       },
       light:   { background: color.grayLight, boxShadow: 'none', '&[data-hovered]': { background: color.grayBg } },
       default: {},

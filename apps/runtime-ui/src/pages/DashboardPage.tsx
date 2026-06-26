@@ -16,7 +16,7 @@ function Bubble({ message }: { message: Message }) {
       <Paper
         p="sm"
         maw="80%"
-        bg={inbound ? '#dbeafe' : undefined}
+        bg={inbound ? 'var(--nb-color-blueLight)' : 'var(--nb-color-surface)'}
       >
         <Group justify="space-between" gap="xs" mb={4}>
           <Text size="xs" c="dimmed" fw={600}>{inbound ? 'You' : 'Agent'}</Text>
