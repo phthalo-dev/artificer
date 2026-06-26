@@ -1,4 +1,35 @@
 import { useCallback, useEffect, useState } from 'react';
+import { darkTheme } from './tokens';
+
+const THEME_STORAGE_KEY = 'theme';
+
+export function useTheme() {
+  const [isDark, setIsDark] = useState(() => {
+    if (typeof window === 'undefined') return false;
+    return document.documentElement.classList.contains(darkTheme.className);
+  });
+
+  useEffect(() => {
+    localStorage.setItem(THEME_STORAGE_KEY, isDark ? 'dark' : 'light');
+
+    if (isDark) {
+      document.documentElement.classList.add(darkTheme.className);
+    } else {
+      document.documentElement.classList.remove(darkTheme.className);
+    }
+
+    const meta = document.querySelector('meta[name="theme-color"]');
+    if (meta) {
+      meta.setAttribute('content', isDark ? '#121212' : '#ffffff');
+    }
+  }, [isDark]);
+
+  return {
+    isDark,
+    themeClass: isDark ? darkTheme.className : '',
+    toggle: () => setIsDark((dark) => !dark),
+  };
+}
 
 export function useDebouncedValue<T>(value: T, delay: number): [T] {
   const [debounced, setDebounced] = useState(value);

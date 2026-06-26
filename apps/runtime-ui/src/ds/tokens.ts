@@ -41,6 +41,42 @@ export const space = tokens.create('nb-space', {
   xxl: '48px',
 });
 
+export const darkTheme = tokens.createTheme('dark', {
+  base: {
+    'nb-color': {
+      bg: '#121212',
+      surface: '#1c1c1c',
+      border: '#525252',
+      text: '#f0f0f0',
+      muted: '#a3a3a3',
+      dimmed: '#737373',
+      blue: '#93c5fd',
+      blueLight: '#1e3a5f',
+      green: '#4ade80',
+      greenLight: '#14532d',
+      red: '#f87171',
+      redLight: '#450a0a',
+      orange: '#fb923c',
+      orangeLight: '#431407',
+      gray: '#9ca3af',
+      grayLight: '#262626',
+      grayBg: '#333333',
+      cyan: '#22d3ee',
+      cyanLight: '#164e63',
+      violet: '#a78bfa',
+      violetLight: '#2e1065',
+      indigo: '#818cf8',
+      indigoLight: '#1e1b4b',
+      teal: '#2dd4bf',
+      tealLight: '#134e4a',
+      grape: '#c084fc',
+      grapeLight: '#3b0764',
+      yellow: '#facc15',
+      yellowLight: '#422006',
+    },
+  },
+});
+
 export const font = tokens.create('nb-font', {
   familySans: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
   familyMono: '"Fira Code", "Cascadia Code", Consolas, "Courier New", monospace',

@@ -45,7 +45,7 @@ export function BenchEfficiencyChart({
   xLabel: string;
   yLabel: string;
 }) {
-  if (points.length === 0) {
+  if (!points || points.length === 0) {
     return (
       <Paper p="md">
         <Text fw={600} size="sm">

@@ -18,3 +18,4 @@ export * from './components/modal';
 export * from './components/tooltip';
 export * from './components/app-shell';
 export * from './components/table';
+export * from './components/theme-toggle';
