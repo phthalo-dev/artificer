@@ -5,6 +5,7 @@ import { Engine } from '../engine/engine.js';
 import { createApp } from '../server/app.js';
 import { Store } from '../storage/store.js';
 import { IdentityStore } from '../storage/identity-store.js';
+import { IdentityGitSync } from '../storage/identity-git-sync.js';
 import { ToolRegistry } from './tool-registry.js';
 import { WorkstreamMemoryService } from '../engine/workstream-memory.js';
 import { scanAgentDirectory } from '../discover/discover.js';
@@ -40,7 +41,9 @@ export async function createRuntime(
 
   const store = new Store(dataDir);
   await store.init();
-  const identity = new IdentityStore(rootDir);
+  const identity = config.identity?.autoCommit
+    ? new IdentityGitSync(rootDir, config.identity, config.github)
+    : new IdentityStore(rootDir);
   await identity.init();
 
   const tools = new ToolRegistry();

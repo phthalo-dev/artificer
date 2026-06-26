@@ -12,6 +12,10 @@ export interface IdentityConfig {
   autoCommit?: boolean;
   autoPush?: boolean;
   commitPrefix?: string;
+  /** Git remote name to push to (default: "origin"). */
+  remote?: string;
+  /** Branch to push to (default: current branch). */
+  branch?: string;
 }
 
 export interface GitHubShorthand {
