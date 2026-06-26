@@ -107,6 +107,7 @@ export interface RunRecord {
   parentRunId?: string;
   originMessageId?: string;
   model?: string;
+  executor?: string;
   status: RunStatus;
   toolCalls: ToolInvocation[];
   usage: TokenUsage;

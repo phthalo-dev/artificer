@@ -137,6 +137,8 @@ export interface RunRecord {
   originMessageId?: string;
   /** Model used for this call (captured for cost attribution). */
   model?: string;
+  /** Executor backend that ran this call (e.g. 'cursor-agent'). Absent means LLM. */
+  executor?: string;
   status: RunStatus;
   toolCalls: ToolInvocation[];
   usage: TokenUsage;
