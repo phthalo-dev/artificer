@@ -22,6 +22,7 @@ function facts(overrides: Partial<WorkstreamFacts> = {}): WorkstreamFacts {
     consecutiveFailedRuns: 0,
     plannerRunsWithoutPlan: 0,
     noProgressRepeats: 0,
+    prSubmitted: false,
     totalRuns: 1,
     maxRuns: 40,
     ...overrides,
@@ -141,9 +142,25 @@ test('worker never reports done -> review forced at the per-review cap', () => {
   assert.equal((a as { role: string }).role, 'reviewer');
 });
 
-test('patch present and approved -> done', () => {
+test('patch present and approved with repo -> submit PR before done', () => {
   const a = nextWorkstreamAction(
-    facts({ patchPresent: true, reviewCount: 1, lastReviewApproved: true }),
+    facts({ patchPresent: true, reviewCount: 1, lastReviewApproved: true, hasRepoUrl: true, prSubmitted: false }),
+  );
+  assert.equal(a.kind, 'dispatch');
+  assert.equal((a as { role: string }).role, 'worker');
+  assert.match((a as { task: string }).task, /pull request/i);
+});
+
+test('patch present, approved, and PR already submitted -> done', () => {
+  const a = nextWorkstreamAction(
+    facts({ patchPresent: true, reviewCount: 1, lastReviewApproved: true, prSubmitted: true }),
+  );
+  assert.deepEqual(a, { kind: 'done' });
+});
+
+test('non-repo task approved -> done without PR step', () => {
+  const a = nextWorkstreamAction(
+    facts({ patchPresent: true, reviewCount: 1, lastReviewApproved: true, hasRepoUrl: false }),
   );
   assert.deepEqual(a, { kind: 'done' });
 });
@@ -185,8 +202,29 @@ test('too many rejected reviews without convergence -> blocked', () => {
   assert.equal(a.kind, 'blocked');
 });
 
+test('approved review + clean working tree (committed) + PR submitted -> done (not an implement loop)', () => {
+  // Regression: after the submit worker commits the patch the working tree
+  // becomes clean (patchPresent = false). The machine must not re-enter the
+  // implement loop — it should see the approval and return done.
+  const a = nextWorkstreamAction(
+    facts({ patchPresent: false, reviewCount: 1, lastReviewApproved: true, prSubmitted: true }),
+  );
+  assert.deepEqual(a, { kind: 'done' });
+});
+
+test('approved review + clean working tree + PR not yet submitted -> re-dispatch submit', () => {
+  // Commit happened but push failed; the machine should retry the submit
+  // worker rather than falling into an implement loop.
+  const a = nextWorkstreamAction(
+    facts({ patchPresent: false, reviewCount: 1, lastReviewApproved: true, prSubmitted: false }),
+  );
+  assert.equal(a.kind, 'dispatch');
+  assert.equal((a as { role: string }).role, 'worker');
+  assert.match((a as { task: string }).task, /pull request/i);
+});
+
 test('full happy path converges to done without an orchestrator', () => {
-  // setup -> plan -> implement -> review -> done, driven only by facts.
+  // setup -> plan -> implement -> review -> submit PR -> done, driven only by facts.
   let f = facts({ repoReady: false, planWritten: false });
   assert.equal(nextWorkstreamAction(f).kind, 'setup');
 
@@ -199,6 +237,9 @@ test('full happy path converges to done without an orchestrator', () => {
   f = facts({ patchPresent: true, reviewCount: 0, workSinceLastReview: 1, lastWorkerDone: true });
   assert.equal((nextWorkstreamAction(f) as { role: string }).role, 'reviewer');
 
-  f = facts({ patchPresent: true, reviewCount: 1, lastReviewApproved: true });
+  f = facts({ patchPresent: true, reviewCount: 1, lastReviewApproved: true, prSubmitted: false });
+  assert.equal((nextWorkstreamAction(f) as { role: string }).role, 'worker');
+
+  f = facts({ patchPresent: true, reviewCount: 1, lastReviewApproved: true, prSubmitted: true });
   assert.equal(nextWorkstreamAction(f).kind, 'done');
 });

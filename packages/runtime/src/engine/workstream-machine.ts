@@ -62,6 +62,19 @@ export const IMPLEMENT_DIRECT_TASK =
   'or add test files. Record key facts with record_finding. Report BLOCKED if ' +
   'genuinely stuck.';
 
+export const SUBMIT_TASK =
+  'The review approved your changes. Now submit them as a pull request:\n' +
+  '1. Create a descriptive branch name from the workstream title (e.g. add-contributing-guidelines).\n' +
+  '2. Stage and commit all changes with a clear commit message.\n' +
+  '3. Try pushing the branch to origin. If the push fails with a 403 or permission error,\n' +
+  '   you do not have push access to the upstream repo — fork it first:\n' +
+  '   a. Run `gh repo fork --remote=true` to create a fork and add it as a remote.\n' +
+  '   b. Push to the fork remote instead (usually named "origin" after forking, with upstream renamed).\n' +
+  '4. Open a pull request with `gh pr create` — include a summary of what changed and why.\n' +
+  '   When working from a fork, `gh pr create` automatically targets the upstream repo.\n' +
+  '5. Report the PR URL in report_status so it can be tracked.\n' +
+  'Do not modify any files. Only create the branch, commit, push, and open the PR.';
+
 export const FIX_TASK =
   'A review rejected the current change. Read the findings and recorded review ' +
   'issues, address them by editing the repository source, then re-run the test ' +
@@ -95,6 +108,8 @@ export interface WorkstreamFacts {
   plannerRunsWithoutPlan: number;
   /** Trailing worker runs since the last review with no progress (thrash). */
   noProgressRepeats: number;
+  /** Whether changes have been pushed and a PR opened. */
+  prSubmitted: boolean;
   /** Total runs in this workstream (drives the hard run cap). */
   totalRuns: number;
   /** Hard per-workstream run cap. */
@@ -138,6 +153,16 @@ export function nextWorkstreamAction(f: WorkstreamFacts): WorkstreamAction {
     return { kind: 'dispatch', role: 'planner', task: PLAN_TASK };
   }
 
+  // If the review already approved, route to submit or done — checked before
+  // patchPresent so a committed (clean) working tree doesn't re-trigger
+  // implementation after the submit worker commits the change.
+  if (f.lastReviewApproved === true) {
+    if (f.hasRepoUrl && !f.prSubmitted) {
+      return { kind: 'dispatch', role: 'worker', task: SUBMIT_TASK };
+    }
+    return { kind: 'done' };
+  }
+
   // Implement until there is a candidate patch — from the plan if we have one,
   // otherwise directly from the goal.
   if (!f.patchPresent) {
@@ -146,11 +171,6 @@ export function nextWorkstreamAction(f: WorkstreamFacts): WorkstreamAction {
       role: 'worker',
       task: f.planWritten ? IMPLEMENT_TASK : IMPLEMENT_DIRECT_TASK,
     };
-  }
-
-  // A candidate patch exists.
-  if (f.lastReviewApproved === true) {
-    return { kind: 'done' };
   }
 
   // There is unreviewed worker output. Let the worker keep implementing until it
