@@ -1,6 +1,7 @@
 import {
   Anchor,
   Badge,
+  Button,
   Card,
   Code,
   Divider,
@@ -8,15 +9,17 @@ import {
   Loader,
   Modal,
   ScrollArea,
+  Select,
   Stack,
   Text,
+  Textarea,
   TextInput,
   Title,
 } from '../ds';
 import { useDebouncedValue, useDisclosure } from '../ds/hooks';
-import { IconSearch } from '@tabler/icons-react';
+import { IconPlus, IconSearch, IconTrash } from '@tabler/icons-react';
 import { useState } from 'react';
-import { useMemories } from '../api/hooks';
+import { useMemories, useCreateMemory, useDeleteMemory, type CreateMemoryInput } from '../api/hooks';
 import type { Memory } from '../api/types';
 import { formatTime, relativeTime } from '../format';
 
@@ -97,7 +100,15 @@ function MemoryCard({
   );
 }
 
-function MemoryDetail({ memory }: { memory: Memory }) {
+function MemoryDetail({
+  memory,
+  onDelete,
+  deleting,
+}: {
+  memory: Memory;
+  onDelete: () => void;
+  deleting: boolean;
+}) {
   return (
     <Stack gap="sm">
       {memory.summary && (
@@ -169,7 +180,118 @@ function MemoryDetail({ memory }: { memory: Memory }) {
           <Code>{memory.id}</Code>
         </Group>
       </Stack>
+      <Divider />
+      <Group justify="flex-end">
+        <Button
+          variant="light"
+          leftSection={<IconTrash size={14} />}
+          size="xs"
+          loading={deleting}
+          onClick={onDelete}
+          style={{ color: 'var(--color-error, #c00)' }}
+        >
+          Delete
+        </Button>
+      </Group>
     </Stack>
+  );
+}
+
+function AddMemoryModal({
+  opened,
+  onClose,
+}: {
+  opened: boolean;
+  onClose: () => void;
+}) {
+  const createMemory = useCreateMemory();
+  const [form, setForm] = useState<{
+    content: string;
+    title: string;
+    summary: string;
+    tags: string;
+    kind: string;
+    source: string;
+  }>({ content: '', title: '', summary: '', tags: '', kind: 'note', source: '' });
+
+  const set = (field: keyof typeof form) => (value: string) =>
+    setForm((f) => ({ ...f, [field]: value }));
+
+  const handleSubmit = async () => {
+    const input: CreateMemoryInput = {
+      content: form.content,
+      title: form.title || undefined,
+      summary: form.summary || undefined,
+      tags: form.tags ? form.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+      kind: (form.kind as CreateMemoryInput['kind']) || 'note',
+      source: form.source || undefined,
+    };
+    await createMemory.mutateAsync(input);
+    setForm({ content: '', title: '', summary: '', tags: '', kind: 'note', source: '' });
+    onClose();
+  };
+
+  return (
+    <Modal opened={opened} onClose={onClose} title={<Text fw={600}>Add Memory</Text>} size="lg">
+      <Stack gap="sm">
+        <TextInput
+          label="Title"
+          placeholder="Short label for this memory"
+          value={form.title}
+          onChange={set('title')}
+        />
+        <Stack gap={4}>
+          <Text size="sm" fw={600}>Content <Text c="dimmed">(required)</Text></Text>
+          <Textarea
+            placeholder="The memory content…"
+            autosize
+            minRows={4}
+            value={form.content}
+            onChange={(e) => set('content')(e.currentTarget.value)}
+          />
+        </Stack>
+        <TextInput
+          label="Summary"
+          placeholder="One-line gist used for search ranking"
+          value={form.summary}
+          onChange={set('summary')}
+        />
+        <TextInput
+          label="Tags"
+          placeholder="Comma-separated tags, e.g. style, payments"
+          value={form.tags}
+          onChange={set('tags')}
+        />
+        <Select
+          label="Kind"
+          data={[
+            { value: 'note', label: 'Note' },
+            { value: 'document', label: 'Document' },
+            { value: 'preference', label: 'Preference' },
+          ]}
+          value={form.kind}
+          onChange={(v) => set('kind')(v ?? 'note')}
+        />
+        <TextInput
+          label="Source"
+          placeholder="URL or description, e.g. https://… or conversation"
+          value={form.source}
+          onChange={set('source')}
+        />
+        <Group justify="flex-end" mt="xs">
+          <Button variant="default" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            onClick={handleSubmit}
+            loading={createMemory.isPending}
+            isDisabled={!form.content.trim()}
+          >
+            Save
+          </Button>
+        </Group>
+      </Stack>
+    </Modal>
   );
 }
 
@@ -178,16 +300,34 @@ export function MemoriesPage() {
   const [debounced] = useDebouncedValue(query, 300);
   const { data, isLoading } = useMemories(debounced.trim() || undefined);
   const [selected, setSelected] = useState<Memory | null>(null);
-  const [opened, { open, close }] = useDisclosure(false);
+  const [detailOpened, { open: openDetail, close: closeDetail }] = useDisclosure(false);
+  const [addOpened, { open: openAdd, close: closeAdd }] = useDisclosure(false);
+  const deleteMemory = useDeleteMemory();
 
   const select = (m: Memory) => {
     setSelected(m);
-    open();
+    openDetail();
+  };
+
+  const handleDelete = async () => {
+    if (!selected) return;
+    await deleteMemory.mutateAsync(selected.id);
+    closeDetail();
+    setSelected(null);
   };
 
   return (
     <Stack gap="lg">
-      <Title order={3}>Memories</Title>
+      <Group justify="space-between">
+        <Title order={3}>Memories</Title>
+        <Button
+          leftSection={<IconPlus size={14} />}
+          size="xs"
+          onClick={openAdd}
+        >
+          Add Memory
+        </Button>
+      </Group>
       <TextInput
         aria-label="Search memories"
         leftSection={<IconSearch size={16} />}
@@ -210,8 +350,8 @@ export function MemoriesPage() {
       </Stack>
 
       <Modal
-        opened={opened}
-        onClose={close}
+        opened={detailOpened}
+        onClose={closeDetail}
         size="lg"
         title={
           <Text fw={600}>
@@ -219,8 +359,16 @@ export function MemoriesPage() {
           </Text>
         }
       >
-        {selected && <MemoryDetail memory={selected} />}
+        {selected && (
+          <MemoryDetail
+            memory={selected}
+            onDelete={handleDelete}
+            deleting={deleteMemory.isPending}
+          />
+        )}
       </Modal>
+
+      <AddMemoryModal opened={addOpened} onClose={closeAdd} />
     </Stack>
   );
 }

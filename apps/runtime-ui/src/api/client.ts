@@ -1,4 +1,4 @@
-const baseOrigin =
+export const baseOrigin =
   import.meta.env.VITE_RUNTIME_URL ?? window.location.origin;
 export const RUNTIME_URL = `${baseOrigin.replace(/\/$/, '')}/api`;
 
@@ -79,4 +79,5 @@ export const api = {
     request<T>(path, { method: 'POST', body: JSON.stringify(body) }),
   put: <T>(path: string, body: unknown) =>
     request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
+  delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
 };

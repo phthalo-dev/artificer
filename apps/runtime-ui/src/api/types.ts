@@ -16,7 +16,7 @@ export interface Memory {
   title?: string;
   summary?: string;
   source?: string;
-  kind?: 'note' | 'document';
+  kind?: 'note' | 'document' | 'preference';
   updatedAt?: string;
 }
 
