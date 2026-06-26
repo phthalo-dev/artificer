@@ -1,5 +1,6 @@
+import os from 'node:os';
 import path from 'node:path';
-import type { ArtificerConfig, IdentityConfig } from './api/types.js';
+import type { ArtificerConfig, ExecutorConfig, IdentityConfig } from './api/types.js';
 import type { DiagnosticsConfig } from './diagnostics/types.js';
 import {
   isModelTier,
@@ -38,8 +39,8 @@ export interface RuntimeConfig {
   roleTiers: Record<RoleName, ModelTier>;
   /** Which model preset seeded tiers/roleTiers (env MODEL_PRESET). */
   modelPresetId: string;
-  /** Root directory where all messages and work history are persisted. */
-  dataDir: string;
+  /** Root directory where all execution artifacts are persisted (runs, workstreams, workspace). */
+  execDir: string;
   /** HTTP port for the runtime server. */
   port: number;
   /** Max concurrent in-flight LLM calls across all workstreams. */
@@ -76,6 +77,8 @@ export interface RuntimeConfig {
   apiAuthKey?: string;
   /** Identity git sync settings (commit/push memories to git). */
   identity?: IdentityConfig;
+  /** Worker executor backend. Defaults to 'llm' (internal tool loop). */
+  executor?: ExecutorConfig;
 }
 
 /** The agent's GitHub identity, used to clone, push, and open/comment on PRs. */
@@ -101,9 +104,10 @@ function required(name: string, value: string | undefined): string {
 }
 
 export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
-  const dataDir = env.ARTIFICER_DATA_DIR
-    ? path.resolve(env.ARTIFICER_DATA_DIR)
-    : path.resolve(process.cwd(), 'data');
+  const agentName = env.AGENT_NAME || 'Artificer';
+  const execDir = env.ARTIFICER_EXEC_DIR
+    ? path.resolve(env.ARTIFICER_EXEC_DIR)
+    : path.join(os.homedir(), '.artificer', agentName);
 
   const presetId = env.MODEL_PRESET ?? DEFAULT_PRESET_ID;
   const preset = getPreset(presetId) ?? getPreset(DEFAULT_PRESET_ID)!;
@@ -195,7 +199,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     models,
     roleTiers,
     modelPresetId,
-    dataDir,
+    execDir,
     port: env.PORT ? Number(env.PORT) : 4100,
     concurrency: env.RUNTIME_CONCURRENCY ? Number(env.RUNTIME_CONCURRENCY) : 2,
     maxIterationsPerCall: env.RUNTIME_MAX_ITERATIONS
@@ -209,7 +213,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
       ? Number(env.RUNTIME_MAX_RUNS_PER_WORKSTREAM)
       : 60,
     resumeOnStartup: env.RUNTIME_RESUME_ON_STARTUP !== 'false',
-    agentName: env.AGENT_NAME || 'Artificer',
+    agentName,
     github,
     diagnostics,
     contextBorrowing,
@@ -235,7 +239,11 @@ export function mergeWithDefinition(
   definition: ArtificerConfig,
   env: NodeJS.ProcessEnv = process.env,
 ): RuntimeConfig {
-  const base = loadConfig(env);
+  // Let the config file's preset field seed MODEL_PRESET when no env override exists.
+  const effectiveEnv = definition.preset && !env.MODEL_PRESET
+    ? { ...env, MODEL_PRESET: definition.preset }
+    : env;
+  const base = loadConfig(effectiveEnv);
 
   return {
     ...base,
@@ -266,5 +274,6 @@ export function mergeWithDefinition(
         }
       : undefined,
     identity: definition.identity ?? base.identity,
+    executor: definition.executor ?? base.executor,
   };
 }

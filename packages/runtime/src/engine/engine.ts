@@ -16,6 +16,8 @@ import type {
   WorkstreamStatus,
 } from '../storage/types.js';
 import { executeCall } from './call.js';
+import type { WorkerExecutor } from './executor.js';
+import { CursorAgentExecutor } from './cursor-executor.js';
 import { findGitRepo } from './git-repo.js';
 import { cloneRepoIntoWorkspace, hasUncommittedChanges } from './git-ops.js';
 import {
@@ -69,6 +71,7 @@ export class Engine implements EngineApi {
   private readonly events = new EventEmitter();
   private readonly active = new Map<string, ActiveRun>();
   private readonly memoryService?: WorkstreamMemoryService;
+  private readonly executor?: WorkerExecutor;
   /** Avoid spamming the user when many concurrent calls hit the same billing wall. */
   private readonly balanceNotified = new Set<string>();
 
@@ -76,6 +79,7 @@ export class Engine implements EngineApi {
     this.config = config;
     this.store = store;
     this.memoryService = memoryService;
+    this.executor = buildExecutor(config.executor);
     this.scheduler = new Scheduler(config.concurrency, (runId) =>
       this.runOne(runId),
     );
@@ -439,6 +443,7 @@ export class Engine implements EngineApi {
         config: this.config,
         store: this.store,
         engine: this,
+        executor: this.executor,
       });
       await this.afterRun(finished);
     } finally {
@@ -763,4 +768,13 @@ export class Engine implements EngineApi {
       })),
     };
   }
+}
+
+function buildExecutor(
+  config: RuntimeConfig['executor'],
+): WorkerExecutor | undefined {
+  if (!config || config === 'llm') return undefined;
+  if (config === 'cursor-agent') return new CursorAgentExecutor();
+  if (config.type === 'cursor-agent') return new CursorAgentExecutor(config.model);
+  return undefined;
 }
