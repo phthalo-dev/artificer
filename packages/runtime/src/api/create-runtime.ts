@@ -6,6 +6,7 @@ import { createApp } from '../server/app.js';
 import { Store } from '../storage/store.js';
 import { IdentityStore } from '../storage/identity-store.js';
 import { ToolRegistry } from './tool-registry.js';
+import { WorkstreamMemoryService } from '../engine/workstream-memory.js';
 import { scanAgentDirectory } from '../discover/discover.js';
 import { loadSkillsFromDisk, loadInstructionsFromDisk } from '../discover/loader.js';
 import { mountChannels } from '../channels/mount.js';
@@ -46,7 +47,8 @@ export async function createRuntime(
 
   const channels: ArtificerChannel[] = [];
 
-  const engine = new Engine(config, store);
+  const memoryService = new WorkstreamMemoryService(identity, store);
+  const engine = new Engine(config, store, memoryService);
   const app = createApp(engine, { identity });
 
   if (channels.length > 0) {
