@@ -47,7 +47,7 @@ export async function createRuntime(
   const channels: ArtificerChannel[] = [];
 
   const engine = new Engine(config, store);
-  const app = createApp(engine);
+  const app = createApp(engine, { identity });
 
   if (channels.length > 0) {
     mountChannels(app, channels, engine);
@@ -64,11 +64,13 @@ export async function createRuntime(
     async start(port?: number) {
       const p = port ?? config.port;
       serve({ fetch: app.fetch, port: p }, (info) => {
-        console.log(
-          `[artificer] ${config.agentName} listening on http://localhost:${info.port}`,
-        );
-        console.log(`[artificer] identity: ${rootDir}`);
-        console.log(`[artificer] execution: ${dataDir}`);
+        const base = `http://localhost:${info.port}`;
+        console.log(`[artificer] ${config.agentName} ready\n`);
+        console.log(`  API   ${base}/api`);
+        console.log(`  UI    ${base}`);
+        console.log(`  SSE   ${base}/events\n`);
+        console.log(`  identity  ${rootDir}`);
+        console.log(`  data      ${dataDir}`);
       });
     },
   };

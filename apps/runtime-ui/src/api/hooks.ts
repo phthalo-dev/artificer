@@ -3,7 +3,8 @@ import {
   useQuery,
   useQueryClient,
 } from '@tanstack/react-query';
-import { api, sendWork } from './client';
+import { useEffect, useState } from 'react';
+import { api, baseOrigin, sendWork } from './client';
 import type {
   BenchOverview,
   BenchRunDetail,
@@ -139,6 +140,17 @@ export function useUpdateRoleTiers() {
   });
 }
 
+export function useCancelWorkstream(id: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ ok: boolean }>(`/workstreams/${id}/cancel`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['workstream', id] });
+      qc.invalidateQueries({ queryKey: ['workstreams'] });
+    },
+  });
+}
+
 export function useBenchRuns() {
   return useQuery({
     queryKey: ['bench-runs'],
@@ -167,6 +179,89 @@ export function useBenchRun(instanceId: string | undefined) {
   });
 }
 
+export interface ActivityEntry {
+  id: string;
+  kind: 'message' | 'workstream' | 'run' | 'tool';
+  label: string;
+  at: string;
+}
+
+const SSE_KINDS = ['message', 'workstream', 'run', 'tool'] as const;
+const MAX_ENTRIES = 100;
+
+function formatEntry(
+  raw: Record<string, unknown>,
+  kind: ActivityEntry['kind'],
+): ActivityEntry | null {
+  const data = (raw.data ?? {}) as Record<string, unknown>;
+  const at = String(raw.at ?? new Date().toISOString());
+
+  let label: string;
+  switch (kind) {
+    case 'message':
+      if (data.direction !== 'inbound') return null;
+      label = '→ message received';
+      break;
+    case 'workstream':
+      label = `workstream:${String(data.status ?? '?')} "${String(data.title ?? '')}"`;
+      break;
+    case 'run':
+      label = `run:${String(data.status ?? '?')} ${String(data.role ?? '')}`;
+      break;
+    case 'tool':
+      label = `tool ${String(data.name ?? '')}`;
+      break;
+  }
+
+  return { id: crypto.randomUUID(), kind, label, at };
+}
+
+export function useSSEEvents(): ActivityEntry[] {
+  const [entries, setEntries] = useState<ActivityEntry[]>([]);
+
+  useEffect(() => {
+    const url = `${baseOrigin.replace(/\/$/, '')}/events`;
+    let es: EventSource;
+    let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
+    let closed = false;
+
+    function connect() {
+      es = new EventSource(url);
+
+      for (const kind of SSE_KINDS) {
+        es.addEventListener(kind, (e: MessageEvent) => {
+          try {
+            const raw = JSON.parse(e.data) as Record<string, unknown>;
+            const entry = formatEntry(raw, kind);
+            if (!entry) return;
+            setEntries((prev) => {
+              const next = [...prev, entry];
+              return next.length > MAX_ENTRIES ? next.slice(-MAX_ENTRIES) : next;
+            });
+          } catch {
+            // ignore malformed events
+          }
+        });
+      }
+
+      es.onerror = () => {
+        es.close();
+        if (!closed) reconnectTimer = setTimeout(connect, 5000);
+      };
+    }
+
+    connect();
+
+    return () => {
+      closed = true;
+      clearTimeout(reconnectTimer);
+      es.close();
+    };
+  }, []);
+
+  return entries;
+}
+
 export function useMemories(q?: string) {
   return useQuery({
     queryKey: ['memories', q ?? ''],
@@ -176,5 +271,35 @@ export function useMemories(q?: string) {
       ),
     refetchInterval: 5000,
     select: (d) => d.memories,
+  });
+}
+
+export interface CreateMemoryInput {
+  content: string;
+  title?: string;
+  summary?: string;
+  tags?: string[];
+  source?: string;
+  kind?: 'note' | 'document' | 'preference';
+}
+
+export function useCreateMemory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateMemoryInput) =>
+      api.post<{ memory: Memory }>('/memories', input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['memories'] });
+    },
+  });
+}
+
+export function useDeleteMemory() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => api.delete<{ ok: boolean }>(`/memories/${id}`),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['memories'] });
+    },
   });
 }

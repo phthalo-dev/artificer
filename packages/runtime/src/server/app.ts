@@ -18,6 +18,7 @@ import { listPresets } from '../engine/presets.js';
 import { readBenchOverview, readBenchRun, readBenchSuites } from './bench.js';
 import { bearerAuth } from './auth.js';
 import { serveUI } from './static.js';
+import type { IdentityStore } from '../storage/identity-store.js';
 
 const sendMessageSchema = z.object({
   content: z.string().min(1, 'content is required'),
@@ -68,6 +69,15 @@ const PROVIDER_LABEL: Record<LlmSdkPackage, string> = {
   '@ai-sdk/openai-compatible': 'OpenAI-compatible',
 };
 
+const createMemorySchema = z.object({
+  content: z.string().min(1, 'content is required'),
+  title: z.string().optional(),
+  summary: z.string().optional(),
+  tags: z.array(z.string()).optional(),
+  source: z.string().optional(),
+  kind: z.enum(['note', 'document', 'preference']).optional(),
+});
+
 export interface AppDeps {
   /** Runs one GitHub watch cycle and persists the resulting state. Overridable for tests. */
   runGithubWatchOnce?: (
@@ -76,6 +86,8 @@ export interface AppDeps {
   ) => Promise<GithubWatchState>;
   /** Directory containing pre-built runtime-ui assets. When set, the UI SPA is served at /. */
   uiDistDir?: string;
+  /** Persistent identity store. Required for /api/memories routes. */
+  identity?: IdentityStore;
 }
 
 /** Builds the Hono app exposing the agent's "person-like" HTTP surface. */
@@ -234,6 +246,13 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     return c.json({ ok: true }, 202);
   });
 
+  api.post('/workstreams/:id/cancel', async (c) => {
+    const id = c.req.param('id');
+    const ok = await engine.cancelWorkstream(id);
+    if (!ok) return c.json({ error: 'not found or already terminal' }, 404);
+    return c.json({ ok: true });
+  });
+
   api.get('/workstreams', async (c) => {
     const workstreams = await engine.store.listWorkstreams();
     return c.json({ workstreams });
@@ -266,17 +285,39 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
   });
 
   api.get('/memories', async (c) => {
+    if (!deps.identity) return c.json({ error: 'identity store not configured' }, 503);
     const q = c.req.query('q')?.trim();
     if (q) {
-      const memories = await engine.store.queryMemories(q, {
-        limit: 20,
-        charBudget: Number.POSITIVE_INFINITY,
-      });
+      const memories = await deps.identity.queryMemories(q, 20);
       return c.json({ memories });
     }
-    const memories = await engine.store.listMemories();
+    const memories = await deps.identity.listMemories();
     memories.sort((a, b) => b.createdAt.localeCompare(a.createdAt));
     return c.json({ memories });
+  });
+
+  api.post('/memories', async (c) => {
+    if (!deps.identity) return c.json({ error: 'identity store not configured' }, 503);
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = createMemorySchema.safeParse(body);
+    if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
+    const memory = await deps.identity.addMemory({
+      content: parsed.data.content,
+      title: parsed.data.title,
+      summary: parsed.data.summary,
+      tags: parsed.data.tags ?? [],
+      source: parsed.data.source,
+      kind: parsed.data.kind,
+    });
+    return c.json({ memory }, 201);
+  });
+
+  api.delete('/memories/:id', async (c) => {
+    if (!deps.identity) return c.json({ error: 'identity store not configured' }, 503);
+    const id = c.req.param('id');
+    const deleted = await deps.identity.deleteMemory(id);
+    if (!deleted) return c.json({ error: 'not found' }, 404);
+    return c.json({ ok: true });
   });
 
   api.get('/usage', async (c) => {
@@ -357,6 +398,16 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
   const uiDistDir =
     deps.uiDistDir ?? path.resolve(import.meta.dirname, '../../ui-dist');
   app.use('*', serveUI(uiDistDir));
+
+  app.all('*', (c) =>
+    c.json(
+      {
+        error: 'Not found',
+        hint: 'UI assets not built. Run: cd apps/runtime-ui && pnpm build',
+      },
+      404,
+    ),
+  );
 
   return app;
 }
