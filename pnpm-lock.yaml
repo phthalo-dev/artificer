@@ -66,7 +66,7 @@ importers:
         version: 5.9.3
       vite:
         specifier: ^6.0.1
-        version: 6.4.1(@types/node@20.19.35)
+        version: 6.4.1(@types/node@20.19.35)(tsx@4.21.0)
 
   apps/web:
     dependencies:
@@ -300,6 +300,19 @@ importers:
         version: 20.19.35
       typescript:
         specifier: ^5.3.3
+        version: 5.9.3
+
+  packages/cli:
+    dependencies:
+      '@artificer/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+    devDependencies:
+      tsx:
+        specifier: ^4.0.0
+        version: 4.21.0
+      typescript:
+        specifier: ^5.5.0
         version: 5.9.3
 
   packages/opencode-client:
@@ -4921,7 +4934,7 @@ packages:
       '@rolldown/pluginutils': 1.0.0-beta.27
       '@types/babel__core': 7.20.5
       react-refresh: 0.17.0
-      vite: 6.4.1(@types/node@20.19.35)
+      vite: 6.4.1(@types/node@20.19.35)(tsx@4.21.0)
     transitivePeerDependencies:
       - supports-color
     dev: true
@@ -7617,57 +7630,6 @@ packages:
     transitivePeerDependencies:
       - supports-color
       - typescript
-    dev: true
-
-  /vite@6.4.1(@types/node@20.19.35):
-    resolution: {integrity: sha512-+Oxm7q9hDoLMyJOYfUYBuHQo+dkAloi33apOPP56pzj+vsdJDzr+j1NISE5pyaAuKL4A3UD34qd0lx5+kfKp2g==}
-    engines: {node: ^18.0.0 || ^20.0.0 || >=22.0.0}
-    hasBin: true
-    peerDependencies:
-      '@types/node': ^18.0.0 || ^20.0.0 || >=22.0.0
-      jiti: '>=1.21.0'
-      less: '*'
-      lightningcss: ^1.21.0
-      sass: '*'
-      sass-embedded: '*'
-      stylus: '*'
-      sugarss: '*'
-      terser: ^5.16.0
-      tsx: ^4.8.1
-      yaml: ^2.4.2
-    peerDependenciesMeta:
-      '@types/node':
-        optional: true
-      jiti:
-        optional: true
-      less:
-        optional: true
-      lightningcss:
-        optional: true
-      sass:
-        optional: true
-      sass-embedded:
-        optional: true
-      stylus:
-        optional: true
-      sugarss:
-        optional: true
-      terser:
-        optional: true
-      tsx:
-        optional: true
-      yaml:
-        optional: true
-    dependencies:
-      '@types/node': 20.19.35
-      esbuild: 0.25.12
-      fdir: 6.5.0(picomatch@4.0.3)
-      picomatch: 4.0.3
-      postcss: 8.5.6
-      rollup: 4.59.0
-      tinyglobby: 0.2.15
-    optionalDependencies:
-      fsevents: 2.3.3
     dev: true
 
   /vite@6.4.1(@types/node@20.19.35)(tsx@4.21.0):

@@ -14,7 +14,9 @@
     "db:studio": "cd apps/web && pnpm db:studio",
     "type-check": "turbo run type-check",
     "infra:deploy": "pnpm --filter artificer-infrastructure deploy:personal",
-    "infra:sync-env": "pnpm --filter artificer-infrastructure sync:runtime-env"
+    "infra:sync-env": "pnpm --filter artificer-infrastructure sync:runtime-env",
+    "link": "cd packages/runtime && npm link && cd ../cli && npm link",
+    "unlink": "cd packages/cli && npm unlink -g && cd ../runtime && npm unlink -g"
   },
   "devDependencies": {
     "@types/node": "^20.11.5",

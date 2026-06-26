@@ -7,9 +7,35 @@ export async function dev(rootDir?: string): Promise<void> {
   const { createRuntime } = await import('@artificer/runtime');
 
   const runtime = await createRuntime({ rootDir: resolved });
-
-  console.log(
-    `[artificer] Starting ${runtime.config.agentName} in dev mode`,
-  );
   await runtime.start();
+
+  const verbose = process.env.ARTIFICER_VERBOSE === 'true';
+
+  runtime.engine.subscribe((event) => {
+    switch (event.kind) {
+      case 'message': {
+        const msg = event.data as { direction?: string };
+        if (msg.direction === 'inbound') {
+          console.log('[artificer] → message received');
+        }
+        break;
+      }
+      case 'workstream': {
+        const ws = event.data as { status?: string; title?: string };
+        console.log(`[artificer] workstream:${ws.status ?? '?'} "${ws.title ?? ''}"`);
+        break;
+      }
+      case 'run': {
+        const run = event.data as { status?: string; role?: string };
+        console.log(`[artificer] run:${run.status ?? '?'} ${run.role ?? ''}`);
+        break;
+      }
+      case 'tool': {
+        if (verbose) {
+          console.log(`[artificer] tool ${event.data.name}`);
+        }
+        break;
+      }
+    }
+  });
 }
