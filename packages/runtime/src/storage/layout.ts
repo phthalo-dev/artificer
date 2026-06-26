@@ -95,6 +95,11 @@ export class Layout {
     return path.join(this.workstreamDir(workstreamId), 'file-cache.json');
   }
 
+  /** Stores the identity memory ID for a workstream so updates survive restarts. */
+  workstreamMemoryRefFile(workstreamId: string): string {
+    return path.join(this.workstreamDir(workstreamId), 'memory-ref.txt');
+  }
+
   /** Cursor/state for the GitHub activity watcher (own PRs + notifications). */
   githubWatchStateFile(): string {
     return path.join(this.root, 'github-watch-state.json');

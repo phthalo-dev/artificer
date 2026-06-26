@@ -30,6 +30,7 @@ import {
   type ModelPreset,
 } from './presets.js';
 import { Scheduler } from './scheduler.js';
+import { WorkstreamMemoryService } from './workstream-memory.js';
 import type { RoleName } from '../storage/types.js';
 
 interface ActiveRun {
@@ -60,12 +61,14 @@ export class Engine implements EngineApi {
   private readonly scheduler: Scheduler;
   private readonly events = new EventEmitter();
   private readonly active = new Map<string, ActiveRun>();
+  private readonly memoryService?: WorkstreamMemoryService;
   /** Avoid spamming the user when many concurrent calls hit the same billing wall. */
   private readonly balanceNotified = new Set<string>();
 
-  constructor(config: RuntimeConfig, store: Store) {
+  constructor(config: RuntimeConfig, store: Store, memoryService?: WorkstreamMemoryService) {
     this.config = config;
     this.store = store;
+    this.memoryService = memoryService;
     this.scheduler = new Scheduler(config.concurrency, (runId) =>
       this.runOne(runId),
     );
@@ -217,6 +220,7 @@ export class Engine implements EngineApi {
     });
     this.emit({ kind: 'workstream', at: ws.createdAt, data: ws });
 
+    void this.memoryService?.onCreated(ws);
     if (input.autostart !== false) {
       await this.kickoffWorkstream(ws.id, message.id);
     }
@@ -249,6 +253,7 @@ export class Engine implements EngineApi {
       status: 'pending',
     });
     this.emit({ kind: 'workstream', at: ws.createdAt, data: ws });
+    void this.memoryService?.onCreated(ws);
 
     await this.stepWorkstream(ws.id, input.originMessageId, input.parentRunId);
     return ws;
@@ -426,11 +431,14 @@ export class Engine implements EngineApi {
         });
         return;
       }
-      case 'done':
+      case 'done': {
         await this.store.updateWorkstream(workstreamId, { status: 'done' });
         await this.emitWorkstream(workstreamId);
         await this.reply(`Workstream "${ws.title}" is complete.`, workstreamId);
+        const doneWs = await this.store.getWorkstream(workstreamId);
+        if (doneWs) void this.memoryService?.onTerminal(doneWs);
         return;
+      }
       case 'blocked':
         await this.blockWorkstream(ws, action.reason);
         return;
@@ -480,6 +488,23 @@ export class Engine implements EngineApi {
     const plannerRunsWithoutPlan = plan
       ? 0
       : wsRuns.filter((r) => r.role === 'planner' && r.status === 'done').length;
+
+    // A PR is submitted if the submit-specific worker ran after the last
+    // approval and reported done/done_with_concerns. Checking the task text
+    // prevents implement/fix workers (dispatched before the approve+submit
+    // routing was reached) from being mistaken for a submit run — which would
+    // cause the machine to return 'done' before any PR was opened.
+    const prSubmitted =
+      lastReview?.approved === true &&
+      wsRuns.some(
+        (r) =>
+          r.role === 'worker' &&
+          r.status === 'done' &&
+          r.createdAt > lastReview.createdAt &&
+          r.task.startsWith('The review approved') &&
+          workerRunDone(r),
+      );
+
     return {
       hasRepoUrl: Boolean(ws.repoUrl),
       repoReady: repoDir !== undefined,
@@ -492,9 +517,20 @@ export class Engine implements EngineApi {
       consecutiveFailedRuns,
       plannerRunsWithoutPlan,
       noProgressRepeats,
+      prSubmitted,
       totalRuns: wsRuns.length,
       maxRuns: this.config.maxRunsPerWorkstream,
     };
+  }
+
+  async cancelWorkstream(id: string): Promise<boolean> {
+    const ws = await this.store.getWorkstream(id);
+    if (!ws || Engine.FSM_TERMINAL.has(ws.status)) return false;
+    await this.store.updateWorkstream(id, { status: 'cancelled' });
+    await this.emitWorkstream(id);
+    const updated = await this.store.getWorkstream(id);
+    if (updated) void this.memoryService?.onTerminal(updated);
+    return true;
   }
 
   private async blockWorkstream(ws: Workstream, reason: string): Promise<void> {
@@ -504,6 +540,8 @@ export class Engine implements EngineApi {
     });
     await this.emitWorkstream(ws.id);
     await this.reply(`Workstream "${ws.title}" paused: ${reason}`, ws.id);
+    const updated = await this.store.getWorkstream(ws.id);
+    if (updated) void this.memoryService?.onTerminal(updated);
   }
 
   private async emitWorkstream(workstreamId: string): Promise<void> {
@@ -561,6 +599,25 @@ export class Engine implements EngineApi {
       if (!wrotePlan && text && text.length > 200) {
         const existing = await this.store.readPlan(run.workstreamId);
         if (!existing) await this.store.writePlan(run.workstreamId, text);
+      }
+      const plan = await this.store.readPlan(run.workstreamId);
+      if (plan) {
+        const planWs = await this.store.getWorkstream(run.workstreamId);
+        if (planWs) void this.memoryService?.onPlanWritten(planWs, plan);
+      }
+    }
+
+    if (run.role === 'worker' && run.status === 'done') {
+      const workerWs = await this.store.getWorkstream(run.workstreamId);
+      if (workerWs) void this.memoryService?.onWorkerRunFinished(workerWs, run);
+    }
+
+    if (run.role === 'reviewer' && run.status === 'done') {
+      const reviews = await this.store.listReviews(run.workstreamId);
+      const latestReview = reviews.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+      if (latestReview) {
+        const reviewWs = await this.store.getWorkstream(run.workstreamId);
+        if (reviewWs) void this.memoryService?.onReviewCompleted(reviewWs, latestReview);
       }
     }
 

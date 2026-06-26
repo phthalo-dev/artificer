@@ -112,4 +112,63 @@ describe('IdentityStore', () => {
     const all = await store.listMemories();
     assert.equal(all.length, 2);
   });
+
+  it('updates memory content', async () => {
+    const memory = await store.addMemory({
+      content: 'Original content',
+      title: 'My memory',
+      tags: ['a'],
+      kind: 'note',
+    });
+
+    const updated = await store.updateMemory(memory.id, {
+      content: 'Updated content',
+    });
+
+    assert.ok(updated);
+    assert.equal(updated!.content, 'Updated content');
+    assert.equal(updated!.title, 'My memory');
+    assert.deepEqual(updated!.tags, ['a']);
+  });
+
+  it('updates memory title and tags', async () => {
+    const memory = await store.addMemory({
+      content: 'Some content',
+      title: 'Old title',
+      tags: ['old'],
+      kind: 'note',
+    });
+
+    const updated = await store.updateMemory(memory.id, {
+      title: 'New title',
+      tags: ['new', 'tags'],
+      summary: 'A summary',
+    });
+
+    assert.ok(updated);
+    assert.equal(updated!.title, 'New title');
+    assert.deepEqual(updated!.tags, ['new', 'tags']);
+    assert.equal(updated!.summary, 'A summary');
+    assert.equal(updated!.content, 'Some content');
+  });
+
+  it('returns null when updating a non-existent memory', async () => {
+    const result = await store.updateMemory('nonexistent_id', { content: 'x' });
+    assert.equal(result, null);
+  });
+
+  it('persists updated memory to disk', async () => {
+    const memory = await store.addMemory({
+      content: 'Before',
+      title: 'Persist test',
+      tags: [],
+      kind: 'note',
+    });
+
+    await store.updateMemory(memory.id, { content: 'After' });
+
+    const reread = await store.getMemory(memory.id);
+    assert.ok(reread);
+    assert.equal(reread!.content, 'After');
+  });
 });

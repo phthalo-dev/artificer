@@ -6,6 +6,7 @@ import { test } from 'node:test';
 import { loadConfig } from '../config.js';
 import { Engine } from '../engine/engine.js';
 import { emptyGithubWatchState, type GithubWatchState } from '../engine/github-watch.js';
+import { WorkstreamMemoryService } from '../engine/workstream-memory.js';
 import { Store } from '../storage/store.js';
 import { IdentityStore } from '../storage/identity-store.js';
 import { createApp } from './app.js';
@@ -29,6 +30,21 @@ async function buildAppWithIdentity(env: NodeJS.ProcessEnv = {}) {
   const { engine, store, dataDir } = await buildApp(env);
   const identity = new IdentityStore(dataDir);
   await identity.init();
+  return { engine, store, identity, dataDir };
+}
+
+async function buildEngineWithMemory(env: NodeJS.ProcessEnv = {}) {
+  const { store, dataDir } = await buildApp(env);
+  const identity = new IdentityStore(dataDir);
+  await identity.init();
+  const config = loadConfig({
+    ARTIFICER_DATA_DIR: dataDir,
+    LLM_API_KEY: 'test-key-not-used',
+    PORT: '0',
+    ...env,
+  });
+  const memoryService = new WorkstreamMemoryService(identity, store);
+  const engine = new Engine(config, store, memoryService);
   return { engine, store, identity, dataDir };
 }
 
@@ -150,4 +166,23 @@ test('DELETE /api/memories/:id returns 404 for unknown id', async () => {
 
   const res = await app.request('/api/memories/nonexistent_id', { method: 'DELETE' });
   assert.equal(res.status, 404);
+});
+
+test('Engine creates an identity memory when a workstream is started', async () => {
+  const { engine, identity } = await buildEngineWithMemory();
+
+  await engine.startWorkstream({
+    title: 'Test workstream',
+    goal: 'Do something useful',
+  });
+
+  // Allow async fire-and-forget to settle
+  await new Promise((r) => setTimeout(r, 50));
+
+  const memories = await identity.listMemories();
+  assert.ok(memories.length >= 1);
+  const ws = memories.find((m) => m.source?.startsWith('workstream:'));
+  assert.ok(ws, 'expected a workstream memory');
+  assert.equal(ws!.title, 'Test workstream');
+  assert.ok(ws!.content.includes('Do something useful'));
 });

@@ -138,6 +138,26 @@ export class IdentityStore {
     return all.filter((m) => idSet.has(m.id));
   }
 
+  async updateMemory(
+    id: string,
+    patch: Partial<Pick<Memory, 'content' | 'title' | 'summary' | 'tags'>>,
+  ): Promise<Memory | null> {
+    const existing = await this.getMemory(id);
+    if (!existing) return null;
+    const updated: Memory = {
+      ...existing,
+      ...patch,
+      updatedAt: now(),
+    };
+    await fs.writeFile(
+      this.layout.memoryFile(id),
+      memoryToMarkdown(updated),
+      'utf-8',
+    );
+    await this.rebuildIndex();
+    return updated;
+  }
+
   async deleteMemory(id: string): Promise<boolean> {
     try {
       await fs.unlink(this.layout.memoryFile(id));
