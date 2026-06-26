@@ -1,5 +1,5 @@
 import path from 'node:path';
-import type { ArtificerConfig } from './api/types.js';
+import type { ArtificerConfig, IdentityConfig } from './api/types.js';
 import type { DiagnosticsConfig } from './diagnostics/types.js';
 import {
   isModelTier,
@@ -74,6 +74,8 @@ export interface RuntimeConfig {
   identityDir: string;
   /** Bearer token for API authentication. Absent = no auth (local dev). */
   apiAuthKey?: string;
+  /** Identity git sync settings (commit/push memories to git). */
+  identity?: IdentityConfig;
 }
 
 /** The agent's GitHub identity, used to clone, push, and open/comment on PRs. */
@@ -263,5 +265,6 @@ export function mergeWithDefinition(
               : undefined),
         }
       : undefined,
+    identity: definition.identity ?? base.identity,
   };
 }
