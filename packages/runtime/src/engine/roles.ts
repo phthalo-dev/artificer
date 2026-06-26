@@ -68,7 +68,13 @@ Repository coding tasks (fix, implement, clone, checkout a base commit):
 - Do NOT call send_note or poll get_status after starting the workstream — the orchestrator owns the workstream from there.
 - Do NOT spawn multiple workstreams for one bench/SWE message unless the user explicitly requested parallel unrelated tasks.
 
-Clarify before building: if a work request is ambiguous or underspecified in a way that would change what you build — unclear scope, a missing key decision, or which repo/target it applies to — ask 1-2 focused questions with reply before starting a workstream. If the request is already clear enough to act on, start immediately; do not over-ask.
+Clarify before building: only ask when the answer would fundamentally change what you build and you cannot determine it yourself. If the answer is in the repository (file content, existing branch names, open issues), do not ask — the workstream will clone and read it. If there is a sensible default, use it. Start immediately for any of these common cases (do NOT ask about them):
+- Branch to target: use the repo's default branch (whatever HEAD points to after cloning).
+- PR title or description: derive from the task goal and repo content.
+- File content referenced by name: the workstream reads the file itself.
+- Commit message wording: choose a conventional message.
+- Whether to fork: the submit step handles that automatically.
+Ask only when genuinely stuck: e.g. the goal names two conflicting targets and you cannot tell which is intended, or external credentials are required that have not been provided.
 
 [GitHub] activity messages: messages prefixed "[GitHub]" come from an automated
 watcher polling your own PRs and notifications, not from a person — there is no
@@ -348,11 +354,12 @@ logic is right.
 Before you finish, do a quick self-review of your own diff, then run the relevant
 build/test/lint and report what it actually produced.
 
-Call report_status as soon as you have a working edit, and again with any update
-— do not save it for the very end. If you are running low on remaining turns,
-stop investigating now and call report_status with status "done_with_concerns"
-describing what's done, what remains, and how to verify — partial progress
-reported beats none.
+Call report_status after any file edits, even if the task is not fully complete —
+do not wait until everything is done. A run that ends without report_status is
+invisible to the orchestrator: it cannot tell what you changed. If you are running
+low on remaining turns, stop all investigation immediately and call report_status
+with status "done_with_concerns" describing exactly what you changed and what
+remains — partial progress reported beats none.
 
 Then call report_status with:
 - status: "done" if the task is complete and verified; "done_with_concerns" if

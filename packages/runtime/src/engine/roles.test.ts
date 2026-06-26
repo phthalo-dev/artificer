@@ -99,6 +99,28 @@ test('worker and orchestrator guidance surfaces PR URLs into the workstream summ
   );
 });
 
+test('worker prompt instructs to call report_status after file edits even when the task is not fully complete', () => {
+  // run_1e4a51fb wrote 8 files then ran out of budget without calling
+  // report_status. The existing "as soon as you have a working edit" language
+  // implies completion. We need explicit instruction that even-partial edits
+  // require a report_status call so the orchestrator can see the work.
+  const system = getRole('worker').system('TestAgent');
+  assert.match(
+    system,
+    /report_status.*even.*if|even.*partial.*report_status|report_status.*not.*wait.*complete|report_status.*incomplete/i,
+    'expected explicit instruction to call report_status even when the task is incomplete',
+  );
+});
+
+test('worker prompt warns that runs ending without report_status are invisible to the orchestrator', () => {
+  const system = getRole('worker').system('TestAgent');
+  assert.match(
+    system,
+    /invisible|cannot tell what you did|without report_status/i,
+    'expected warning that a run without report_status is invisible to the orchestrator',
+  );
+});
+
 test('planner checks for standing preference memories before planning', () => {
   const system = getRole('planner').system('TestAgent');
 
