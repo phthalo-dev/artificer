@@ -5,6 +5,8 @@ import type { ExecutorResult, WorkerExecutor } from './executor.js';
 const TIMEOUT_MS = 5 * 60 * 1000;
 
 export class CursorAgentExecutor implements WorkerExecutor {
+  readonly name = 'cursor-agent';
+
   constructor(private readonly model?: string) {}
 
   execute({ context, workspaceDir }: {

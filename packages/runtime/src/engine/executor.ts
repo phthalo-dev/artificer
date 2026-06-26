@@ -6,6 +6,7 @@ export interface ExecutorResult {
 }
 
 export interface WorkerExecutor {
+  readonly name: string;
   execute(opts: {
     context: string;
     workspaceDir: string;

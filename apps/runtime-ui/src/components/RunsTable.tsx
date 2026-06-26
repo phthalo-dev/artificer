@@ -45,7 +45,11 @@ export function RunsTable({ runs }: { runs: RunRecord[] }) {
                 )}
               </Table.Td>
               <Table.Td>
-                {run.model ? <Code>{run.model}</Code> : <Text size="xs" c="dimmed">—</Text>}
+                {run.executor
+                  ? <Code>{run.executor}</Code>
+                  : run.model
+                    ? <Code>{run.model}</Code>
+                    : <Text size="xs" c="dimmed">—</Text>}
               </Table.Td>
               <Table.Td>
                 <Text size="sm">

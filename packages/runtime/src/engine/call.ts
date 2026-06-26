@@ -235,6 +235,7 @@ export async function executeCall(
         ...emptyUsage(),
         ...(execResult.usage ?? {}),
       };
+      run.executor = deps.executor.name;
     } else {
       let runCharTotal = 0;
 
