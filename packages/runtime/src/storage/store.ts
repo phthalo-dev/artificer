@@ -105,14 +105,34 @@ async function listJson<T>(dir: string): Promise<T[]> {
 }
 
 /**
+ * Normalize a raw finding JSON object into a Finding, tolerating field-name
+ * variants that external executors (e.g. cursor agent) may write. Maps
+ * `author` → `role` and `summary`/`content` → `note`, and falls back to the
+ * empty string for missing `createdAt` so sort comparisons never crash.
+ */
+function normalizeFinding(
+  workstreamId: string,
+  r: Record<string, unknown>,
+): Finding {
+  return {
+    id: (r.id as string | undefined) ?? String(r.note ?? r.summary ?? '').slice(0, 12),
+    workstreamId,
+    role: ((r.role ?? r.author ?? 'worker') as string) as Finding['role'],
+    file: r.file as string | undefined,
+    note: (r.note ?? r.summary ?? r.content ?? '') as string,
+    createdAt: (r.createdAt as string | undefined) ?? '',
+  };
+}
+
+/**
  * File-backed persistence for all runtime state. There is no database: every
  * message, workstream, task, review, run, and memory is a file on disk.
  */
 export class Store {
   readonly layout: Layout;
 
-  constructor(dataDir: string) {
-    this.layout = new Layout(dataDir);
+  constructor(execDir: string) {
+    this.layout = new Layout(execDir);
   }
 
   async init(): Promise<void> {
@@ -295,8 +315,10 @@ export class Store {
   }
 
   async listFindings(workstreamId: string): Promise<Finding[]> {
-    return listJson<Finding>(this.layout.findingsDir(workstreamId));
+    const raw = await listJson<Record<string, unknown>>(this.layout.findingsDir(workstreamId));
+    return raw.map((r) => normalizeFinding(workstreamId, r));
   }
+
 
   // --- Runs (one record per LLM call) ---
 
