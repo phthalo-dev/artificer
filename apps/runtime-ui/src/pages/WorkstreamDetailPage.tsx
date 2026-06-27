@@ -1,9 +1,7 @@
 import {
   Alert,
-  Anchor,
   Badge,
   type BadgeColor,
-  Box,
   Button,
   Card,
   Code,
@@ -16,9 +14,9 @@ import {
   Tabs,
   Text,
   Title,
+  color,
 } from '../ds';
-import { IconArrowLeft } from '@tabler/icons-react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useCancelWorkstream, useWorkstream } from '../api/hooks';
 import type { ReviewSeverity, RunRecord, Workstream } from '../api/types';
 import {
@@ -27,6 +25,7 @@ import {
   flattenRuns,
   peakContext,
 } from '../components/BenchTrajectory';
+import { DataCard } from '../components/DataCard';
 import { BreakdownTable } from '../components/BreakdownTable';
 import { StatusBadge } from '../components/StatusBadge';
 import { TokenSpendByRole } from '../components/TokenSpendChart';
@@ -40,19 +39,6 @@ const SEVERITY_COLORS: Record<ReviewSeverity, BadgeColor> = {
   none: 'green',
 };
 
-function Metric({ label, value }: { label: string; value: string }) {
-  return (
-    <Box>
-      <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={4}>
-        {label}
-      </Text>
-      <Text fz={22} fw={700} lh={1}>
-        {value}
-      </Text>
-    </Box>
-  );
-}
-
 function workstreamDurationMs(ws: Workstream, runs: RunRecord[]): number {
   if (runs.length === 0) {
     return new Date(ws.updatedAt).getTime() - new Date(ws.createdAt).getTime();
@@ -60,9 +46,7 @@ function workstreamDurationMs(ws: Workstream, runs: RunRecord[]): number {
   const starts = runs.map((r) =>
     new Date(r.startedAt ?? r.createdAt).getTime(),
   );
-  const ends = runs.map((r) =>
-    new Date(r.finishedAt ?? r.createdAt).getTime(),
-  );
+  const ends = runs.map((r) => new Date(r.finishedAt ?? r.createdAt).getTime());
   return Math.max(...ends) - Math.min(...starts);
 }
 
@@ -108,22 +92,10 @@ export function WorkstreamDetailPage() {
 
   return (
     <Stack gap="lg">
-      <Anchor component={Link} to="/workstreams" size="sm">
-        <Group gap={4}>
-          <IconArrowLeft size={14} /> Back to workstreams
-        </Group>
-      </Anchor>
-
       <div>
         <Group gap={8} mb={4}>
-          <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
-            Artificer Runtime
-          </Text>
           <Text size="xs" c="dimmed">
-            · workstream
-          </Text>
-          <Text size="xs" c="dimmed">
-            · <Code style={{ fontSize: 11 }}>{ws.id}</Code>
+            <Code>{ws.id}</Code>
           </Text>
         </Group>
         <Group gap="sm" align="center">
@@ -135,13 +107,16 @@ export function WorkstreamDetailPage() {
               size="sm"
               loading={cancel.isPending}
               onPress={() => cancel.mutate()}
-              style={{ color: 'var(--nb-color-red)', borderColor: 'var(--nb-color-red)' }}
+              style={{
+                color: color.red,
+                borderColor: color.red,
+              }}
             >
               Stop
             </Button>
           )}
         </Group>
-        <Text c="dimmed" size="sm" mt={4} style={{ whiteSpace: 'pre-wrap' }}>
+        <Text c="dimmed" size="sm" mt={4} preWrap>
           {ws.goal}
         </Text>
         {ws.repoUrl && (
@@ -151,39 +126,50 @@ export function WorkstreamDetailPage() {
         )}
       </div>
 
-      <Paper p="lg">
-        <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: 7 }}>
-          <Metric label="Steps" value={String(steps)} />
-          <Metric label="Calls" value={String(usage.total.runs)} />
-          <Metric label="Cost" value={formatCost(usage.total.costUsd)} />
-          <Metric
-            label="Input tok"
-            value={usage.total.inputTokens.toLocaleString()}
-          />
-          <Metric
-            label="Output tok"
-            value={usage.total.outputTokens.toLocaleString()}
-          />
-          <Metric
-            label="Peak ctx"
-            value={peakCtx > 0 ? peakCtx.toLocaleString() : '—'}
-          />
-          <Metric label="Duration" value={formatDuration(durationMs)} />
-        </SimpleGrid>
-      </Paper>
-
-      {runs.length > 0 && <TokenSpendByRole byRole={usage.byRole} />}
-
       {ws.summary && (
         <Card padding="md">
           <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={4}>
             Summary
           </Text>
-          <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
+          <Text size="sm" preWrap>
             {ws.summary}
           </Text>
         </Card>
       )}
+
+      <Paper p="lg">
+        <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: 7 }}>
+          <DataCard size="lg" label="Steps" value={String(steps)} />
+          <DataCard size="lg" label="Calls" value={String(usage.total.runs)} />
+          <DataCard
+            size="lg"
+            label="Cost"
+            value={formatCost(usage.total.costUsd)}
+          />
+          <DataCard
+            size="lg"
+            label="Input tok"
+            value={usage.total.inputTokens.toLocaleString()}
+          />
+          <DataCard
+            size="lg"
+            label="Output tok"
+            value={usage.total.outputTokens.toLocaleString()}
+          />
+          <DataCard
+            size="lg"
+            label="Peak ctx"
+            value={peakCtx > 0 ? peakCtx.toLocaleString() : '—'}
+          />
+          <DataCard
+            size="lg"
+            label="Duration"
+            value={formatDuration(durationMs)}
+          />
+        </SimpleGrid>
+      </Paper>
+
+      {runs.length > 0 && <TokenSpendByRole byRole={usage.byRole} />}
 
       <Tabs defaultValue="trajectory" keepMounted={false}>
         <Tabs.List>
@@ -195,7 +181,7 @@ export function WorkstreamDetailPage() {
         </Tabs.List>
 
         <Tabs.Panel value="trajectory" pt="md">
-          <Group justify="space-between" style={{ marginBottom: 'var(--nb-space-sm)' }}>
+          <Group justify="space-between" mb="sm">
             <Group gap="xs">
               <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
                 {model ?? 'sub-agents'}
@@ -221,7 +207,7 @@ export function WorkstreamDetailPage() {
         <Tabs.Panel value="plan" pt="md">
           {plan ? (
             <Paper p="sm">
-              <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
+              <Text size="sm" preWrap>
                 {plan}
               </Text>
             </Paper>
@@ -295,21 +281,16 @@ export function WorkstreamDetailPage() {
                     </Group>
                     <Group gap="xs">
                       {r.severity && r.severity !== 'none' ? (
-                        <Badge
-                          color={SEVERITY_COLORS[r.severity]}
-                          size="sm"
-                        >
+                        <Badge color={SEVERITY_COLORS[r.severity]} size="sm">
                           {r.severity}
                         </Badge>
                       ) : null}
-                      <Badge
-                        color={r.approved ? 'green' : 'orange'}
-                      >
+                      <Badge color={r.approved ? 'green' : 'orange'}>
                         {r.approved ? 'approved' : 'changes requested'}
                       </Badge>
                     </Group>
                   </Group>
-                  <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
+                  <Text size="sm" preWrap>
                     {r.notes}
                   </Text>
                   <Text size="xs" c="dimmed" mt={4}>
@@ -324,22 +305,16 @@ export function WorkstreamDetailPage() {
         <Tabs.Panel value="metrics" pt="md">
           <Stack gap="lg">
             <SimpleGrid cols={{ base: 2, sm: 4 }}>
-              <Metric
-                label="Requests"
-                value={String(usage.total.requests)}
-              />
-              <Metric
+              <DataCard label="Requests" value={String(usage.total.requests)} />
+              <DataCard
                 label="Cache read"
                 value={usage.total.cacheReadInputTokens.toLocaleString()}
               />
-              <Metric
+              <DataCard
                 label="Cache write"
                 value={usage.total.cacheCreationInputTokens.toLocaleString()}
               />
-              <Metric
-                label="Updated"
-                value={formatTime(ws.updatedAt)}
-              />
+              <DataCard label="Updated" value={formatTime(ws.updatedAt)} />
             </SimpleGrid>
             <div>
               <Text fw={600} size="sm" mb={6}>

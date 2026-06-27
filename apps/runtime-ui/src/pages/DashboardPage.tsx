@@ -1,5 +1,5 @@
 import {
-  Badge, Card, Group, Loader, Paper, ScrollArea, Stack, Text, Title,
+  Badge, Card, Group, Loader, Paper, ScrollArea, Stack, Text, Title, color,
 } from '../ds';
 import { Link } from 'react-router-dom';
 import { useMessages, useRuntimeState, useUsage } from '../api/hooks';
@@ -16,13 +16,13 @@ function Bubble({ message }: { message: Message }) {
       <Paper
         p="sm"
         maw="80%"
-        bg={inbound ? 'var(--nb-color-blueLight)' : 'var(--nb-color-surface)'}
+        bg={inbound ? color.blueLight : color.surface}
       >
         <Group justify="space-between" gap="xs" mb={4}>
           <Text size="xs" c="dimmed" fw={600}>{inbound ? 'You' : 'Agent'}</Text>
           <Text size="xs" c="dimmed">{formatTime(message.createdAt)}</Text>
         </Group>
-        <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>{message.content}</Text>
+        <Text size="sm" preWrap>{message.content}</Text>
         {message.workstreamId && (
           <Text size="xs" mt={4}>
             <Link to={`/workstreams/${message.workstreamId}`}>View workstream →</Link>
@@ -42,7 +42,7 @@ export function DashboardPage() {
     <Stack gap="lg">
       <div>
         <Title order={3}>Dashboard</Title>
-        <Group gap="xs" style={{ marginTop: 4 }}>
+        <Group gap="xs" mt={4}>
           {state.isError ? (
             <Badge variant="light" color="orange">{CLOUD_MODE ? 'hibernating or starting' : 'offline'}</Badge>
           ) : (
@@ -62,8 +62,8 @@ export function DashboardPage() {
       )}
 
       <Card padding="md">
-        <Title order={5} style={{ marginBottom: 'var(--nb-space-sm)' }}>Conversation</Title>
-        <ScrollArea.Autosize mah={420} style={{ marginBottom: 'var(--nb-space-md)' }}>
+        <Title order={5} mb="sm">Conversation</Title>
+        <ScrollArea.Autosize mah={420} mb="md">
           <Stack gap="sm">
             {messages.isLoading && <Loader size="sm" />}
             {messages.data?.length === 0 && (

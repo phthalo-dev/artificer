@@ -30,7 +30,7 @@ export function scanAgentDirectory(rootDir: string): AgentManifest {
     memories: [],
   };
 
-  const configPath = path.join(rootDir, 'artificer.config.ts');
+  const configPath = path.join(rootDir, 'artificer.config.json');
   if (fs.existsSync(configPath)) {
     manifest.config = { name: 'config', path: configPath };
   }

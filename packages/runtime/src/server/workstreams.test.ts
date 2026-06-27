@@ -11,11 +11,11 @@ import { createApp } from './app.js';
 async function buildApp() {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-ws-api-'));
   const config = loadConfig({
-    ARTIFICER_DATA_DIR: dataDir,
+    ARTIFICER_EXEC_DIR: dataDir,
     LLM_API_KEY: 'test-key-not-used',
     PORT: '0',
   });
-  const store = new Store(config.dataDir);
+  const store = new Store(config.execDir);
   await store.init();
   const engine = new Engine(config, store);
   return { app: createApp(engine), store };

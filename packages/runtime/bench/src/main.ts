@@ -37,7 +37,7 @@ function evalHint(kind: ReturnType<typeof suiteKind>): string {
 
 /** Warn when Go gateway is paired with models that only exist on standard Zen. */
 function warnGoModelMismatch(config: BenchConfig): void {
-  const base = process.env.LLM_BASE_URL ?? '';
+  const base = config.baseUrl ?? process.env.LLM_BASE_URL ?? '';
   if (!base.includes('/zen/go/')) return;
   const zenOnly = (id: string) =>
     id.startsWith('gpt-') || id.startsWith('gemini-') || id.startsWith('claude-');
@@ -45,7 +45,7 @@ function warnGoModelMismatch(config: BenchConfig): void {
   if (bad.length === 0) return;
   // eslint-disable-next-line no-console
   console.warn(
-    `[bench] warning: LLM_BASE_URL points at OpenCode Go but tier models look Zen-only: ` +
+    `[bench] warning: gateway points at OpenCode Go but tier models look Zen-only: ` +
       bad.map(([tier, id]) => `${tier}=${id}`).join(', ') +
       `. Use a go-* preset and unset LLM_MODEL* in .env.`,
   );
@@ -66,10 +66,13 @@ async function main(): Promise<void> {
 
   warnGoModelMismatch(config);
 
+  const gatewayLabel = config.gateway
+    ? `${config.gateway} (${config.baseUrl})`
+    : (process.env.LLM_BASE_URL ?? 'default');
   // eslint-disable-next-line no-console
   console.log(
     `[bench] suite=${suiteName(suite, config.suitePath)} (${kind}) · ` +
-      `${instances.length} instance(s) · models ` +
+      `${instances.length} instance(s) · gateway=${gatewayLabel} · models ` +
       `low=${config.models.low} medium=${config.models.medium} high=${config.models.high}`,
   );
 
@@ -175,11 +178,13 @@ async function writeArtifacts(
     JSON.stringify(instances, null, 2),
     'utf8',
   );
+  // Exclude apiKey from persisted run-config (don't write secrets to disk).
+  const { apiKey: _apiKey, ...safeConfig } = config;
   await fs.writeFile(
     path.join(config.resultsDir, 'run-config.json'),
     JSON.stringify(
       {
-        ...config,
+        ...safeConfig,
         suiteKind: suiteKind(suite),
         suiteName: suiteName(suite, config.suitePath),
         suiteDescription: suite.description ?? null,

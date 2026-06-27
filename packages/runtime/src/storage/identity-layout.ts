@@ -32,6 +32,6 @@ export class IdentityLayout {
   }
 
   get configFile(): string {
-    return path.join(this.root, 'artificer.config.ts');
+    return path.join(this.root, 'artificer.config.json');
   }
 }

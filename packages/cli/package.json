@@ -1,5 +1,5 @@
 {
-  "name": "@artificer/cli",
+  "name": "@artificer-ai/cli",
   "version": "0.1.0",
   "type": "module",
   "bin": {
@@ -11,7 +11,7 @@
     "link:global": "pnpm link --global"
   },
   "dependencies": {
-    "@artificer/runtime": "workspace:*"
+    "@artificer-ai/runtime": "workspace:*"
   },
   "devDependencies": {
     "tsx": "^4.0.0",

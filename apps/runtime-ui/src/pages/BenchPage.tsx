@@ -155,7 +155,7 @@ export function BenchPage() {
 
       {suites && suites.length > 0 && (
         <Card padding="md">
-          <Text fw={600} size="sm" style={{ marginBottom: 'var(--nb-space-xs)' }}>
+          <Text fw={600} size="sm" mb="xs">
             Available suites
           </Text>
           <Stack gap="sm">
@@ -190,7 +190,7 @@ export function BenchPage() {
       )}
 
       <Card padding="lg">
-        <Group justify="space-between" align="flex-end" style={{ marginBottom: 'var(--nb-space-sm)' }}>
+        <Group justify="space-between" align="flex-end" mb="sm">
           <div>
             <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
               Pass@1

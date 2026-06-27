@@ -14,6 +14,7 @@ import { IconChevronDown, IconChevronRight } from '@tabler/icons-react';
 import { useState } from 'react';
 import type { RunNode, RunRecord, ToolInvocation } from '../api/types';
 import { TokenSpendTimeline } from './TokenSpendChart';
+import { fullWidth, minWidthZero, stepHeader } from './BenchTrajectory.styles';
 
 type BadgeColor = NonNullable<BadgeProps['color']>;
 
@@ -29,6 +30,8 @@ const ROLE_COLOR: Record<string, BadgeColor> = {
 function roleColor(role: string): BadgeColor {
   return ROLE_COLOR[role] ?? 'gray';
 }
+
+const stepHeaderCls = stepHeader;
 
 function normalizeTree(tree: RunNode[] | null | undefined): RunNode[] {
   return Array.isArray(tree) ? tree : [];
@@ -82,7 +85,7 @@ function ToolCall({ call, index }: { call: ToolInvocation; index: number }) {
     <Box>
       <UnstyledButton
         onPress={() => setOpen((o) => !o)}
-        style={{ width: '100%' }}
+        className={fullWidth}
       >
         <Group gap={6} wrap="nowrap" align="center">
           {open ? (
@@ -93,9 +96,9 @@ function ToolCall({ call, index }: { call: ToolInvocation; index: number }) {
           <Text size="xs" c="dimmed" w={18} ta="right">
             {index + 1}
           </Text>
-          <Code style={{ fontSize: 11 }}>{call.name}</Code>
+          <Code size="xs">{call.name}</Code>
           {hint && (
-            <Text size="xs" c="dimmed" lineClamp={1} style={{ minWidth: 0 }}>
+            <Text size="xs" c="dimmed" lineClamp={1} className={minWidthZero}>
               {hint}
             </Text>
           )}
@@ -111,7 +114,7 @@ function ToolCall({ call, index }: { call: ToolInvocation; index: number }) {
           <Text size="xs" c="dimmed" fw={600} mb={2}>
             Input
           </Text>
-          <Code block style={{ fontSize: 11 }}>
+          <Code block size="xs">
             {typeof call.input === 'string'
               ? call.input
               : JSON.stringify(call.input, null, 2)}
@@ -119,10 +122,7 @@ function ToolCall({ call, index }: { call: ToolInvocation; index: number }) {
           <Text size="xs" c="dimmed" fw={600} mt={6} mb={2}>
             Output
           </Text>
-          <Code
-            block
-            style={{ fontSize: 11, maxHeight: 280, overflow: 'auto' }}
-          >
+          <Code block size="xs" scroll>
             {call.error ? `${call.error}\n${call.output}` : call.output || '—'}
           </Code>
         </Box>
@@ -135,26 +135,20 @@ function Step({ run, index }: { run: RunRecord; index: number }) {
   const [open, setOpen] = useState(index < 6);
   const dur = runDurationMs(run);
   return (
-    <Paper p="sm">
-      <UnstyledButton onPress={() => setOpen((o) => !o)} style={{ width: '100%' }}>
-        <Group justify="space-between" wrap="nowrap">
-          <Group gap={8} wrap="nowrap" style={{ minWidth: 0 }}>
-            {open ? (
-              <IconChevronDown size={15} />
-            ) : (
-              <IconChevronRight size={15} />
-            )}
+    <Paper p="0">
+      <UnstyledButton
+        className={stepHeaderCls}
+        onPress={() => setOpen((o) => !o)}
+      >
+        <Group justify="space-between" wrap="nowrap" className={fullWidth}>
+          <Group gap={8} wrap="nowrap" className={minWidthZero}>
             <Text size="sm" c="dimmed" w={28} ta="right">
               #{index + 1}
             </Text>
             <Badge color={roleColor(run.role)} variant="light">
               {run.role}
             </Badge>
-            {run.model && (
-              <Code style={{ fontSize: 11 }}>
-                {run.model}
-              </Code>
-            )}
+            {run.model && <Code size="xs">{run.model}</Code>}
             {run.status === 'failed' && (
               <Badge size="sm" color="red" variant="light">
                 failed
@@ -170,25 +164,30 @@ function Step({ run, index }: { run: RunRecord; index: number }) {
                 {(dur / 1000).toFixed(1)}s
               </Text>
             )}
+            {open ? (
+              <IconChevronDown size={15} />
+            ) : (
+              <IconChevronRight size={15} />
+            )}
           </Group>
         </Group>
       </UnstyledButton>
 
       <Collapse in={open}>
-        <Box ml={36} mt={8}>
+        <Box p="sm">
           {run.task && (
             <>
               <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={2}>
                 Task
               </Text>
-              <Text size="sm" mb={8} style={{ whiteSpace: 'pre-wrap' }}>
+              <Text size="sm" mb={8} preWrap>
                 {run.task}
               </Text>
             </>
           )}
 
           {run.toolCalls.length > 0 && (
-            <Stack gap={2} style={{ marginBottom: 8 }}>
+            <Stack gap={2} mb={8}>
               {run.toolCalls.map((call, i) => (
                 <ToolCall key={`${run.id}-${i}`} call={call} index={i} />
               ))}
@@ -200,7 +199,7 @@ function Step({ run, index }: { run: RunRecord; index: number }) {
               <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={2}>
                 Output
               </Text>
-              <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
+              <Text size="sm" preWrap>
                 {run.output}
               </Text>
             </>
@@ -226,8 +225,8 @@ export function BenchTrajectory({
   if (runs.length === 0) {
     return (
       <Text c="dimmed" size="sm">
-        No trajectory captured for this instance. Re-run{' '}
-        <Code>pnpm bench</Code> to record one.
+        No trajectory captured for this instance. Re-run <Code>pnpm bench</Code>{' '}
+        to record one.
       </Text>
     );
   }
@@ -252,7 +251,8 @@ export function peakContext(tree: RunNode[] | null | undefined): number {
   const visit = (nodes: RunNode[] | null | undefined) => {
     if (!Array.isArray(nodes)) return;
     for (const n of nodes) {
-      const ctx = (n.self?.inputTokens ?? 0) + (n.self?.cacheReadInputTokens ?? 0);
+      const ctx =
+        (n.self?.inputTokens ?? 0) + (n.self?.cacheReadInputTokens ?? 0);
       if (ctx > peak) peak = ctx;
       visit(n.children);
     }

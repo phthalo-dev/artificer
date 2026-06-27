@@ -109,6 +109,7 @@ export function toolsForRole(
           'query_memories',
           'add_memory',
           'record_finding',
+          'update_status',
         ]),
       ];
       break;

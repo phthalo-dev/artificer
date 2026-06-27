@@ -24,7 +24,7 @@ describe('scanAgentDirectory', () => {
     fs.writeFileSync(path.join(tmpDir, 'agent', 'channels', 'slack.ts'), '');
     fs.writeFileSync(path.join(tmpDir, 'agent', 'skills', 'review.md'), '');
     fs.writeFileSync(path.join(tmpDir, 'agent', 'instructions.md'), '');
-    fs.writeFileSync(path.join(tmpDir, 'artificer.config.ts'), '');
+    fs.writeFileSync(path.join(tmpDir, 'artificer.config.json'), '{}');
 
     const manifest = scanAgentDirectory(tmpDir);
     assert.equal(manifest.tools.length, 1);

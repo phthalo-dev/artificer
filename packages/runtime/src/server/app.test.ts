@@ -15,12 +15,12 @@ import type { Memory } from '../storage/types.js';
 async function buildApp(env: NodeJS.ProcessEnv = {}) {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-app-'));
   const config = loadConfig({
-    ARTIFICER_DATA_DIR: dataDir,
+    ARTIFICER_EXEC_DIR: dataDir,
     LLM_API_KEY: 'test-key-not-used',
     PORT: '0',
     ...env,
   });
-  const store = new Store(config.dataDir);
+  const store = new Store(config.execDir);
   await store.init();
   const engine = new Engine(config, store);
   return { engine, store, dataDir };
@@ -38,7 +38,7 @@ async function buildEngineWithMemory(env: NodeJS.ProcessEnv = {}) {
   const identity = new IdentityStore(dataDir);
   await identity.init();
   const config = loadConfig({
-    ARTIFICER_DATA_DIR: dataDir,
+    ARTIFICER_EXEC_DIR: dataDir,
     LLM_API_KEY: 'test-key-not-used',
     PORT: '0',
     ...env,

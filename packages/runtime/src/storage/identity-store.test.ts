@@ -20,7 +20,7 @@ describe('IdentityLayout', () => {
     );
     assert.equal(
       layout.configFile,
-      '/home/user/my-agent/artificer.config.ts',
+      '/home/user/my-agent/artificer.config.json',
     );
   });
 

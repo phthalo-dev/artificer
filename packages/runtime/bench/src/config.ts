@@ -12,6 +12,38 @@ export const TASKS_DIR = path.join(BENCH_DIR, 'tasks');
 export const RESULTS_DIR = path.join(BENCH_DIR, 'results');
 export const CACHE_DIR = path.join(TASKS_DIR, '.cache');
 
+interface GatewayProfile {
+  baseUrl: string;
+  /** Name of the env var that holds the API key for this gateway. */
+  apiKeyEnv: string;
+  /** Default preset when none is specified via --preset / BENCH_PRESET. */
+  defaultPreset: string;
+}
+
+const GATEWAY_PROFILES: Record<string, GatewayProfile> = {
+  anthropic: {
+    baseUrl: 'https://api.anthropic.com/v1',
+    apiKeyEnv: 'ANTHROPIC_API_KEY',
+    defaultPreset: 'quality-first',
+  },
+  'opencode-zen': {
+    baseUrl: 'https://opencode.ai/zen/v1',
+    apiKeyEnv: 'OPENCODE_API_KEY',
+    defaultPreset: 'async-economy',
+  },
+  'opencode-go': {
+    baseUrl: 'https://opencode.ai/zen/go/v1',
+    apiKeyEnv: 'OPENCODE_API_KEY',
+    defaultPreset: 'go-economy',
+  },
+};
+
+const GATEWAY_ALIASES: Record<string, string> = {
+  go: 'opencode-go',
+  zen: 'opencode-zen',
+  claude: 'anthropic',
+};
+
 /** Resolved configuration for a benchmark run. */
 export interface BenchConfig {
   /** Path to the suite definition JSON. */
@@ -50,6 +82,21 @@ export interface BenchConfig {
   preflightClone: boolean;
   /** Pause between instances, in ms (helps avoid provider rate-limit stalls). */
   instanceDelayMs: number;
+  /**
+   * Resolved gateway name (e.g. "opencode-go"). Set when --gateway was passed.
+   * Controls which LLM_BASE_URL and LLM_API_KEY the spawned runtime uses.
+   */
+  gateway?: string;
+  /**
+   * LLM base URL resolved from --gateway. Overrides the .env value in the
+   * spawned runtime so bench runs don't require manual .env edits.
+   */
+  baseUrl?: string;
+  /**
+   * API key resolved from --gateway. Overrides LLM_API_KEY in the spawned
+   * runtime. Not written to run-config.json.
+   */
+  apiKey?: string;
 }
 
 function flag(args: string[], name: string): string | undefined {
@@ -79,6 +126,13 @@ function resolveSuitePath(raw: string | undefined): string {
 /**
  * Resolves the benchmark config from CLI args and environment, applying
  * reproducibility-friendly defaults (single-instance isolation, pinned models).
+ *
+ * Pass `--gateway <name>` to select a provider without editing .env:
+ *   anthropic / claude  — Anthropic direct (ANTHROPIC_API_KEY, quality-first preset)
+ *   opencode-zen / zen  — OpenCode Zen    (OPENCODE_API_KEY, async-economy preset)
+ *   opencode-go  / go   — OpenCode Go     (OPENCODE_API_KEY, go-economy preset)
+ *
+ * The gateway sets a default preset but --preset still wins when specified.
  */
 export function loadBenchConfig(
   argv: string[] = process.argv.slice(2),
@@ -87,9 +141,25 @@ export function loadBenchConfig(
   const idsArg = flag(argv, 'instance-ids');
   const limitArg = flag(argv, 'limit');
 
+  // Resolve gateway profile (--gateway flag or BENCH_GATEWAY env var).
+  const gatewayArg = flag(argv, 'gateway') ?? env.BENCH_GATEWAY;
+  const gatewayKey = gatewayArg
+    ? (GATEWAY_ALIASES[gatewayArg] ?? gatewayArg)
+    : undefined;
+  const gatewayProfile = gatewayKey ? GATEWAY_PROFILES[gatewayKey] : undefined;
+  if (gatewayArg && !gatewayProfile) {
+    // eslint-disable-next-line no-console
+    console.warn(
+      `[bench] unknown --gateway "${gatewayArg}"; valid values: ` +
+        [...Object.keys(GATEWAY_PROFILES), ...Object.keys(GATEWAY_ALIASES)].join(', '),
+    );
+  }
+
+  // Preset: explicit flag wins, then env, then the gateway's recommended default.
   const presetArg = flag(argv, 'preset');
-  const presetId = presetArg ?? env.BENCH_PRESET ?? env.MODEL_PRESET;
-  const preset = presetId ? getPreset(presetId) : getPreset(DEFAULT_PRESET_ID)!;
+  const presetId =
+    presetArg ?? env.BENCH_PRESET ?? env.MODEL_PRESET ?? gatewayProfile?.defaultPreset;
+  const preset = (presetId ? getPreset(presetId) : null) ?? getPreset(DEFAULT_PRESET_ID)!;
 
   // CLI model flags win; then preset tiers (reproducible bench runs); then env.
   const models = {
@@ -120,14 +190,22 @@ export function loadBenchConfig(
 
   const suitePath = resolveSuitePath(flag(argv, 'suite'));
   const suiteBase = path.basename(suitePath, '.json');
-  const defaultResultsDir = presetId
-    ? path.join(RESULTS_DIR, presetId, suiteBase)
+  const resolvedPresetId = presetId ?? preset.id;
+  const defaultResultsDir = resolvedPresetId
+    ? path.join(RESULTS_DIR, resolvedPresetId, suiteBase)
     : RESULTS_DIR;
 
   const explicitModelName = flag(argv, 'model-name') ?? env.BENCH_MODEL_NAME;
   const modelName =
     explicitModelName ??
-    (presetId ? `${presetId}/${suiteBase}` : 'artificer-runtime');
+    (resolvedPresetId ? `${resolvedPresetId}/${suiteBase}` : 'artificer-runtime');
+
+  // Resolve gateway key/URL — falls back to LLM_* env vars (from .env) when no
+  // --gateway flag is passed, so existing behaviour is unchanged.
+  const baseUrl = gatewayProfile?.baseUrl;
+  const apiKey = gatewayProfile
+    ? (env[gatewayProfile.apiKeyEnv] ?? env.LLM_API_KEY)
+    : undefined;
 
   return {
     suitePath,
@@ -153,7 +231,7 @@ export function loadBenchConfig(
     ),
     models,
     roleTiers,
-    presetId: presetId ?? preset.id,
+    presetId: resolvedPresetId,
     modelName,
     keepData: boolFlag(argv, 'keep-data') || env.BENCH_KEEP_DATA === 'true',
     resultsDir: flag(argv, 'results-dir') ?? env.BENCH_RESULTS_DIR ?? defaultResultsDir,
@@ -165,5 +243,8 @@ export function loadBenchConfig(
     instanceDelayMs: Number(
       flag(argv, 'instance-delay-ms') ?? env.BENCH_INSTANCE_DELAY_MS ?? 0,
     ),
+    gateway: gatewayKey,
+    baseUrl,
+    apiKey,
   };
 }

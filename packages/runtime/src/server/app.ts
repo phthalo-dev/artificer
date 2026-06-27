@@ -153,6 +153,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
       return c.json({ error: parsed.error.flatten() }, 400);
     }
     const tiers = engine.setModelTiers(parsed.data);
+    void engine.persistConfig();
     return c.json({
       tiers,
       roleTiers: engine.config.roleTiers,
@@ -167,6 +168,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
       return c.json({ error: parsed.error.flatten() }, 400);
     }
     const roleTiers = engine.setRoleTiers(parsed.data);
+    void engine.persistConfig();
     return c.json({
       tiers: engine.getModelTiers(),
       roleTiers,
@@ -182,6 +184,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     }
     try {
       const applied = engine.applyPreset(parsed.data.presetId);
+      void engine.persistConfig();
       return c.json({
         presetId: applied.preset.id,
         name: applied.preset.name,

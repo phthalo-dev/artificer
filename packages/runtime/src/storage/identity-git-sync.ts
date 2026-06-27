@@ -73,16 +73,32 @@ export class IdentityGitSync extends IdentityStore {
 
     if (!this.syncConfig.autoPush) return;
 
+    const remote = this.syncConfig.remote ?? 'origin';
+    let branch = this.syncConfig.branch;
+    if (!branch) {
+      const { stdout: branchOut } = await exec('git', ['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD'], { env });
+      branch = branchOut.trim();
+      if (!branch || branch === 'HEAD') branch = undefined;
+    }
+
     try {
-      const remote = this.syncConfig.remote ?? 'origin';
-      const pushArgs = ['push', remote];
-      if (this.syncConfig.branch) {
-        pushArgs.push(this.syncConfig.branch);
+      const pullArgs = ['pull', '--rebase', remote];
+      if (branch) pullArgs.push(branch);
+      await exec('git', ['-C', dir, ...pullArgs], { env });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      // Remote branch doesn't exist yet (first push) — safe to proceed
+      if (msg.includes('couldn\'t find remote ref') || msg.includes('no such ref')) {
+        // fall through to push
       } else {
-        const { stdout: branchOut } = await exec('git', ['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD'], { env });
-        const branch = branchOut.trim();
-        if (branch && branch !== 'HEAD') pushArgs.push(branch);
+        console.error('[identity-git-sync] git pull --rebase failed:', err);
+        return;
       }
+    }
+
+    try {
+      const pushArgs = ['push', remote];
+      if (branch) pushArgs.push(branch);
       await exec('git', ['-C', dir, ...pushArgs], { env });
     } catch (err) {
       console.error('[identity-git-sync] git push failed:', err);

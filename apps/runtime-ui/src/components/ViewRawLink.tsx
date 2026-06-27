@@ -1,4 +1,4 @@
-import { Anchor } from '../ds';
+import { Anchor, anchorIcon } from '../ds';
 import { IconExternalLink } from '@tabler/icons-react';
 import { useEffect, useMemo } from 'react';
 
@@ -21,7 +21,7 @@ export function ViewRawLink({ data, filename }: { data: unknown; filename: strin
       size="xs"
       c="dimmed"
     >
-      View raw <IconExternalLink size={12} style={{ verticalAlign: -2 }} />
+      View raw <IconExternalLink size={12} className={anchorIcon} />
     </Anchor>
   );
 }

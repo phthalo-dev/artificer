@@ -27,7 +27,7 @@ export function WorkstreamsPage() {
             component={Link}
             to={`/workstreams/${ws.id}`}
           >
-            <Group justify="space-between" style={{ marginBottom: 'var(--nb-space-xs)' }} wrap="nowrap">
+            <Group justify="space-between" mb="xs" wrap="nowrap">
               <Text fw={600} lineClamp={1}>
                 {ws.title}
               </Text>

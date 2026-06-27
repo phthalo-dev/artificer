@@ -1,37 +1,36 @@
 import { Box, Group, Paper, Stack, Text } from '../ds';
+import { roleColor, tokenLayerColor } from '../ds/tokens';
 import type { RunRecord, TokenUsage, UsageSummary } from '../api/types';
 import { costForRun } from '../cost';
 import { formatCost, formatTokens } from '../format';
-
-const ROLE_COLOR: Record<string, string> = {
-  communicator: '#9333ea',
-  orchestrator: '#4338ca',
-  planner: '#2563eb',
-  worker: '#0f766e',
-  reviewer: '#7c3aed',
-  librarian: '#ea580c',
-};
-
-const LAYER_COLORS: Record<string, string> = {
-  blue: '#2563eb',
-  teal: '#0f766e',
-  gray: '#6b7280',
-  orange: '#ea580c',
-};
+import {
+  legendSwatchMd,
+  legendSwatchSm,
+  roleBarSegment,
+  roleBarTrack,
+  stackedBar,
+  stackedBarEmpty,
+  stackedBarLayer,
+  timelineScroll,
+} from './TokenSpendChart.styles';
 
 const TOKEN_LAYERS = [
-  { key: 'inputTokens' as const, label: 'Input', color: 'blue' },
-  { key: 'outputTokens' as const, label: 'Output', color: 'teal' },
-  { key: 'cacheReadInputTokens' as const, label: 'Cache read', color: 'gray' },
+  { key: 'inputTokens' as const, label: 'Input', color: 'blue' as const },
+  { key: 'outputTokens' as const, label: 'Output', color: 'teal' as const },
+  {
+    key: 'cacheReadInputTokens' as const,
+    label: 'Cache read',
+    color: 'gray' as const,
+  },
   {
     key: 'cacheCreationInputTokens' as const,
     label: 'Cache write',
-    color: 'orange',
+    color: 'orange' as const,
   },
 ];
 
 function colorForRole(role: string): string {
-  return ROLE_COLOR[role] ?? '#6b7280';
+  return roleColor[role] ?? tokenLayerColor.gray;
 }
 
 function totalTokens(u: TokenUsage): number {
@@ -94,13 +93,9 @@ function Legend() {
     <Group gap="md" mt={6}>
       {TOKEN_LAYERS.map((layer) => (
         <Group key={layer.key} gap={6}>
-          <Box
-            w={10}
-            h={10}
-            style={{
-              borderRadius: 2,
-              backgroundColor: LAYER_COLORS[layer.color],
-            }}
+          <span
+            className={legendSwatchMd}
+            style={{ backgroundColor: tokenLayerColor[layer.color] }}
           />
           <Text size="xs" c="dimmed">
             {layer.label}
@@ -130,46 +125,33 @@ export function TokenSpendByRole({
   if (grandTotal === 0) return null;
 
   return (
-    <Paper withBorder radius="md" p="sm">
+    <Box>
       <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={8}>
         Token spend by role
       </Text>
-      <Box
-        style={{
-          display: 'flex',
-          height: 28,
-          borderRadius: 4,
-          overflow: 'hidden',
-          backgroundColor: '#f3f4f6',
-        }}
-      >
+      <div className={roleBarTrack}>
         {rows.map(({ role, usage, tokens }) => {
           const pct = (tokens / grandTotal) * 100;
           return (
             <div
               key={role}
+              className={roleBarSegment}
               title={`${role} · ${formatTokens(tokens)} tok · ${formatCost(usage.costUsd)}`}
               style={{
                 width: `${pct}%`,
                 minWidth: pct > 0 ? 4 : 0,
-                height: '100%',
                 backgroundColor: colorForRole(role),
-                opacity: 0.9,
               }}
             />
           );
         })}
-      </Box>
+      </div>
       <Group gap="md" mt={8} wrap="wrap">
         {rows.map(({ role, usage, tokens }) => (
           <Group key={role} gap={6}>
-            <Box
-              w={8}
-              h={8}
-              style={{
-                borderRadius: 2,
-                backgroundColor: colorForRole(role),
-              }}
+            <span
+              className={legendSwatchSm}
+              style={{ backgroundColor: colorForRole(role) }}
             />
             <Text size="xs" c="dimmed">
               {role} {((tokens / grandTotal) * 100).toFixed(0)}% ·{' '}
@@ -178,7 +160,7 @@ export function TokenSpendByRole({
           </Group>
         ))}
       </Group>
-    </Paper>
+    </Box>
   );
 }
 
@@ -196,32 +178,12 @@ function StackedBar({
   const total = totalTokens(usage);
   if (total === 0) {
     return (
-      <Box
-        style={{
-          width,
-          height,
-          flex: '0 0 auto',
-          borderRadius: 2,
-          backgroundColor: '#e5e7eb',
-          opacity,
-        }}
-      />
+      <Box className={stackedBarEmpty} style={{ width, height, opacity }} />
     );
   }
 
   return (
-    <Box
-      style={{
-        width,
-        height,
-        flex: '0 0 auto',
-        display: 'flex',
-        flexDirection: 'column-reverse',
-        borderRadius: 2,
-        overflow: 'hidden',
-        opacity,
-      }}
-    >
+    <Box className={stackedBar} style={{ width, height, opacity }}>
       {TOKEN_LAYERS.map((layer) => {
         const value = usage[layer.key];
         if (!value) return null;
@@ -229,10 +191,11 @@ function StackedBar({
         return (
           <Box
             key={layer.key}
+            className={stackedBarLayer}
             style={{
               height: `${pct}%`,
               minHeight: pct > 0 ? 1 : 0,
-              backgroundColor: LAYER_COLORS[layer.color],
+              backgroundColor: tokenLayerColor[layer.color],
             }}
           />
         );
@@ -260,18 +223,11 @@ export function TokenSpendTimeline({ runs }: { runs: RunRecord[] }) {
           width = tokens per call
         </Text>
       </Group>
-      <Group
-        gap={2}
-        wrap="nowrap"
-        align="flex-end"
-        style={{ overflowX: 'auto', padding: '4px 0' }}
-      >
+      <Group gap={2} wrap="nowrap" align="flex-end" className={timelineScroll}>
         {runs.map((run, i) => {
           const tokens = totals[i];
           const width =
-            tokens === 0
-              ? minW
-              : minW + (tokens / maxTokens) * (maxW - minW);
+            tokens === 0 ? minW : minW + (tokens / maxTokens) * (maxW - minW);
           const layers = TOKEN_LAYERS.map((layer) => ({
             ...layer,
             value: run.usage[layer.key],

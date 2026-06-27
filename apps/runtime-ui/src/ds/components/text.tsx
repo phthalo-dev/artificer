@@ -1,50 +1,30 @@
 import { type CSSProperties, type HTMLAttributes, forwardRef } from 'react';
-import { styles, cx } from 'typestyles';
-import { color, font } from '../tokens';
+import { cx } from '../styles';
+import { space } from '../tokens';
+import { text as textCls, title as titleCls } from './text.styles';
 
-const textCls = styles.component('nb-text', {
-  base: {
-    fontFamily: font.familySans,
-    fontSize: font.sizeMd,
-    color: color.text,
-    lineHeight: '1.5',
-  },
-  variants: {
-    size: {
-      xs: { fontSize: font.sizeXs },
-      sm: { fontSize: font.sizeSm },
-      md: { fontSize: font.sizeMd },
-      lg: { fontSize: font.sizeLg },
-      xl: { fontSize: font.sizeXl },
-    },
-    c: {
-      dimmed:  { color: color.dimmed },
-      muted:   { color: color.muted },
-      red:     { color: color.red },
-      green:   { color: color.green },
-      blue:    { color: color.blue },
-      orange:  { color: color.orange },
-      cyan:    { color: color.cyan },
-      violet:  { color: color.violet },
-      grape:   { color: color.grape },
-      teal:    { color: color.teal },
-      indigo:  { color: color.indigo },
-      gray:    { color: color.gray },
-      inherit: { color: 'inherit' },
-    },
-    upper: {
-      true: { textTransform: 'uppercase', letterSpacing: '0.05em' },
-    },
-    mono: {
-      true: { fontFamily: font.familyMono },
-    },
-  },
-  defaultVariants: { size: 'md' },
-});
+type GapKey = keyof typeof space;
+type SpacingValue = number | string | GapKey;
+
+function spacing(v: SpacingValue): string {
+  if (typeof v === 'string' && v in space) return space[v as GapKey];
+  return typeof v === 'number' ? `${v}px` : v;
+}
 
 type TextColor =
-  | 'dimmed' | 'muted' | 'red' | 'green' | 'blue' | 'orange'
-  | 'cyan' | 'violet' | 'grape' | 'teal' | 'indigo' | 'gray' | 'inherit';
+  | 'dimmed'
+  | 'muted'
+  | 'red'
+  | 'green'
+  | 'blue'
+  | 'orange'
+  | 'cyan'
+  | 'violet'
+  | 'grape'
+  | 'teal'
+  | 'indigo'
+  | 'gray'
+  | 'inherit';
 
 export type TextProps = HTMLAttributes<HTMLElement> & {
   component?: React.ElementType;
@@ -59,13 +39,14 @@ export type TextProps = HTMLAttributes<HTMLElement> & {
   ta?: 'left' | 'right' | 'center';
   w?: number | string;
   maw?: number | string;
-  mt?: number | string;
-  mb?: number | string;
+  mt?: SpacingValue;
+  mb?: SpacingValue;
+  preWrap?: boolean;
 };
 
 export const Text = forwardRef<HTMLElement, TextProps>(function Text(
   {
-    component: Tag = 'span',
+    component: Tag = 'div',
     size = 'md',
     c,
     fw,
@@ -79,6 +60,7 @@ export const Text = forwardRef<HTMLElement, TextProps>(function Text(
     maw,
     mt,
     mb,
+    preWrap,
     className,
     style,
     ...props
@@ -90,6 +72,7 @@ export const Text = forwardRef<HTMLElement, TextProps>(function Text(
     c: c as any,
     upper: tt === 'uppercase' ? 'true' : undefined,
     mono: ff === 'monospace' ? 'true' : undefined,
+    preWrap: preWrap ? 'true' : undefined,
   });
 
   const s: CSSProperties = {
@@ -98,12 +81,23 @@ export const Text = forwardRef<HTMLElement, TextProps>(function Text(
     ...(lh ? { lineHeight: lh } : {}),
     ...(tt && tt !== 'uppercase' ? { textTransform: tt } : {}),
     ...(ff && ff !== 'monospace' ? { fontFamily: ff } : {}),
-    ...(lineClamp ? { display: '-webkit-box', WebkitLineClamp: lineClamp, WebkitBoxOrient: 'vertical', overflow: 'hidden' } : {}),
+    ...(lineClamp
+      ? {
+          display: '-webkit-box',
+          WebkitLineClamp: lineClamp,
+          WebkitBoxOrient: 'vertical',
+          overflow: 'hidden',
+        }
+      : {}),
     ...(ta ? { textAlign: ta } : {}),
-    ...(w !== undefined ? { width: typeof w === 'number' ? `${w}px` : w } : {}),
-    ...(maw !== undefined ? { maxWidth: typeof maw === 'number' ? `${maw}px` : maw } : {}),
-    ...(mt !== undefined ? { marginTop: typeof mt === 'number' ? `${mt}px` : mt } : {}),
-    ...(mb !== undefined ? { marginBottom: typeof mb === 'number' ? `${mb}px` : mb } : {}),
+    ...(w !== undefined
+      ? { width: typeof w === 'number' ? `${w}px` : w }
+      : {}),
+    ...(maw !== undefined
+      ? { maxWidth: typeof maw === 'number' ? `${maw}px` : maw }
+      : {}),
+    ...(mt !== undefined ? { marginTop: spacing(mt) } : {}),
+    ...(mb !== undefined ? { marginBottom: spacing(mb) } : {}),
     ...style,
   };
 
@@ -117,45 +111,34 @@ export const Text = forwardRef<HTMLElement, TextProps>(function Text(
   );
 });
 
-// ── Title ─────────────────────────────────────────────────────────────
-
-const titleCls = styles.component('nb-title', {
-  base: {
-    fontFamily: font.familySans,
-    fontWeight: font.w700,
-    color: color.text,
-    lineHeight: '1.2',
-  },
-  variants: {
-    order: {
-      '1': { fontSize: font.size4xl },
-      '2': { fontSize: font.size3xl },
-      '3': { fontSize: font.size2xl },
-      '4': { fontSize: font.sizeXl },
-      '5': { fontSize: font.sizeLg, fontWeight: font.w600 },
-      '6': { fontSize: font.sizeMd, fontWeight: font.w600 },
-    },
-  },
-  defaultVariants: { order: '3' },
-});
-
 const TAG_FOR_ORDER: Record<number, React.ElementType> = {
-  1: 'h1', 2: 'h2', 3: 'h3', 4: 'h4', 5: 'h5', 6: 'h6',
+  1: 'h1',
+  2: 'h2',
+  3: 'h3',
+  4: 'h4',
+  5: 'h5',
+  6: 'h6',
 };
 
 export type TitleProps = HTMLAttributes<HTMLHeadingElement> & {
   order?: 1 | 2 | 3 | 4 | 5 | 6;
+  mb?: SpacingValue;
 };
 
 export const Title = forwardRef<HTMLHeadingElement, TitleProps>(function Title(
-  { order = 3, className, ...props },
+  { order = 3, mb, className, style, ...props },
   ref,
 ) {
   const Tag = TAG_FOR_ORDER[order];
+  const s: CSSProperties = {
+    ...(mb !== undefined ? { marginBottom: spacing(mb) } : {}),
+    ...style,
+  };
   return (
     <Tag
       ref={ref}
       className={cx(titleCls({ order: String(order) as any }), className)}
+      style={Object.keys(s).length ? s : undefined}
       {...props}
     />
   );

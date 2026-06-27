@@ -9,9 +9,9 @@ import { RuntimeClient } from './client.js';
 
 export interface RuntimeHandle {
   client: RuntimeClient;
-  /** Isolated data dir for this runtime instance. */
-  dataDir: string;
-  /** Stops the process and (unless keepData) removes the data dir. */
+  /** Isolated exec dir for this runtime instance. */
+  execDir: string;
+  /** Stops the process and (unless keepData) removes the exec dir. */
   stop: () => Promise<void>;
 }
 
@@ -68,7 +68,7 @@ export async function startRuntime(
   label: string,
 ): Promise<RuntimeHandle> {
   const safeLabel = label.replace(/[^a-zA-Z0-9._-]/g, '_');
-  const dataDir = await fs.mkdtemp(
+  const execDir = await fs.mkdtemp(
     path.join(os.tmpdir(), `artificer-bench-${safeLabel}-`),
   );
 
@@ -76,7 +76,7 @@ export async function startRuntime(
 
   const env: NodeJS.ProcessEnv = {
     ...process.env,
-    ARTIFICER_DATA_DIR: dataDir,
+    ARTIFICER_EXEC_DIR: execDir,
     PORT: String(port),
     RUNTIME_CONCURRENCY: '1',
     RUNTIME_MAX_RUNS_PER_WORKSTREAM: String(config.maxRunsPerWorkstream),
@@ -86,6 +86,10 @@ export async function startRuntime(
     LLM_MODEL_LOW: config.models.low,
     LLM_MODEL_HIGH: config.models.high,
     MODEL_PRESET: config.presetId ?? 'custom',
+    // Gateway overrides — only set when --gateway was passed, so the .env
+    // defaults are left untouched for runs that don't specify a gateway.
+    ...(config.baseUrl !== undefined ? { LLM_BASE_URL: config.baseUrl } : {}),
+    ...(config.apiKey !== undefined ? { LLM_API_KEY: config.apiKey } : {}),
   };
 
   for (const [role, tier] of Object.entries(config.roleTiers)) {
@@ -126,7 +130,7 @@ export async function startRuntime(
       });
     }
     if (!config.keepData) {
-      await fs.rm(dataDir, { recursive: true, force: true }).catch(() => {});
+      await fs.rm(execDir, { recursive: true, force: true }).catch(() => {});
     }
   };
 
@@ -144,5 +148,5 @@ export async function startRuntime(
     throw err;
   }
 
-  return { client, dataDir, stop };
+  return { client, execDir, stop };
 }

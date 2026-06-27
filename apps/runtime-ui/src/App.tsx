@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { AppShell, Badge, Button, Group, NavLink, Text, ThemeToggle, Title } from './ds';
+import { AppShell, Badge, Button, Group, NavLink, Text, ThemeToggle, Title, headerInner, navFooter, space } from './ds';
 import {
   IconActivity,
   IconBook,
@@ -17,6 +17,8 @@ import {
   useLocation,
 } from 'react-router-dom';
 import { useRuntimeState } from './api/hooks';
+
+const MOCK_MODE = import.meta.env.VITE_MOCK_API === 'true';
 import { ActivityFeed } from './components/ActivityFeed';
 import { BenchPage } from './pages/BenchPage';
 import { BenchRunPage } from './pages/BenchRunPage';
@@ -50,9 +52,14 @@ export function App() {
       padding="md"
     >
       <AppShell.Header>
-        <Group style={{ height: '100%', padding: '0 var(--nb-space-md)' }} justify="space-between">
+        <Group className={headerInner} style={{ padding: `0 ${space.md}` }} justify="space-between">
           <Title order={4}>{state?.agentName ?? 'Artificer'} Runtime</Title>
           <Group gap="xs">
+            {MOCK_MODE && (
+              <Badge color="grape" variant="light">
+                mock data
+              </Badge>
+            )}
             <Button
               variant="subtle"
               size="sm"
@@ -94,7 +101,7 @@ export function App() {
             />
           );
         })}
-        <Text size="xs" c="dimmed" style={{ marginTop: 'var(--nb-space-md)', padding: '0 var(--nb-space-sm)' }}>
+        <Text size="xs" c="dimmed" className={navFooter}>
           {state?.workstreams.length ?? 0} workstream(s)
         </Text>
       </AppShell.Navbar>
