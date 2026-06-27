@@ -18,15 +18,15 @@ import type { WorkerExecutor } from './executor.js';
 
 const execAsync = promisify(exec);
 
+// Fallback status instruction for executors that don't support MCP.
+// Executors with MCP (e.g. cursor-agent) use the report_status tool instead.
 const EXECUTOR_STATUS_INSTRUCTION = `
 
 ---
-When you finish, output one of the following on its own line at the very end of your response (required):
+Call the report_status MCP tool when you finish (preferred). If the tool is unavailable, output one of the following on its own line at the very end of your response:
 - DONE — task is complete and verified
 - DONE_WITH_CONCERNS — task is done but has known issues or caveats
-- BLOCKED — you are genuinely stuck and cannot proceed without more information
-
-Do not omit this line. The orchestrator uses it to track progress.`;
+- BLOCKED — you are genuinely stuck and cannot proceed without more information`;
 
 /** Roles that implement against the repo and benefit from working-set context. */
 const WORK_ROLES = new Set<RunRecord['role']>(['planner', 'worker', 'reviewer']);
@@ -247,6 +247,21 @@ export async function executeCall(
         ...(execResult.usage ?? {}),
       };
       run.executor = deps.executor.name;
+
+      // Synthesize a report_status tool call from the MCP result so the
+      // existing workerRunDone / lastWorkerReport logic works unchanged.
+      if (execResult.workerStatus) {
+        run.toolCalls.push({
+          name: 'report_status',
+          input: {
+            status: execResult.workerStatus,
+            summary: execResult.workerSummary ?? '',
+            ...(execResult.workerFollowUps ? { followUps: execResult.workerFollowUps } : {}),
+          },
+          output: 'Status recorded via MCP.',
+          at: new Date().toISOString(),
+        });
+      }
     } else {
       let runCharTotal = 0;
 
