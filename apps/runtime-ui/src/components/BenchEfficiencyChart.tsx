@@ -65,7 +65,7 @@ export function BenchEfficiencyChart({
 
   return (
     <Paper p="md">
-      <Group justify="space-between" align="flex-start" style={{ marginBottom: 'var(--nb-space-sm)' }}>
+      <Group justify="space-between" align="flex-start" mb="sm">
         <div>
           <Text fw={600} size="sm">
             {title}

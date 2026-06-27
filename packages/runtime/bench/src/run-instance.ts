@@ -369,7 +369,7 @@ export async function runInstance(
   }
 
   if (config.preflightClone && workstreamId && messageId) {
-    const workspaceDir = path.join(runtime.dataDir, 'workspace', workstreamId);
+    const workspaceDir = path.join(runtime.execDir, 'workspace', workstreamId);
     try {
       await preflightClone(workspaceDir, repoUrl, instance.base_commit);
       setupTracker.notePreflightComplete();
@@ -429,7 +429,7 @@ export async function runInstance(
   // Extract whatever patch exists, even on timeout/blocked, for partial credit.
   let patch = '';
   if (workstreamId) {
-    const workspaceDir = path.join(runtime.dataDir, 'workspace', workstreamId);
+    const workspaceDir = path.join(runtime.execDir, 'workspace', workstreamId);
     const clonePath = await findGitRepoInWorkspace(workspaceDir);
     rec.localRepoReady = clonePath !== undefined;
     if (clonePath) {

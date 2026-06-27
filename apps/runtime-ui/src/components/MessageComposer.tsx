@@ -1,4 +1,4 @@
-import { Button, Group, Textarea } from '../ds';
+import { Button, Group, Text, Textarea } from '../ds';
 import { notifications } from '../ds/notifications';
 import { IconSend } from '@tabler/icons-react';
 import { useState } from 'react';
@@ -45,8 +45,8 @@ export function MessageComposer() {
           if ((e.metaKey || e.ctrlKey) && e.key === 'Enter') submit();
         }}
       />
-      <Group justify="space-between" style={{ marginTop: 'var(--nb-space-xs)' }}>
-        <span style={{ fontSize: 12, opacity: 0.6 }}>⌘/Ctrl + Enter to send</span>
+      <Group justify="space-between" mt="xs">
+        <Text size="xs" c="dimmed">⌘/Ctrl + Enter to send</Text>
         <Button
           leftSection={<IconSend size={16} />}
           onPress={submit}

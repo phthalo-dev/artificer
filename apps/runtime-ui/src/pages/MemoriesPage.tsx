@@ -11,6 +11,7 @@ import {
   ScrollArea,
   Select,
   Stack,
+  Tabs,
   Text,
   Textarea,
   TextInput,
@@ -21,6 +22,7 @@ import { IconPlus, IconSearch, IconTrash } from '@tabler/icons-react';
 import { useState } from 'react';
 import { useMemories, useCreateMemory, useDeleteMemory, type CreateMemoryInput } from '../api/hooks';
 import type { Memory } from '../api/types';
+import { MarkdownContent } from '../components/MarkdownContent';
 import { formatTime, relativeTime } from '../format';
 
 function isUrl(s: string | undefined): s is string {
@@ -116,11 +118,24 @@ function MemoryDetail({
           {memory.summary}
         </Text>
       )}
-      <ScrollArea.Autosize mah={420}>
-        <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
-          {memory.content}
-        </Text>
-      </ScrollArea.Autosize>
+      <Tabs defaultValue="rendered">
+        <Tabs.List>
+          <Tabs.Tab value="rendered">Rendered</Tabs.Tab>
+          <Tabs.Tab value="raw">Raw</Tabs.Tab>
+        </Tabs.List>
+        <Tabs.Panel value="rendered" pt="sm">
+          <ScrollArea.Autosize mah={420}>
+            <MarkdownContent content={memory.content} />
+          </ScrollArea.Autosize>
+        </Tabs.Panel>
+        <Tabs.Panel value="raw" pt="sm">
+          <ScrollArea.Autosize mah={420}>
+            <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
+              {memory.content}
+            </Text>
+          </ScrollArea.Autosize>
+        </Tabs.Panel>
+      </Tabs>
       {memory.tags.length > 0 && (
         <Group gap="xs">
           {memory.tags.map((t) => (

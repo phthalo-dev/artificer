@@ -42,15 +42,17 @@ export function MessageCostPage() {
       </Anchor>
 
       <div>
-        <Title order={3}>Message cost</Title>
-        <Card padding="sm" style={{ marginTop: 'var(--nb-space-xs)' }}>
-          <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
-            {data.message.content}
-          </Text>
-          <Text size="xs" c="dimmed" mt={4}>
-            {formatTime(data.message.createdAt)}
-          </Text>
-        </Card>
+        <Stack gap="xs">
+          <Title order={3}>Message cost</Title>
+          <Card padding="sm">
+            <Text size="sm" preWrap>
+              {data.message.content}
+            </Text>
+            <Text size="xs" c="dimmed" mt={4}>
+              {formatTime(data.message.createdAt)}
+            </Text>
+          </Card>
+        </Stack>
       </div>
 
       <div>
@@ -83,7 +85,7 @@ export function MessageCostPage() {
       </Group>
 
       <div>
-        <Title order={5} style={{ marginBottom: 'var(--nb-space-sm)' }}>
+        <Title order={5} mb="sm">
           Call tree
         </Title>
         <Text size="xs" c="dimmed" mb={8}>

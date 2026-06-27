@@ -1,29 +1,6 @@
 import { type AnchorHTMLAttributes, forwardRef } from 'react';
-import { styles, cx } from 'typestyles';
-import { color, font } from '../tokens';
-
-const anchorCls = styles.component('nb-anchor', {
-  base: {
-    color: color.blue,
-    textDecoration: 'underline',
-    textDecorationThickness: '2px',
-    fontFamily: font.familySans,
-    cursor: 'pointer',
-    '&:hover': { color: color.indigo },
-  },
-  variants: {
-    size: {
-      xs: { fontSize: font.sizeXs },
-      sm: { fontSize: font.sizeSm },
-      md: { fontSize: font.sizeMd },
-    },
-    c: {
-      dimmed:  { color: color.dimmed },
-      inherit: { color: 'inherit' },
-    },
-  },
-  defaultVariants: { size: 'md' },
-});
+import { cx } from '../styles';
+import { anchor as anchorCls, anchorIcon } from './anchor.styles';
 
 export type AnchorProps = AnchorHTMLAttributes<HTMLAnchorElement> & {
   component?: React.ElementType;
@@ -45,3 +22,5 @@ export const Anchor = forwardRef<HTMLAnchorElement, AnchorProps>(function Anchor
     />
   );
 });
+
+export { anchorIcon };

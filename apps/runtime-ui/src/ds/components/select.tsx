@@ -10,60 +10,7 @@ import {
   Select as AriaSelect,
   SelectValue,
 } from 'react-aria-components';
-import { styles } from 'typestyles';
-import { color, font, space } from '../tokens';
-
-const selectCls = {
-  root: styles.class('nb-select-root', { display: 'flex', flexDirection: 'column', gap: space.xs }),
-  label: styles.class('nb-select-label', { fontSize: font.sizeSm, fontWeight: font.w600, display: 'block' }),
-  trigger: styles.class('nb-select-trigger', {
-    display: 'flex',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    gap: space.sm,
-    padding: `${space.xs} ${space.sm}`,
-    background: color.bg,
-    border: `2px solid ${color.border}`,
-    borderRadius: '0',
-    boxShadow: `2px 2px 0 0 ${color.border}`,
-    fontFamily: font.familySans,
-    fontSize: font.sizeMd,
-    cursor: 'pointer',
-    minWidth: '200px',
-    width: '100%',
-    '&[data-hovered]': { background: color.grayLight },
-    '&[data-focused]': { outline: `2px solid ${color.border}`, outlineOffset: '2px' },
-  }),
-  popover: styles.class('nb-select-popover', {
-    background: color.bg,
-    border: `2px solid ${color.border}`,
-    borderRadius: '0',
-    boxShadow: `4px 4px 0 0 ${color.border}`,
-    animation: 'nb-fadein 120ms ease',
-    minWidth: 'var(--trigger-width)',
-    zIndex: 1000,
-    maxHeight: '300px',
-    overflow: 'auto',
-  }),
-  item: styles.class('nb-select-item', {
-    padding: `${space.xs} ${space.sm}`,
-    fontFamily: font.familySans,
-    fontSize: font.sizeMd,
-    cursor: 'pointer',
-    outline: 'none',
-    '&[data-focused]': { background: color.grayLight },
-    '&[data-selected]': { background: color.border, color: color.bg },
-  }),
-  section: styles.class('nb-select-section', {
-    padding: `${space.xs} ${space.sm}`,
-    fontSize: font.sizeXs,
-    fontWeight: font.w700,
-    textTransform: 'uppercase',
-    letterSpacing: '0.05em',
-    color: color.dimmed,
-    borderTop: `1px solid ${color.grayBg}`,
-  }),
-};
+import { select as selectCls } from './select.styles';
 
 type SelectItem = { value: string; label: string };
 type SelectGroup = { group: string; items: SelectItem[] };
@@ -111,7 +58,9 @@ export function Select({
     >
       {label && <Label className={selectCls.label}>{label}</Label>}
       <AriaButton className={selectCls.trigger}>
-        <SelectValue>{({ defaultChildren }) => defaultChildren ?? placeholder}</SelectValue>
+        <SelectValue>
+          {({ defaultChildren }) => defaultChildren ?? placeholder}
+        </SelectValue>
         <span aria-hidden>▾</span>
       </AriaButton>
       <Popover className={selectCls.popover}>
@@ -121,14 +70,26 @@ export function Select({
                 <ListBoxSection key={group.group}>
                   <Header className={selectCls.section}>{group.group}</Header>
                   {group.items.map((item) => (
-                    <ListBoxItem key={item.value} id={item.value} textValue={item.label} className={selectCls.item}>
-                      {renderOption ? renderOption({ option: item }) : item.label}
+                    <ListBoxItem
+                      key={item.value}
+                      id={item.value}
+                      textValue={item.label}
+                      className={selectCls.item}
+                    >
+                      {renderOption
+                        ? renderOption({ option: item })
+                        : item.label}
                     </ListBoxItem>
                   ))}
                 </ListBoxSection>
               ))
             : (data as SelectItem[]).map((item) => (
-                <ListBoxItem key={item.value} id={item.value} textValue={item.label} className={selectCls.item}>
+                <ListBoxItem
+                  key={item.value}
+                  id={item.value}
+                  textValue={item.label}
+                  className={selectCls.item}
+                >
                   {renderOption ? renderOption({ option: item }) : item.label}
                 </ListBoxItem>
               ))}

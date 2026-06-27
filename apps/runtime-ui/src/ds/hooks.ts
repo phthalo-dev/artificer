@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react';
-import { darkTheme } from './tokens';
+import { darkTheme } from './tokens/themes';
 
 const THEME_STORAGE_KEY = 'theme';
 

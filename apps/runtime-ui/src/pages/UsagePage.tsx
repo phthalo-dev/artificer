@@ -24,21 +24,21 @@ export function UsagePage() {
       </div>
 
       <div>
-        <Title order={5} style={{ marginBottom: 'var(--nb-space-sm)' }}>
+        <Title order={5} mb="sm">
           By model
         </Title>
         <BreakdownTable label="Model" data={data.byModel} />
       </div>
 
       <div>
-        <Title order={5} style={{ marginBottom: 'var(--nb-space-sm)' }}>
+        <Title order={5} mb="sm">
           By role
         </Title>
         <BreakdownTable label="Role" data={data.byRole} />
       </div>
 
       <div>
-        <Title order={5} style={{ marginBottom: 'var(--nb-space-sm)' }}>
+        <Title order={5} mb="sm">
           By workstream
         </Title>
         <BreakdownTable
@@ -52,7 +52,7 @@ export function UsagePage() {
       </div>
 
       <div>
-        <Title order={5} style={{ marginBottom: 'var(--nb-space-sm)' }}>
+        <Title order={5} mb="sm">
           By message
         </Title>
         <BreakdownTable

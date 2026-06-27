@@ -10,6 +10,7 @@ import {
   Table,
   Text,
   Title,
+  color,
 } from '../ds';
 import { notifications } from '../ds/notifications';
 import { IconCheck, IconDeviceFloppy, IconRefresh } from '@tabler/icons-react';
@@ -58,9 +59,9 @@ function PresetCard({
       padding="md"
       style={{
         border: active
-          ? '2px solid var(--nb-color-blue)'
-          : '2px solid var(--nb-color-border)',
-        background: active ? 'var(--nb-color-blueLight)' : undefined,
+          ? `2px solid ${color.blue}`
+          : `2px solid ${color.border}`,
+        background: active ? color.blueLight : undefined,
       }}
     >
       <Group justify="space-between" align="flex-start" mb={6}>
@@ -196,7 +197,7 @@ export function ModelsPage() {
       </div>
 
       <div>
-        <Text fw={600} size="sm" style={{ marginBottom: 'var(--nb-space-sm)' }}>
+        <Text fw={600} size="sm" mb="sm">
           Presets
         </Text>
         <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>

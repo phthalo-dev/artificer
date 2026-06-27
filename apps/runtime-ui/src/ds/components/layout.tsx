@@ -3,10 +3,22 @@ import {
   type HTMLAttributes,
   forwardRef,
 } from 'react';
-import { styles, cx } from 'typestyles';
+import { cx } from '../styles';
 import { space } from '../tokens';
+import {
+  group as groupCls,
+  overflowXAuto,
+  scrollArea,
+  simpleGrid,
+  stack as stackCls,
+} from './layout.styles';
 
-// ── Box ──────────────────────────────────────────────────────────────
+type GapKey = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
+
+function spacing(v: number | string | GapKey): string {
+  if (typeof v === 'string' && v in space) return space[v as GapKey];
+  return typeof v === 'number' ? `${v}px` : v;
+}
 
 export type BoxProps = HTMLAttributes<HTMLDivElement> & {
   component?: React.ElementType;
@@ -26,41 +38,21 @@ export const Box = forwardRef<HTMLDivElement, BoxProps>(function Box(
   ref,
 ) {
   const s: CSSProperties = {
-    ...(w !== undefined ? { width: px(w) } : {}),
-    ...(h !== undefined ? { height: px(h) } : {}),
-    ...(maw !== undefined ? { maxWidth: px(maw) } : {}),
-    ...(mah !== undefined ? { maxHeight: px(mah) } : {}),
-    ...(ml !== undefined ? { marginLeft: px(ml) } : {}),
-    ...(mr !== undefined ? { marginRight: px(mr) } : {}),
-    ...(mt !== undefined ? { marginTop: px(mt) } : {}),
-    ...(mb !== undefined ? { marginBottom: px(mb) } : {}),
-    ...(p !== undefined ? { padding: px(p) } : {}),
+    ...(w !== undefined ? { width: spacing(w) } : {}),
+    ...(h !== undefined ? { height: spacing(h) } : {}),
+    ...(maw !== undefined ? { maxWidth: spacing(maw) } : {}),
+    ...(mah !== undefined ? { maxHeight: spacing(mah) } : {}),
+    ...(ml !== undefined ? { marginLeft: spacing(ml) } : {}),
+    ...(mr !== undefined ? { marginRight: spacing(mr) } : {}),
+    ...(mt !== undefined ? { marginTop: spacing(mt) } : {}),
+    ...(mb !== undefined ? { marginBottom: spacing(mb) } : {}),
+    ...(p !== undefined ? { padding: spacing(p) } : {}),
     ...style,
   };
-  return <Tag ref={ref} style={Object.keys(s).length ? s : undefined} {...props} />;
+  return (
+    <Tag ref={ref} style={Object.keys(s).length ? s : undefined} {...props} />
+  );
 });
-
-function px(v: number | string): string {
-  return typeof v === 'number' ? `${v}px` : v;
-}
-
-// ── Stack ─────────────────────────────────────────────────────────────
-
-const stackCls = styles.component('nb-stack', {
-  base: { display: 'flex', flexDirection: 'column' },
-  variants: {
-    gap: {
-      xs: { gap: space.xs },
-      sm: { gap: space.sm },
-      md: { gap: space.md },
-      lg: { gap: space.lg },
-      xl: { gap: space.xl },
-    },
-  },
-  defaultVariants: { gap: 'md' },
-});
-
-type GapKey = 'xs' | 'sm' | 'md' | 'lg' | 'xl';
 
 export type StackProps = HTMLAttributes<HTMLDivElement> & {
   gap?: GapKey | number;
@@ -78,11 +70,12 @@ export const Stack = forwardRef<HTMLDivElement, StackProps>(function Stack(
     ...(typeof gap === 'number' ? { gap: `${gap}px` } : {}),
     ...(align ? { alignItems: align } : {}),
     ...(justify ? { justifyContent: justify } : {}),
-    ...(mt !== undefined ? { marginTop: px(mt) } : {}),
-    ...(mb !== undefined ? { marginBottom: px(mb) } : {}),
+    ...(mt !== undefined ? { marginTop: spacing(mt) } : {}),
+    ...(mb !== undefined ? { marginBottom: spacing(mb) } : {}),
     ...style,
   };
-  const gapCls = typeof gap === 'string' ? stackCls({ gap }) : stackCls({ gap: 'md' });
+  const gapCls =
+    typeof gap === 'string' ? stackCls({ gap }) : stackCls({ gap: 'md' });
   return (
     <div
       ref={ref}
@@ -91,22 +84,6 @@ export const Stack = forwardRef<HTMLDivElement, StackProps>(function Stack(
       {...props}
     />
   );
-});
-
-// ── Group ─────────────────────────────────────────────────────────────
-
-const groupCls = styles.component('nb-group', {
-  base: { display: 'flex', flexDirection: 'row', alignItems: 'center' },
-  variants: {
-    gap: {
-      xs: { gap: space.xs },
-      sm: { gap: space.sm },
-      md: { gap: space.md },
-      lg: { gap: space.lg },
-      xl: { gap: space.xl },
-    },
-  },
-  defaultVariants: { gap: 'sm' },
 });
 
 export type GroupProps = HTMLAttributes<HTMLDivElement> & {
@@ -118,10 +95,24 @@ export type GroupProps = HTMLAttributes<HTMLDivElement> & {
   mt?: number | string;
   mb?: number | string;
   w?: number | string;
+  alignStretch?: boolean;
 };
 
 export const Group = forwardRef<HTMLDivElement, GroupProps>(function Group(
-  { gap = 'sm', align, justify, wrap, grow, mt, mb, w, className, style, ...props },
+  {
+    gap = 'sm',
+    align,
+    justify,
+    wrap,
+    grow,
+    mt,
+    mb,
+    w,
+    alignStretch,
+    className,
+    style,
+    ...props
+  },
   ref,
 ) {
   const s: CSSProperties = {
@@ -129,12 +120,16 @@ export const Group = forwardRef<HTMLDivElement, GroupProps>(function Group(
     ...(align ? { alignItems: align } : {}),
     ...(justify ? { justifyContent: justify } : {}),
     ...(wrap ? { flexWrap: wrap } : {}),
-    ...(mt !== undefined ? { marginTop: px(mt) } : {}),
-    ...(mb !== undefined ? { marginBottom: px(mb) } : {}),
-    ...(w !== undefined ? { width: px(w) } : {}),
+    ...(grow ? { flex: 1 } : {}),
+    ...(mt !== undefined ? { marginTop: spacing(mt) } : {}),
+    ...(mb !== undefined ? { marginBottom: spacing(mb) } : {}),
+    ...(w !== undefined ? { width: spacing(w) } : {}),
     ...style,
   };
-  const gapCls = typeof gap === 'string' ? groupCls({ gap }) : groupCls({ gap: 'sm' });
+  const gapCls =
+    typeof gap === 'string'
+      ? groupCls({ gap, alignStretch: alignStretch ? 'true' : undefined })
+      : groupCls({ gap: 'sm', alignStretch: alignStretch ? 'true' : undefined });
   return (
     <div
       ref={ref}
@@ -144,8 +139,6 @@ export const Group = forwardRef<HTMLDivElement, GroupProps>(function Group(
     />
   );
 });
-
-// ── SimpleGrid ────────────────────────────────────────────────────────
 
 type ColsInput =
   | number
@@ -157,42 +150,44 @@ export type SimpleGridProps = HTMLAttributes<HTMLDivElement> & {
 };
 
 export const SimpleGrid = forwardRef<HTMLDivElement, SimpleGridProps>(
-  function SimpleGrid({ cols = 1, spacing = 'md', style, ...props }, ref) {
-    const colCount = typeof cols === 'number' ? cols : (cols.lg ?? cols.md ?? cols.sm ?? cols.base ?? 1);
-    const gap = typeof spacing === 'string' ? `var(--nb-space-${spacing})` : `${spacing}px`;
+  function SimpleGrid({ cols = 1, spacing: gridSpacing = 'md', className, style, ...props }, ref) {
+    const colCount =
+      typeof cols === 'number'
+        ? cols
+        : (cols.lg ?? cols.md ?? cols.sm ?? cols.base ?? 1);
+    const gap =
+      typeof gridSpacing === 'string' ? space[gridSpacing] : `${gridSpacing}px`;
+    const s: CSSProperties = {
+      gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))`,
+      gap,
+      ...style,
+    };
     return (
-      <div
-        ref={ref}
-        style={{
-          display: 'grid',
-          gridTemplateColumns: `repeat(${colCount}, minmax(0, 1fr))`,
-          gap,
-          ...style,
-        }}
-        {...props}
-      />
+      <div ref={ref} className={cx(simpleGrid, className)} style={s} {...props} />
     );
   },
 );
 
-// ── ScrollArea ─────────────────────────────────────────────────────────
-
-const scrollCls = styles.class('nb-scroll-area', { overflow: 'auto' });
-
 export type ScrollAreaProps = HTMLAttributes<HTMLDivElement> & {
   type?: string;
   mah?: number | string;
+  mb?: number | string | GapKey;
 };
 
 function ScrollAreaBase(
-  { mah, style, className, ...props }: ScrollAreaProps,
+  { mah, mb, style, className, ...props }: ScrollAreaProps,
   ref: React.Ref<HTMLDivElement>,
 ) {
+  const s: CSSProperties = {
+    ...(mah !== undefined ? { maxHeight: spacing(mah) } : {}),
+    ...(mb !== undefined ? { marginBottom: spacing(mb) } : {}),
+    ...style,
+  };
   return (
     <div
       ref={ref}
-      className={cx(scrollCls, className)}
-      style={{ ...(mah !== undefined ? { maxHeight: px(mah) } : {}), ...style }}
+      className={cx(scrollArea, className)}
+      style={Object.keys(s).length ? s : undefined}
       {...props}
     />
   );
@@ -203,3 +198,5 @@ const ScrollAreaForwardRef = forwardRef<HTMLDivElement, ScrollAreaProps>(ScrollA
 export const ScrollArea = Object.assign(ScrollAreaForwardRef, {
   Autosize: ScrollAreaForwardRef,
 });
+
+export { overflowXAuto };

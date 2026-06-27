@@ -1,5 +1,7 @@
 export const baseOrigin =
-  import.meta.env.VITE_RUNTIME_URL ?? window.location.origin;
+  import.meta.env.VITE_MOCK_API === 'true'
+    ? window.location.origin
+    : (import.meta.env.VITE_RUNTIME_URL ?? window.location.origin);
 export const RUNTIME_URL = `${baseOrigin.replace(/\/$/, '')}/api`;
 
 /** When set, outbound messages go through the wake API (queue + start EC2). */

@@ -11,7 +11,7 @@ describe('createRuntime', () => {
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'artificer-runtime-'));
     fs.mkdirSync(path.join(tmpDir, 'identity', 'memories'), { recursive: true });
-    fs.mkdirSync(path.join(tmpDir, '.artificer'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'exec'), { recursive: true });
   });
 
   afterEach(() => {
@@ -24,6 +24,7 @@ describe('createRuntime', () => {
       config: {
         apiKey: 'test-key',
         baseURL: 'http://localhost:9999',
+        execDir: path.join(tmpDir, 'exec'),
       },
     });
 
@@ -35,16 +36,18 @@ describe('createRuntime', () => {
     assert.equal(typeof runtime.start, 'function');
   });
 
-  it('uses .artificer/ for execution state', async () => {
+  it('uses explicit execDir when provided', async () => {
+    const execDir = path.join(tmpDir, 'exec');
     const runtime = await createRuntime({
       rootDir: tmpDir,
       config: {
         apiKey: 'test-key',
         baseURL: 'http://localhost:9999',
+        execDir,
       },
     });
 
-    assert.ok(runtime.config.dataDir.includes('.artificer'));
+    assert.equal(runtime.config.execDir, execDir);
   });
 
   it('uses identity/ for identity store', async () => {
@@ -53,10 +56,30 @@ describe('createRuntime', () => {
       config: {
         apiKey: 'test-key',
         baseURL: 'http://localhost:9999',
+        execDir: path.join(tmpDir, 'exec'),
       },
     });
 
     assert.equal(runtime.config.identityDir, tmpDir);
+  });
+
+  it('loads agentName and preset from artificer.config.json', async () => {
+    fs.writeFileSync(
+      path.join(tmpDir, 'artificer.config.json'),
+      JSON.stringify({ name: 'TestBot', preset: 'ultra-budget' }),
+    );
+
+    const runtime = await createRuntime({
+      rootDir: tmpDir,
+      config: {
+        apiKey: 'test-key',
+        baseURL: 'http://localhost:9999',
+        execDir: path.join(tmpDir, 'exec'),
+      },
+    });
+
+    assert.equal(runtime.config.agentName, 'TestBot');
+    assert.equal(runtime.config.modelPresetId, 'ultra-budget');
   });
 
   it('discovers skills from agent/skills/', async () => {
@@ -71,6 +94,7 @@ describe('createRuntime', () => {
       config: {
         apiKey: 'test-key',
         baseURL: 'http://localhost:9999',
+        execDir: path.join(tmpDir, 'exec'),
       },
     });
 

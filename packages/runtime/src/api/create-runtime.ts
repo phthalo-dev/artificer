@@ -1,6 +1,8 @@
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { serve } from '@hono/node-server';
-import { loadConfig, type RuntimeConfig } from '../config.js';
+import { loadConfig, mergeWithDefinition, type RuntimeConfig } from '../config.js';
 import { Engine } from '../engine/engine.js';
 import { createApp } from '../server/app.js';
 import { Store } from '../storage/store.js';
@@ -22,24 +24,41 @@ export async function createRuntime(
   if (options.config?.apiKey) syntheticEnv.LLM_API_KEY = options.config.apiKey;
   if (options.config?.baseURL) syntheticEnv.LLM_BASE_URL = options.config.baseURL;
 
-  const envConfig = loadConfig(syntheticEnv);
-  const dataDir = options.config?.dataDir ?? path.join(rootDir, '.artificer');
+  // Load artificer.config.json early so its fields seed agentName, models, etc.
+  const manifest = scanAgentDirectory(rootDir);
+  let fileDefinition: import('./types.js').ArtificerConfig | undefined;
+  if (manifest.config) {
+    try {
+      fileDefinition = JSON.parse(
+        fs.readFileSync(manifest.config.path, 'utf-8'),
+      ) as import('./types.js').ArtificerConfig;
+    } catch { /* ignore — config file is optional */ }
+  }
+
+  const baseConfig = fileDefinition
+    ? mergeWithDefinition(fileDefinition, syntheticEnv)
+    : loadConfig(syntheticEnv);
+
+  // Resolve agentName first so the default execDir reflects any name override.
+  const agentName = options.config?.agentName ?? fileDefinition?.name ?? baseConfig.agentName;
+  const execDir = options.config?.execDir
+    ?? (syntheticEnv.ARTIFICER_EXEC_DIR ? path.resolve(syntheticEnv.ARTIFICER_EXEC_DIR) : null)
+    ?? path.join(os.homedir(), '.artificer', agentName);
 
   const config: RuntimeConfig = {
-    ...envConfig,
+    ...baseConfig,
     ...options.config,
-    dataDir,
+    agentName,
+    execDir,
     identityDir: rootDir,
   } as RuntimeConfig;
-
-  const manifest = scanAgentDirectory(rootDir);
 
   const skills: ArtificerSkill[] = loadSkillsFromDisk(manifest.skills);
   const instructions = manifest.instructions
     ? loadInstructionsFromDisk(manifest.instructions.path)
     : null;
 
-  const store = new Store(dataDir);
+  const store = new Store(execDir);
   await store.init();
   const identity = config.identity?.autoCommit
     ? new IdentityGitSync(rootDir, config.identity, config.github)
@@ -75,7 +94,7 @@ export async function createRuntime(
         console.log(`  UI    ${base}`);
         console.log(`  SSE   ${base}/events\n`);
         console.log(`  identity  ${rootDir}`);
-        console.log(`  data      ${dataDir}`);
+        console.log(`  exec      ${execDir}`);
       });
     },
   };
