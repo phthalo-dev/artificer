@@ -18,15 +18,20 @@ import type { WorkerExecutor } from './executor.js';
 
 const execAsync = promisify(exec);
 
-// Fallback status instruction for executors that don't support MCP.
-// Executors with MCP (e.g. cursor-agent) use the report_status tool instead.
+// Status/review reporting instruction appended to executor context.
+// MCP tools (report_status, submit_review) are preferred; text fallback
+// catches cases where MCP is unavailable.
 const EXECUTOR_STATUS_INSTRUCTION = `
 
 ---
-Call the report_status MCP tool when you finish (preferred). If the tool is unavailable, output one of the following on its own line at the very end of your response:
+When you finish:
+- Workers: call the report_status MCP tool with status and summary.
+- Reviewers: call the submit_review MCP tool with target, notes, approved, stage ("work"), and severity.
+
+If MCP tools are unavailable, output one of the following on its own line at the very end:
 - DONE — task is complete and verified
 - DONE_WITH_CONCERNS — task is done but has known issues or caveats
-- BLOCKED — you are genuinely stuck and cannot proceed without more information`;
+- BLOCKED — you are genuinely stuck and cannot proceed`;
 
 /** Roles that implement against the repo and benefit from working-set context. */
 const WORK_ROLES = new Set<RunRecord['role']>(['planner', 'worker', 'reviewer']);
@@ -248,8 +253,8 @@ export async function executeCall(
       };
       run.executor = deps.executor.name;
 
-      // Synthesize a report_status tool call from the MCP result so the
-      // existing workerRunDone / lastWorkerReport logic works unchanged.
+      // Synthesize a report_status tool call so workerRunDone / lastWorkerReport
+      // work unchanged.
       if (execResult.workerStatus) {
         run.toolCalls.push({
           name: 'report_status',
@@ -259,6 +264,26 @@ export async function executeCall(
             ...(execResult.workerFollowUps ? { followUps: execResult.workerFollowUps } : {}),
           },
           output: 'Status recorded via MCP.',
+          at: new Date().toISOString(),
+        });
+      }
+
+      // Synthesize a submit_review tool call and write the review record so the
+      // workstream machine sees lastReviewApproved correctly.
+      if (execResult.review && run.workstreamId) {
+        const rev = execResult.review;
+        await store.createReview({
+          workstreamId: run.workstreamId,
+          target: rev.target,
+          notes: rev.notes,
+          approved: rev.approved,
+          stage: rev.stage,
+          severity: rev.severity,
+        });
+        run.toolCalls.push({
+          name: 'submit_review',
+          input: rev,
+          output: 'Review recorded via MCP.',
           at: new Date().toISOString(),
         });
       }

@@ -3,7 +3,7 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { RunRecord } from '../storage/types.js';
-import type { ExecutorResult, WorkerExecutor } from './executor.js';
+import type { ExecutorReview, ExecutorResult, WorkerExecutor } from './executor.js';
 import type { WorkerStatus } from './worker-report.js';
 
 const TIMEOUT_MS = 5 * 60 * 1000;
@@ -64,16 +64,27 @@ export class CursorAgentExecutor implements WorkerExecutor {
         clearTimeout(timer);
         const text = Buffer.concat(stdout).toString('utf-8').trim();
 
-        // Read MCP-reported status if the tool was called
+        // Read MCP-reported tool result if a tool was called
         let workerStatus: WorkerStatus | undefined;
         let workerSummary: string | undefined;
         let workerFollowUps: string | undefined;
+        let review: ExecutorReview | undefined;
         try {
           if (fs.existsSync(statusFile)) {
             const raw = JSON.parse(fs.readFileSync(statusFile, 'utf-8')) as Record<string, unknown>;
-            workerStatus = raw.status as WorkerStatus | undefined;
-            workerSummary = raw.summary as string | undefined;
-            workerFollowUps = raw.followUps as string | undefined;
+            if (raw.tool === 'submit_review') {
+              review = {
+                target: String(raw.target ?? 'work'),
+                notes: String(raw.notes ?? ''),
+                approved: Boolean(raw.approved),
+                stage: (raw.stage as 'plan' | 'work' | undefined) ?? 'work',
+                severity: raw.severity as ExecutorReview['severity'] | undefined,
+              };
+            } else {
+              workerStatus = raw.status as WorkerStatus | undefined;
+              workerSummary = raw.summary as string | undefined;
+              workerFollowUps = raw.followUps as string | undefined;
+            }
           }
         } catch { /* ignore malformed status file */ }
 
@@ -87,6 +98,7 @@ export class CursorAgentExecutor implements WorkerExecutor {
             workerStatus,
             workerSummary,
             workerFollowUps,
+            review,
           });
         }
       });

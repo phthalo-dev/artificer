@@ -1,6 +1,14 @@
 import type { RunRecord } from '../storage/types.js';
 import type { WorkerStatus } from './worker-report.js';
 
+export interface ExecutorReview {
+  target: string;
+  notes: string;
+  approved: boolean;
+  stage?: 'plan' | 'work';
+  severity?: 'critical' | 'important' | 'minor' | 'none';
+}
+
 export interface ExecutorResult {
   text: string;
   usage?: { inputTokens: number; outputTokens: number };
@@ -8,6 +16,8 @@ export interface ExecutorResult {
   workerStatus?: WorkerStatus;
   workerSummary?: string;
   workerFollowUps?: string;
+  /** Review verdict reported via the MCP submit_review tool, if called. */
+  review?: ExecutorReview;
 }
 
 export interface WorkerExecutor {
