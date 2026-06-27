@@ -18,6 +18,16 @@ import type { WorkerExecutor } from './executor.js';
 
 const execAsync = promisify(exec);
 
+const EXECUTOR_STATUS_INSTRUCTION = `
+
+---
+When you finish, output one of the following on its own line at the very end of your response (required):
+- DONE — task is complete and verified
+- DONE_WITH_CONCERNS — task is done but has known issues or caveats
+- BLOCKED — you are genuinely stuck and cannot proceed without more information
+
+Do not omit this line. The orchestrator uses it to track progress.`;
+
 /** Roles that implement against the repo and benefit from working-set context. */
 const WORK_ROLES = new Set<RunRecord['role']>(['planner', 'worker', 'reviewer']);
 
@@ -229,7 +239,8 @@ export async function executeCall(
     let resultUsage: RunRecord['usage'];
 
     if (deps.executor && WORK_ROLES.has(run.role)) {
-      const execResult = await deps.executor.execute({ context: userMessage, workspaceDir, run });
+      const execContext = userMessage + EXECUTOR_STATUS_INSTRUCTION;
+      const execResult = await deps.executor.execute({ context: execContext, workspaceDir, run });
       resultText = execResult.text;
       resultUsage = {
         ...emptyUsage(),
