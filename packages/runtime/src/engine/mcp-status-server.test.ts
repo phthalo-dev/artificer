@@ -88,8 +88,7 @@ test('tools/list returns report_status tool with correct schema', async () => {
     const listResponse = responses.find((r) => r.id === 2);
     assert.ok(listResponse, 'missing tools/list response');
     const result = listResponse.result as { tools: Array<{ name: string }> };
-    assert.equal(result.tools.length, 1);
-    assert.equal(result.tools[0].name, 'report_status');
+    assert.ok(result.tools.some((t) => t.name === 'report_status'));
   } finally {
     fs.rmSync(statusFile, { force: true });
   }
@@ -188,6 +187,71 @@ test('notifications/initialized produces no response', async () => {
     assert.ok(!ids.includes(undefined as unknown as number), 'notification should not produce a response id');
     assert.ok(ids.includes(1));
     assert.ok(ids.includes(2));
+  } finally {
+    fs.rmSync(statusFile, { force: true });
+  }
+});
+
+test('tools/list includes both report_status and submit_review', async () => {
+  const statusFile = tmpStatusFile();
+  try {
+    const responses = await driveServer(statusFile, [
+      { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} },
+      { jsonrpc: '2.0', id: 2, method: 'tools/list', params: {} },
+    ]);
+    const listResponse = responses.find((r) => r.id === 2);
+    assert.ok(listResponse);
+    const result = listResponse!.result as { tools: Array<{ name: string }> };
+    const names = result.tools.map((t) => t.name);
+    assert.ok(names.includes('report_status'));
+    assert.ok(names.includes('submit_review'));
+  } finally {
+    fs.rmSync(statusFile, { force: true });
+  }
+});
+
+test('tools/call submit_review writes review to status file', async () => {
+  const statusFile = tmpStatusFile();
+  try {
+    const responses = await driveServer(statusFile, [
+      { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} },
+      {
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: {
+          name: 'submit_review',
+          arguments: { target: 'work', notes: 'LGTM.', approved: true, stage: 'work', severity: 'none' },
+        },
+      },
+    ]);
+    const callResponse = responses.find((r) => r.id === 2);
+    assert.ok(!callResponse?.error, `unexpected error: ${callResponse?.error?.message}`);
+
+    assert.ok(fs.existsSync(statusFile));
+    const written = JSON.parse(fs.readFileSync(statusFile, 'utf-8')) as Record<string, unknown>;
+    assert.equal(written.tool, 'submit_review');
+    assert.equal(written.approved, true);
+    assert.equal(written.stage, 'work');
+    assert.equal(written.severity, 'none');
+  } finally {
+    fs.rmSync(statusFile, { force: true });
+  }
+});
+
+test('submit_review and report_status write tool discriminator', async () => {
+  const statusFile = tmpStatusFile();
+  try {
+    await driveServer(statusFile, [
+      { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} },
+      {
+        jsonrpc: '2.0', id: 2, method: 'tools/call',
+        params: { name: 'report_status', arguments: { status: 'done', summary: 'Done.' } },
+      },
+    ]);
+    const status = JSON.parse(fs.readFileSync(statusFile, 'utf-8')) as Record<string, unknown>;
+    assert.equal(status.tool, 'report_status');
+    assert.equal(status.status, 'done');
   } finally {
     fs.rmSync(statusFile, { force: true });
   }
