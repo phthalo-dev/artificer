@@ -1,7 +1,6 @@
 import type { ToolRegistry } from '../api/tool-registry.js';
 import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
-import type { RoleName } from '../storage/types.js';
 import { createArtifactTools } from './artifacts.js';
 import {
   createCommunicatorTools,
@@ -27,7 +26,7 @@ function byName(tools: ToolDef[], names: string[]): ToolDef[] {
  * shared widely so any level can query the system and spawn new calls.
  */
 export function toolsForRole(
-  role: RoleName,
+  role: string,
   ctx: ToolContext,
   customRegistry?: ToolRegistry,
 ): ToolDef[] {
