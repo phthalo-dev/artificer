@@ -16,9 +16,13 @@
     "infra:deploy": "pnpm --filter artificer-infrastructure deploy:personal",
     "infra:sync-env": "pnpm --filter artificer-infrastructure sync:runtime-env",
     "link": "cd packages/runtime && npm link && cd ../cli && npm link",
-    "unlink": "cd packages/cli && npm unlink -g && cd ../runtime && npm unlink -g"
+    "unlink": "cd packages/cli && npm unlink -g && cd ../runtime && npm unlink -g",
+    "changeset": "changeset",
+    "version-packages": "changeset version",
+    "publish-packages": "pnpm --filter @artificer-ai/runtime build && pnpm --filter @artificer-ai/runtime build:ui && pnpm --filter @artificer-ai/cli build && changeset publish"
   },
   "devDependencies": {
+    "@changesets/cli": "^2.29.0",
     "@types/node": "^20.11.5",
     "prettier": "^3.2.4",
     "turbo": "^1.12.4",

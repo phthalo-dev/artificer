@@ -1,4 +1,4 @@
-# @artificer/runtime
+# @artificer-ai/runtime
 
 A containerized agent runtime. It runs as a single web server that _is_ an agent
 entity: you talk to it like a person (send it messages), it does work using its

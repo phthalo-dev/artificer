@@ -192,7 +192,10 @@ export class Store {
   async updateWorkstream(
     id: string,
     patch: Partial<
-      Pick<Workstream, 'status' | 'summary' | 'title' | 'repoUrl' | 'baseCommit'>
+      Pick<
+        Workstream,
+        'status' | 'summary' | 'title' | 'repoUrl' | 'baseCommit' | 'quotaPausedStatus'
+      >
     >,
   ): Promise<Workstream | null> {
     const existing = await this.getWorkstream(id);

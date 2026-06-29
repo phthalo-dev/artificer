@@ -1,6 +1,6 @@
 # Runtime benchmarking harness (SWE-bench-style)
 
-Drives the `@artificer/runtime` agent over HTTP against a curated suite of real
+Drives the `@artificer-ai/runtime` agent over HTTP against a curated suite of real
 repo-fixing tasks, then measures **correctness** (does the agent's patch make
 the failing tests pass) and **cost/efficiency** (tokens, USD, LLM call count)
 per task.
@@ -74,7 +74,7 @@ pnpm bench:deepswe:typescript:go-economy  # fast TS subset for quick probes
 Results land under `bench/results/<preset>/<suite>/` (e.g.
 `bench/results/async-economy/mini-suite/`).
 
-Model presets match the runtime (`MODEL_PRESET` / Models page in runtime-ui):
+Model presets match the runtime (`MODEL_PRESET` / Models page in the UI):
 `async-economy` (default), `ultra-budget`, `async-slow`, `quality-first`, `bench-budget`,
 `go-economy`, `go-flash`, `go-mimo`, `go-quality`, `go-minimax`.
 

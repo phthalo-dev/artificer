@@ -1,6 +1,6 @@
 # Artificer Personal Runtime (AWS)
 
-Deploy the **runtime** + **runtime-ui console** to AWS. Send messages from your phone or laptop; the agent hibernates when idle.
+Deploy the **runtime** + **UI console** to AWS. Send messages from your phone or laptop; the agent hibernates when idle.
 
 **Expected idle cost:** ~$3–8/month (EBS + Elastic IP while stopped + SQS).
 
@@ -17,7 +17,7 @@ Deploy the **runtime** + **runtime-ui console** to AWS. Send messages from your 
 | Secrets Manager | API auth token, runtime env (`ANTHROPIC_API_KEY`) |
 
 ```
-Browser → CloudFront ─┬─► S3 (runtime-ui SPA)
+Browser → CloudFront ─┬─► S3 (UI SPA)
                       └─► EC2:4100 (API reads: /state, /workstreams, …)
 
 Message send → API Gateway POST /work → SQS + start EC2 → bridge → runtime
@@ -44,7 +44,7 @@ This will:
 1. Deploy/update the CDK stack
 2. Build & push runtime + bridge images to ECR
 3. Restart containers on EC2 via SSM
-4. Build runtime-ui with your CloudFront + wake API URLs
+4. Build the UI with your CloudFront + wake API URLs
 5. Sync the UI to S3 and invalidate CloudFront
 
 ## After first deploy
@@ -124,8 +124,8 @@ curl -X POST "${WAKE_URL}/work" \
 ## Local development (no AWS)
 
 ```bash
-pnpm --filter @artificer/runtime dev
-pnpm --filter @artificer/runtime-ui dev   # http://localhost:5173 → localhost:4100
+pnpm --filter @artificer-ai/runtime dev
+pnpm --filter @artificer-ai/ui dev   # http://localhost:5173 → localhost:4100
 ```
 
 Leave `VITE_WAKE_API_URL` unset in `.env` — messages go directly to the runtime.

@@ -13,7 +13,7 @@ export async function start(rootDir?: string): Promise<void> {
     );
   }
 
-  const { createRuntime } = await import('@artificer/runtime');
+  const { createRuntime } = await import('@artificer-ai/runtime');
 
   const runtime = await createRuntime({ rootDir: resolved });
 

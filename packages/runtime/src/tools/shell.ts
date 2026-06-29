@@ -2,6 +2,7 @@ import { exec } from 'node:child_process';
 import { promisify } from 'node:util';
 import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
+import type { RoleName } from '../storage/types.js';
 import {
   checkGitCloneInWorkspace,
   checkGitStash,
@@ -95,11 +96,11 @@ export function createShellTool(ctx: ToolContext): ToolDef[] {
         if (!cloneCheck.allowed) {
           return `Error: ${cloneCheck.reason}`;
         }
-        const writeCheck = checkReviewerWrite(command, ctx.run.role);
+        const writeCheck = checkReviewerWrite(command, ctx.run.role as RoleName);
         if (!writeCheck.allowed) {
           return `Error: ${writeCheck.reason}`;
         }
-        const stashCheck = checkGitStash(command, ctx.run.role);
+        const stashCheck = checkGitStash(command, ctx.run.role as RoleName);
         if (!stashCheck.allowed) {
           return `Error: ${stashCheck.reason}`;
         }

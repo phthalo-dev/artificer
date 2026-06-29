@@ -49,6 +49,7 @@ function syncPresetToPrimaryRoute(
   const preset = getPreset(presetId);
   const primary = config.quota?.routes?.[0];
   if (!preset || !primary) return;
+  const restRoutes = config.quota?.routes?.slice(1) ?? [];
   config.quota = {
     ...config.quota,
     routes: [
@@ -58,7 +59,7 @@ function syncPresetToPrimaryRoute(
         models: { ...preset.tiers },
         roleTiers: cloneRoleTiers(preset.roleTiers),
       },
-      ...(config.quota.routes?.slice(1) ?? []),
+      ...restRoutes,
     ],
   };
 }

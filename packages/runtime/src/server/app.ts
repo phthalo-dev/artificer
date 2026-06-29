@@ -1,4 +1,3 @@
-import path from 'node:path';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { streamSSE } from 'hono/streaming';
@@ -16,9 +15,11 @@ import type { GithubWatchState } from '../engine/github-watch.js';
 import { type LlmSdkPackage, MODEL_CATALOG } from '../llm/catalog.js';
 import { listPresets } from '../engine/presets.js';
 import { primaryAccountIdFor } from '../engine/quota-config.js';
+import type { QuotaConfig } from '../engine/quota-types.js';
 import { readBenchOverview, readBenchRun, readBenchSuites } from './bench.js';
 import { bearerAuth } from './auth.js';
 import { serveUI } from './static.js';
+import { resolveUiDistDir } from './ui-dist.js';
 import { mountChannels } from '../channels/mount.js';
 import type { ArtificerChannel } from '../api/types.js';
 import type { IdentityStore } from '../storage/identity-store.js';
@@ -180,7 +181,7 @@ export interface AppDeps {
     engine: Engine,
     log?: (message: string) => void,
   ) => Promise<GithubWatchState>;
-  /** Directory containing pre-built runtime-ui assets. When set, the UI SPA is served at /. */
+  /** Directory containing pre-built @artificer-ai/ui assets. When set, the UI SPA is served at /. */
   uiDistDir?: string;
   /** Persistent identity store. Required for /api/memories routes. */
   identity?: IdentityStore;
@@ -328,7 +329,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
       return c.json({ error: parsed.error.flatten() }, 400);
     }
     try {
-      engine.setQuotaConfig(parsed.data);
+      engine.setQuotaConfig(parsed.data as QuotaConfig);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       return c.json({ error: message }, 400);
@@ -562,15 +563,14 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
 
   // --- Static UI serving ---
 
-  const uiDistDir =
-    deps.uiDistDir ?? path.resolve(import.meta.dirname, '../../ui-dist');
+  const uiDistDir = deps.uiDistDir ?? resolveUiDistDir();
   app.use('*', serveUI(uiDistDir));
 
   app.all('*', (c) =>
     c.json(
       {
         error: 'Not found',
-        hint: 'UI assets not built. Run: cd apps/runtime-ui && pnpm build',
+        hint: 'UI assets not built. Run: pnpm --filter @artificer-ai/runtime build:ui',
       },
       404,
     ),
