@@ -6,6 +6,7 @@ const WORKSTREAM_COLORS: Record<WorkstreamStatus, BadgeColor> = {
   planning: 'blue',
   reviewing: 'violet',
   in_progress: 'cyan',
+  paused_quota: 'yellow',
   blocked: 'orange',
   done: 'green',
   failed: 'red',

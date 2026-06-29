@@ -1,4 +1,4 @@
-import type { Memory, Message, ModelConfig, Workstream, WorkstreamDetail } from '../api/types';
+import type { Memory, Message, ModelConfig, QuotaConfig, Workstream, WorkstreamDetail } from '../api/types';
 import {
   buildUsageOverview,
   mockBenchOverview,
@@ -7,6 +7,8 @@ import {
   mockMemories,
   mockMessages,
   mockModelConfig,
+  mockQuotaConfig,
+  mockQuotaSnapshot,
   mockWorkstreamDetails,
   mockWorkstreams,
 } from './data';
@@ -21,6 +23,7 @@ export class MockStore {
   workstreamDetails: Record<string, WorkstreamDetail> = clone(mockWorkstreamDetails);
   memories: Memory[] = clone(mockMemories);
   modelConfig: ModelConfig = clone(mockModelConfig);
+  quotaConfig: QuotaConfig = clone(mockQuotaConfig);
 
   getState() {
     return {
@@ -47,6 +50,49 @@ export class MockStore {
 
   getUsageOverview() {
     return buildUsageOverview(this.messages, this.workstreamDetails);
+  }
+
+  resetQuotaWindow(accountId: string, windowId: string): boolean {
+    const account = mockQuotaSnapshot.accounts[accountId];
+    const window = account?.windows.find((w) => w.config.id === windowId);
+    if (!window) return false;
+    window.used = 0;
+    window.rollingEntries = [];
+    window.usedByWorkstream = {};
+    if (account) account.status = 'ok';
+    return true;
+  }
+
+  getQuotaConfig() {
+    return {
+      configured: this.quotaConfig,
+      effective: this.quotaConfig,
+      primaryAccountId: 'opencode-go',
+      catalog: this.modelConfig.catalog,
+      presets: this.modelConfig.presets,
+    };
+  }
+
+  updateQuotaConfig(config: QuotaConfig) {
+    this.quotaConfig = clone(config);
+    mockQuotaSnapshot.reservePercent = config.reservePercent ?? 10;
+    for (const route of config.routes ?? []) {
+      const state = mockQuotaSnapshot.accounts[route.accountId];
+      if (!state) continue;
+      state.config = {
+        id: route.accountId,
+        mode: route.mode,
+        windows: route.windows,
+        onExhausted: 'wait',
+      };
+      for (const window of route.windows) {
+        const existing = state.windows.find((w) => w.config.id === window.id);
+        if (existing) {
+          existing.config = { ...existing.config, ...window };
+        }
+      }
+    }
+    return this.getQuotaConfig();
   }
 
   getMessageCost(messageId: string) {

@@ -67,6 +67,21 @@ test('communicator distinguishes facts from standing preferences when saving mem
   );
 });
 
+test('communicator can read and update provider route and quota config', () => {
+  const system = getRole('communicator').system('TestAgent');
+
+  assert.match(
+    system,
+    /get_provider_config/,
+    'expected guidance to read provider config before changing it',
+  );
+  assert.match(
+    system,
+    /update_provider_config/,
+    'expected guidance to apply provider or quota changes via update_provider_config',
+  );
+});
+
 test('communicator routes [GitHub]-prefixed watcher messages to send_note or start_workstream', () => {
   const system = getRole('communicator').system('TestAgent');
 

@@ -22,6 +22,7 @@ export type WorkstreamStatus =
   | 'planning'
   | 'reviewing'
   | 'in_progress'
+  | 'paused_quota'
   | 'blocked'
   | 'done'
   | 'failed'
@@ -33,6 +34,8 @@ export interface Workstream {
   /** The original request / objective driving this workstream. */
   goal: string;
   status: WorkstreamStatus;
+  /** Status to restore when a quota pause lifts. */
+  quotaPausedStatus?: WorkstreamStatus;
   /** Running summary the orchestrator maintains across calls. */
   summary: string;
   /** Optional repository this workstream operates on. */
@@ -139,6 +142,10 @@ export interface RunRecord {
   model?: string;
   /** Executor backend that ran this call (e.g. 'cursor-agent'). Absent means LLM. */
   executor?: string;
+  /** Quota routing profile (primary or failover target id). */
+  routeProfileId?: string;
+  /** Quota account that accrued usage for this run. */
+  routeAccountId?: string;
   status: RunStatus;
   toolCalls: ToolInvocation[];
   usage: TokenUsage;

@@ -333,6 +333,8 @@ export class Store {
           | 'originMessageId'
           | 'model'
           | 'status'
+          | 'routeProfileId'
+          | 'routeAccountId'
         >
       >,
   ): Promise<RunRecord> {
@@ -345,6 +347,8 @@ export class Store {
       parentRunId: input.parentRunId,
       originMessageId: input.originMessageId,
       model: input.model,
+      routeProfileId: input.routeProfileId,
+      routeAccountId: input.routeAccountId,
       status: input.status ?? 'queued',
       toolCalls: [],
       usage: emptyUsage(),

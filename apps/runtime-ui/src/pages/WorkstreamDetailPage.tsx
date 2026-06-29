@@ -17,7 +17,7 @@ import {
   color,
 } from '../ds';
 import { useParams } from 'react-router-dom';
-import { useCancelWorkstream, useWorkstream } from '../api/hooks';
+import { useCancelWorkstream, useUsage, useWorkstream } from '../api/hooks';
 import type { ReviewSeverity, RunRecord, Workstream } from '../api/types';
 import {
   BenchTrajectory,
@@ -27,10 +27,14 @@ import {
 } from '../components/BenchTrajectory';
 import { DataCard } from '../components/DataCard';
 import { BreakdownTable } from '../components/BreakdownTable';
+import { summarizeByRoute } from '../usage-breakdown';
+import { MarkdownContent } from '../components/MarkdownContent';
 import { StatusBadge } from '../components/StatusBadge';
+import { QuotaAlert } from '../components/QuotaBanner';
 import { TokenSpendByRole } from '../components/TokenSpendChart';
 import { ViewRawLink } from '../components/ViewRawLink';
 import { formatCost, formatDuration, formatTime } from '../format';
+import { earliestQuotaReset, formatUntil } from '../quota';
 
 const SEVERITY_COLORS: Record<ReviewSeverity, BadgeColor> = {
   critical: 'red',
@@ -53,8 +57,9 @@ function workstreamDurationMs(ws: Workstream, runs: RunRecord[]): number {
 function primaryModel(runs: RunRecord[]): string | null {
   const counts = new Map<string, number>();
   for (const run of runs) {
-    if (!run.model) continue;
-    counts.set(run.model, (counts.get(run.model) ?? 0) + 1);
+    const label = run.executor ?? run.model;
+    if (!label) continue;
+    counts.set(label, (counts.get(label) ?? 0) + 1);
   }
   let best: string | null = null;
   let bestCount = 0;
@@ -72,6 +77,7 @@ const TERMINAL_STATUSES = new Set(['done', 'failed', 'cancelled']);
 export function WorkstreamDetailPage() {
   const { id } = useParams();
   const { data, isLoading, error } = useWorkstream(id);
+  const { data: usageOverview } = useUsage();
   const cancel = useCancelWorkstream(id);
 
   if (isLoading) return <Loader size="sm" />;
@@ -89,9 +95,31 @@ export function WorkstreamDetailPage() {
   const peakCtx = peakContext(tree);
   const durationMs = workstreamDurationMs(ws, data.runs);
   const model = primaryModel(data.runs);
+  const quotaReset = earliestQuotaReset(usageOverview?.quota);
 
   return (
     <Stack gap="lg">
+      {ws.status === 'paused_quota' && (
+        <Alert color="orange" title="Paused — usage quota">
+          Work is temporarily paused until the quota window resets.
+          {quotaReset && (
+            <>
+              {' '}
+              Expected to resume {formatUntil(quotaReset)} (
+              {formatTime(quotaReset)}).
+            </>
+          )}
+          {ws.quotaPausedStatus && (
+            <>
+              {' '}
+              Will return to <strong>{ws.quotaPausedStatus.replace(/_/g, ' ')}</strong>{' '}
+              when quota clears.
+            </>
+          )}
+        </Alert>
+      )}
+
+      <QuotaAlert />
       <div>
         <Group gap={8} mb={4}>
           <Text size="xs" c="dimmed">
@@ -206,10 +234,8 @@ export function WorkstreamDetailPage() {
 
         <Tabs.Panel value="plan" pt="md">
           {plan ? (
-            <Paper p="sm">
-              <Text size="sm" preWrap>
-                {plan}
-              </Text>
+            <Paper p="md">
+              <MarkdownContent content={plan} />
             </Paper>
           ) : (
             <Text c="dimmed" size="sm">
@@ -290,9 +316,7 @@ export function WorkstreamDetailPage() {
                       </Badge>
                     </Group>
                   </Group>
-                  <Text size="sm" preWrap>
-                    {r.notes}
-                  </Text>
+                  <MarkdownContent content={r.notes} />
                   <Text size="xs" c="dimmed" mt={4}>
                     {formatTime(r.createdAt)}
                   </Text>
@@ -316,6 +340,15 @@ export function WorkstreamDetailPage() {
               />
               <DataCard label="Updated" value={formatTime(ws.updatedAt)} />
             </SimpleGrid>
+            <div>
+              <Text fw={600} size="sm" mb={6}>
+                By route
+              </Text>
+              <BreakdownTable
+                label="Route"
+                data={summarizeByRoute(data.runs)}
+              />
+            </div>
             <div>
               <Text fw={600} size="sm" mb={6}>
                 By role

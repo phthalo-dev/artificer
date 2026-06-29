@@ -5,6 +5,7 @@ import {
   formatCallError,
   insufficientBalanceUserMessage,
   isInsufficientBalanceError,
+  isQuotaExhaustedError,
 } from './errors.js';
 
 test('isInsufficientBalanceError detects APICallError 402', () => {
@@ -58,6 +59,28 @@ test('formatCallError includes status and response body for APICallError', () =>
   const formatted = formatCallError(err);
   assert.match(formatted, /Insufficient Balance/);
   assert.match(formatted, /402/);
+});
+
+test('isQuotaExhaustedError detects 429 but not balance errors', () => {
+  assert.equal(
+    isQuotaExhaustedError(
+      new APICallError({
+        message: 'Too Many Requests',
+        url: 'https://example.com',
+        requestBodyValues: {},
+        statusCode: 429,
+      }),
+    ),
+    true,
+  );
+  assert.equal(
+    isQuotaExhaustedError(new Error('rate limit exceeded')),
+    true,
+  );
+  assert.equal(
+    isQuotaExhaustedError(new Error('AI_APICallError: Insufficient Balance')),
+    false,
+  );
 });
 
 test('insufficientBalanceUserMessage mentions model and workstream', () => {

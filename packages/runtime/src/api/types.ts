@@ -3,6 +3,7 @@ import type { RuntimeConfig } from '../config.js';
 import type { ToolContext } from '../context.js';
 import type { Engine } from '../engine/engine.js';
 import type { ModelTier, ModelTiers } from '../engine/models.js';
+import type { QuotaConfig } from '../engine/quota-types.js';
 import type { JsonSchema, ToolDef } from '../llm/types.js';
 import type { IdentityStore } from '../storage/identity-store.js';
 import type { RoleName } from '../storage/types.js';
@@ -25,7 +26,9 @@ export interface GitHubShorthand {
 export type ExecutorConfig =
   | 'llm'
   | 'cursor-agent'
-  | { type: 'cursor-agent'; model?: string };
+  | 'claude-code'
+  | { type: 'cursor-agent'; model?: string }
+  | { type: 'claude-code'; model?: string };
 
 export interface ArtificerConfig {
   name: string;
@@ -40,6 +43,7 @@ export interface ArtificerConfig {
   execDir?: string;
   identity?: IdentityConfig;
   executor?: ExecutorConfig;
+  quota?: QuotaConfig;
 }
 
 export interface ToolDefinition<TInput = Record<string, unknown>> {

@@ -2,10 +2,8 @@ import type { ToolRegistry } from '../api/tool-registry.js';
 import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
 import { createArtifactTools } from './artifacts.js';
-import {
-  createCommunicatorTools,
-  createReplyTool,
-} from './communication.js';
+import { createCommunicatorTools, createReplyTool } from './communication.js';
+import { createProviderConfigTools } from './config.js';
 import { createEditTool } from './edit.js';
 import { createFetchTools } from './fetch.js';
 import { createFileTools } from './files.js';
@@ -40,6 +38,7 @@ export function toolsForRole(
   const artifacts = createArtifactTools(ctx);
   const fetchTools = createFetchTools(ctx);
   const toolResultRead = createToolResultReadTools(ctx);
+  const providerConfig = createProviderConfigTools(ctx);
   const searchAll = createSearchTools(ctx);
   const searchGrepOnly = createSearchTools(ctx, { includeGlob: false });
 
@@ -49,6 +48,7 @@ export function toolsForRole(
       result = [
         ...reply,
         ...communicator,
+        ...providerConfig,
         ...byName(orchestrator, ['get_status', 'query_memories', 'add_memory']),
       ];
       break;

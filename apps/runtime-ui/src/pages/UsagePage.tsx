@@ -1,6 +1,9 @@
-import { Loader, Stack, Text, Title } from '../ds';
+import { Link } from 'react-router-dom';
+import { Anchor, Loader, Stack, Text, Title } from '../ds';
 import { useUsage, useWorkstreams } from '../api/hooks';
 import { BreakdownTable } from '../components/BreakdownTable';
+import { QuotaAlert } from '../components/QuotaBanner';
+import { QuotaPanel } from '../components/QuotaPanel';
 import { UsageStats } from '../components/UsageStats';
 
 export function UsagePage() {
@@ -16,11 +19,30 @@ export function UsagePage() {
     <Stack gap="lg">
       <Title order={3}>Usage &amp; cost</Title>
 
+      <QuotaAlert />
+
+      <QuotaPanel />
+
+      <Text size="sm" c="dimmed">
+        Configure routes, failover, and model presets on the{' '}
+        <Anchor component={Link} to="/providers">
+          Providers
+        </Anchor>{' '}
+        page.
+      </Text>
+
       <div>
         <Text fw={600} mb={4}>
           Grand total
         </Text>
         <UsageStats usage={data.total} />
+      </div>
+
+      <div>
+        <Title order={5} mb="sm">
+          By route
+        </Title>
+        <BreakdownTable label="Route" data={data.byRoute ?? {}} />
       </div>
 
       <div>

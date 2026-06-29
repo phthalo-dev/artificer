@@ -62,6 +62,17 @@ export function handleMockRequest(req: MockRequest): MockResponse {
     return { status: 200, body: mockStore.getUsageOverview() };
   }
 
+  if (method === 'POST' && pathname === '/quota/reset') {
+    const accountId = (body as { accountId?: string })?.accountId;
+    const windowId = (body as { windowId?: string })?.windowId;
+    if (!accountId || !windowId) {
+      return { status: 400, body: { error: 'accountId and windowId are required' } };
+    }
+    const ok = mockStore.resetQuotaWindow(accountId, windowId);
+    if (!ok) return { status: 404, body: { error: 'window not found' } };
+    return { status: 200, body: { ok: true, quota: mockStore.getUsageOverview().quota } };
+  }
+
   if (method === 'GET' && pathname === '/config/models') {
     return { status: 200, body: mockStore.modelConfig };
   }
@@ -113,6 +124,22 @@ export function handleMockRequest(req: MockRequest): MockResponse {
         roleTiers: preset.roleTiers,
         activePresetId: preset.id,
       },
+    };
+  }
+
+  if (method === 'GET' && pathname === '/config/quota') {
+    return { status: 200, body: mockStore.getQuotaConfig() };
+  }
+
+  if (method === 'PUT' && pathname === '/config/quota') {
+    const config = body as import('../api/types').QuotaConfig;
+    if (!config?.routes?.length && !config?.accounts?.length) {
+      return { status: 400, body: { error: 'routes required' } };
+    }
+    const updated = mockStore.updateQuotaConfig(config);
+    return {
+      status: 200,
+      body: { ...updated, quota: mockStore.getUsageOverview().quota },
     };
   }
 

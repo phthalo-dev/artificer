@@ -35,6 +35,7 @@ export type WorkstreamStatus =
   | 'planning'
   | 'reviewing'
   | 'in_progress'
+  | 'paused_quota'
   | 'blocked'
   | 'done'
   | 'failed'
@@ -45,6 +46,8 @@ export interface Workstream {
   title: string;
   goal: string;
   status: WorkstreamStatus;
+  /** Status restored when a quota pause lifts. */
+  quotaPausedStatus?: WorkstreamStatus;
   summary: string;
   repoUrl?: string;
   createdAt: string;
@@ -108,6 +111,8 @@ export interface RunRecord {
   originMessageId?: string;
   model?: string;
   executor?: string;
+  routeProfileId?: string;
+  routeAccountId?: string;
   status: RunStatus;
   toolCalls: ToolInvocation[];
   usage: TokenUsage;
@@ -172,8 +177,112 @@ export interface UsageOverview {
   total: UsageSummary;
   byRole: Record<string, UsageSummary>;
   byModel: Record<string, UsageSummary>;
+  byRoute: Record<string, UsageSummary>;
   byWorkstream: Record<string, UsageSummary>;
   byMessage: MessageUsageRow[];
+  quota: QuotaSnapshot | null;
+}
+
+export type QuotaUnit = 'dollars' | 'tokens' | 'requests';
+export type QuotaPeriod =
+  | 'rolling5h'
+  | 'daily'
+  | 'weekly'
+  | 'monthly'
+  | 'fixed';
+export type QuotaScope = 'global' | 'workstream';
+export type QuotaAccountStatus = 'ok' | 'warning' | 'exhausted' | 'unknown';
+export type QuotaUsageSource = 'metered' | 'provider' | 'estimated' | 'inferred';
+
+export interface QuotaWindowConfig {
+  id: string;
+  unit: QuotaUnit;
+  period: QuotaPeriod;
+  scope?: QuotaScope;
+  limit: number;
+  warnAtPercent?: number;
+  blockAtPercent?: number;
+}
+
+export interface QuotaWindowState {
+  config: QuotaWindowConfig;
+  used: number;
+  usedByWorkstream: Record<string, number>;
+  rollingEntries: Array<{ amount: number; at: string }>;
+  windowStart?: string;
+  resetsAt?: string;
+  source: QuotaUsageSource;
+}
+
+export interface FailoverLlmConfig {
+  baseURL: string;
+  apiKeyEnv?: string;
+  preset?: string;
+}
+
+export interface FailoverTargetConfig {
+  id: string;
+  accountId: string;
+  roles?: string[];
+  llm?: FailoverLlmConfig;
+  executor?: 'llm' | 'cursor-agent' | 'claude-code';
+  onExhausted?: 'wait' | 'failover';
+}
+
+export interface QuotaAccountConfig {
+  id: string;
+  mode: 'metered' | 'windowed' | 'opaque';
+  windows: QuotaWindowConfig[];
+  onExhausted?: 'wait' | 'failover';
+  failover?: FailoverTargetConfig[];
+  pollIntervalMs?: number;
+}
+
+export interface ExecutionRouteConfig {
+  id: string;
+  accountId: string;
+  mode: 'metered' | 'windowed' | 'opaque';
+  windows: QuotaWindowConfig[];
+  execution: 'llm' | 'cursor-agent' | 'claude-code';
+  llm?: {
+    baseURL: string;
+    apiKeyEnv?: string;
+  };
+  presetId?: string;
+  models: ModelTiers;
+  roleTiers?: Record<RoleName, ModelTier>;
+  roles?: string[];
+  pollIntervalMs?: number;
+}
+
+export interface QuotaConfig {
+  reservePercent?: number;
+  defaultEstimateDollars?: Partial<Record<'low' | 'medium' | 'high', number>>;
+  routes?: ExecutionRouteConfig[];
+  /** @deprecated Legacy shape — migrated to routes at runtime. */
+  accounts?: QuotaAccountConfig[];
+}
+
+export interface QuotaConfigResponse {
+  configured: QuotaConfig | null;
+  effective: QuotaConfig | null;
+  primaryAccountId: string;
+  catalog: CatalogModel[];
+  presets: ModelPresetInfo[];
+}
+
+export interface QuotaAccountState {
+  config: QuotaAccountConfig;
+  windows: QuotaWindowState[];
+  status: QuotaAccountStatus;
+  updatedAt: string;
+}
+
+export interface QuotaSnapshot {
+  accounts: Record<string, QuotaAccountState>;
+  activeRoutes: Record<string, string>;
+  pausedWorkstreams: Record<string, string>;
+  reservePercent: number;
 }
 
 export interface MessageCost {

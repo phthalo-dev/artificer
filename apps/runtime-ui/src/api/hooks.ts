@@ -15,6 +15,8 @@ import type {
   ModelConfig,
   ModelTier,
   ModelTiers,
+  QuotaConfig,
+  QuotaConfigResponse,
   RoleName,
   RuntimeState,
   UsageOverview,
@@ -179,14 +181,59 @@ export function useBenchRun(instanceId: string | undefined) {
   });
 }
 
+export function useResetQuotaWindow() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: {
+      accountId: string;
+      windowId: string;
+      workstreamId?: string;
+    }) =>
+      api.post<{ ok: boolean; quota: import('./types').QuotaSnapshot | null }>(
+        '/quota/reset',
+        input,
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['usage'] });
+      qc.invalidateQueries({ queryKey: ['workstreams'] });
+      qc.invalidateQueries({ queryKey: ['workstream'] });
+    },
+  });
+}
+
+export function useQuotaConfig() {
+  return useQuery({
+    queryKey: ['quota-config'],
+    queryFn: () => api.get<QuotaConfigResponse>('/config/quota'),
+  });
+}
+
+export function useUpdateQuotaConfig() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (config: QuotaConfig) =>
+      api.put<QuotaConfigResponse & { quota: import('./types').QuotaSnapshot | null }>(
+        '/config/quota',
+        config,
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['quota-config'] });
+      qc.invalidateQueries({ queryKey: ['model-config'] });
+      qc.invalidateQueries({ queryKey: ['usage'] });
+      qc.invalidateQueries({ queryKey: ['workstreams'] });
+      qc.invalidateQueries({ queryKey: ['workstream'] });
+    },
+  });
+}
+
 export interface ActivityEntry {
   id: string;
-  kind: 'message' | 'workstream' | 'run' | 'tool';
+  kind: 'message' | 'workstream' | 'run' | 'tool' | 'quota';
   label: string;
   at: string;
 }
 
-const SSE_KINDS = ['message', 'workstream', 'run', 'tool'] as const;
+const SSE_KINDS = ['message', 'workstream', 'run', 'tool', 'quota'] as const;
 const MAX_ENTRIES = 100;
 
 function formatEntry(
@@ -211,6 +258,26 @@ function formatEntry(
     case 'tool':
       label = `tool ${String(data.name ?? '')}`;
       break;
+    case 'quota': {
+      const event = String(data.event ?? '?');
+      const resumesAt = data.resumesAt;
+      if (event === 'exhausted') {
+        label = resumesAt
+          ? `quota exhausted · resumes ${String(resumesAt)}`
+          : 'quota exhausted';
+      } else if (event === 'failover_active') {
+        label = 'quota · failover active';
+      } else if (event === 'failover_cleared') {
+        label = 'quota · back on primary';
+      } else if (event === 'resumed') {
+        label = 'quota · work resumed';
+      } else if (event === 'warning') {
+        label = 'quota warning';
+      } else {
+        label = `quota:${event}`;
+      }
+      break;
+    }
   }
 
   return { id: crypto.randomUUID(), kind, label, at };
@@ -218,6 +285,7 @@ function formatEntry(
 
 export function useSSEEvents(): ActivityEntry[] {
   const [entries, setEntries] = useState<ActivityEntry[]>([]);
+  const qc = useQueryClient();
 
   useEffect(() => {
     const url = `${baseOrigin.replace(/\/$/, '')}/events`;
@@ -238,6 +306,10 @@ export function useSSEEvents(): ActivityEntry[] {
               const next = [...prev, entry];
               return next.length > MAX_ENTRIES ? next.slice(-MAX_ENTRIES) : next;
             });
+            if (kind === 'quota') {
+              qc.invalidateQueries({ queryKey: ['usage'] });
+              qc.invalidateQueries({ queryKey: ['workstreams'] });
+            }
           } catch {
             // ignore malformed events
           }
@@ -257,7 +329,7 @@ export function useSSEEvents(): ActivityEntry[] {
       clearTimeout(reconnectTimer);
       es.close();
     };
-  }, []);
+  }, [qc]);
 
   return entries;
 }

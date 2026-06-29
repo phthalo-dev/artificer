@@ -15,7 +15,7 @@ export const codeBlock = styles.class('code-block', {
   fontFamily: font.familyMono,
   fontSize: font.sizeSm,
   background: color.grayLight,
-  border: `2px solid ${color.border}`,
+  border: `1px solid ${color.border}`,
   borderRadius: '0',
   padding: '12px 16px',
   overflowX: 'auto',
@@ -34,7 +34,7 @@ export const code = styles.component('code', {
       true: {
         fontSize: font.sizeSm,
         background: color.grayLight,
-        border: `2px solid ${color.border}`,
+        border: `1px solid ${color.border}`,
         borderRadius: '0',
         padding: '12px 16px',
         overflowX: 'auto',

@@ -1,5 +1,9 @@
 import type { RuntimeConfig } from './config.js';
 import type { ModelTier } from './engine/models.js';
+import type {
+  ProviderConfigSnapshot,
+  ProviderConfigUpdate,
+} from './engine/provider-config.js';
 import type { Store } from './storage/store.js';
 import type {
   RunRecord,
@@ -22,7 +26,8 @@ export type RuntimeEvent =
   | { kind: 'message'; at: string; data: unknown }
   | { kind: 'workstream'; at: string; data: unknown }
   | { kind: 'run'; at: string; data: unknown }
-  | { kind: 'tool'; at: string; data: ToolInvocation & { runId: string } };
+  | { kind: 'tool'; at: string; data: ToolInvocation & { runId: string } }
+  | { kind: 'quota'; at: string; data: unknown };
 
 /**
  * The surface the engine exposes to tools. Tools use this to spawn child
@@ -44,6 +49,8 @@ export interface EngineApi {
   reply(content: string, workstreamId?: string): Promise<void>;
   emit(event: RuntimeEvent): void;
   listRoles(): string[];
+  getProviderConfig(): ProviderConfigSnapshot;
+  updateProviderConfig(update: ProviderConfigUpdate): Promise<string>;
 }
 
 /** Everything a tool factory needs about the call it is serving. */
