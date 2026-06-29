@@ -1,6 +1,36 @@
-import type { Hono } from 'hono';
+import type { Context, Hono } from 'hono';
 import type { ArtificerChannel } from '../api/types.js';
 import type { Engine } from '../engine/engine.js';
+
+async function handleChannelPayload(
+  c: Context,
+  channel: ArtificerChannel,
+  payload: Record<string, unknown>,
+  engine: Engine,
+) {
+  const message = await channel.receive(payload);
+
+  if (message.metadata?._challenge) {
+    return c.json({ challenge: message.metadata._challenge });
+  }
+  if (message.metadata?._ping) {
+    const formatted = await channel.format({
+      content: message.content,
+      metadata: message.metadata,
+    });
+    return c.json(formatted);
+  }
+  if (message.metadata?._skip) {
+    return c.json({ ok: true });
+  }
+
+  const result = await engine.receiveMessage(message.content);
+  const formatted = await channel.format({
+    content: result.content ?? '',
+    metadata: message.metadata,
+  });
+  return c.json(formatted);
+}
 
 export function mountChannels(
   app: Hono,
@@ -20,40 +50,12 @@ export function mountChannels(
           return c.json({ error: 'Verification failed' }, 401);
         }
 
-        const payload = JSON.parse(body);
-        const message = await channel.receive(payload);
-
-        if (message.metadata?._challenge) {
-          return c.json({ challenge: message.metadata._challenge });
-        }
-        if (message.metadata?._skip) {
-          return c.json({ ok: true });
-        }
-
-        const result = await engine.receiveMessage(message.content);
-        const formatted = await channel.format({
-          content: result.content ?? '',
-          metadata: message.metadata,
-        });
-        return c.json(formatted);
+        const payload = JSON.parse(body) as Record<string, unknown>;
+        return handleChannelPayload(c, channel, payload, engine);
       }
 
-      const payload = await c.req.json();
-      const message = await channel.receive(payload);
-
-      if (message.metadata?._challenge) {
-        return c.json({ challenge: message.metadata._challenge });
-      }
-      if (message.metadata?._skip) {
-        return c.json({ ok: true });
-      }
-
-      const result = await engine.receiveMessage(message.content);
-      const formatted = await channel.format({
-        content: result.content ?? '',
-        metadata: message.metadata,
-      });
-      return c.json(formatted);
+      const payload = await c.req.json<Record<string, unknown>>();
+      return handleChannelPayload(c, channel, payload, engine);
     });
   }
 }

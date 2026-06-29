@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { loadSkillsFromDisk, loadInstructionsFromDisk, loadRolesFromDisk } from './loader.js';
+import { loadSkillsFromDisk, loadInstructionsFromDisk, loadRolesFromDisk, loadChannelsFromDisk } from './loader.js';
 
 describe('loadSkillsFromDisk', () => {
   let tmpDir: string;
@@ -123,5 +123,28 @@ describe('loadRolesFromDisk', () => {
   it('skips unreadable files without throwing', () => {
     const roles = loadRolesFromDisk([{ name: 'missing', path: '/nonexistent/path.md' }]);
     assert.equal(roles.length, 0);
+  });
+});
+
+describe('loadChannelsFromDisk', () => {
+  it('loads channel modules from disk', async () => {
+    const fixturePath = path.join(
+      import.meta.dirname,
+      'fixtures/echo-channel.ts',
+    );
+
+    const channels = await loadChannelsFromDisk([
+      { name: 'echo', path: fixturePath },
+    ]);
+
+    assert.equal(channels.length, 1);
+    assert.equal(channels[0].name, 'echo');
+  });
+
+  it('skips modules without a default ArtificerChannel export', async () => {
+    const channels = await loadChannelsFromDisk([
+      { name: 'missing', path: '/nonexistent/channel.ts' },
+    ]);
+    assert.equal(channels.length, 0);
   });
 });

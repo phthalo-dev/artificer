@@ -11,10 +11,14 @@ import { IdentityGitSync } from '../storage/identity-git-sync.js';
 import { ToolRegistry } from './tool-registry.js';
 import { WorkstreamMemoryService } from '../engine/workstream-memory.js';
 import { scanAgentDirectory } from '../discover/discover.js';
-import { loadSkillsFromDisk, loadInstructionsFromDisk, loadRolesFromDisk } from '../discover/loader.js';
+import {
+  loadSkillsFromDisk,
+  loadInstructionsFromDisk,
+  loadRolesFromDisk,
+  loadChannelsFromDisk,
+} from '../discover/loader.js';
 import { RoleRegistry } from '../engine/role-registry.js';
-import { mountChannels } from '../channels/mount.js';
-import type { ArtificerRuntime, ArtificerChannel, ArtificerSkill, RuntimeOptions } from './types.js';
+import type { ArtificerRuntime, ArtificerSkill, RuntimeOptions } from './types.js';
 
 export async function createRuntime(
   options: RuntimeOptions,
@@ -71,15 +75,11 @@ export async function createRuntime(
 
   const tools = new ToolRegistry();
 
-  const channels: ArtificerChannel[] = [];
+  const channels = await loadChannelsFromDisk(manifest.channels);
 
   const memoryService = new WorkstreamMemoryService(identity, store);
   const engine = new Engine(config, store, memoryService, registry);
-  const app = createApp(engine, { identity });
-
-  if (channels.length > 0) {
-    mountChannels(app, channels, engine);
-  }
+  const app = createApp(engine, { identity, channels });
 
   return {
     engine,
@@ -99,6 +99,9 @@ export async function createRuntime(
         console.log(`  SSE   ${base}/events\n`);
         console.log(`  identity  ${rootDir}`);
         console.log(`  exec      ${execDir}`);
+        if (channels.length > 0) {
+          console.log(`  channels  ${channels.map((ch) => ch.name).join(', ')}`);
+        }
       });
     },
   };

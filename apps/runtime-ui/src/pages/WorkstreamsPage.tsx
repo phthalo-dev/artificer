@@ -13,8 +13,8 @@ export function WorkstreamsPage() {
       {isLoading && <Loader size="sm" />}
       {data?.length === 0 && (
         <Text c="dimmed" size="sm">
-          No workstreams yet. Ask the agent to take on a piece of work from the
-          Dashboard.
+          No workstreams yet. Ask the agent to take on a piece of work from
+          Messages.
         </Text>
       )}
       <SimpleGrid cols={{ base: 1, sm: 2, lg: 3 }}>
