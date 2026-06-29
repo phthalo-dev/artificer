@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { loadSkillsFromDisk, loadInstructionsFromDisk } from './loader.js';
+import { loadSkillsFromDisk, loadInstructionsFromDisk, loadRolesFromDisk } from './loader.js';
 
 describe('loadSkillsFromDisk', () => {
   let tmpDir: string;
@@ -54,5 +54,74 @@ describe('loadInstructionsFromDisk', () => {
       path.join(tmpDir, 'nope.md'),
     );
     assert.equal(instructions, null);
+  });
+});
+
+describe('loadRolesFromDisk', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'artificer-roles-'));
+  });
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('parses name, blurb, and baseRole from frontmatter', () => {
+    const p = path.join(tmpDir, 'auditor.md');
+    fs.writeFileSync(p, '---\nname: Security Auditor\nblurb: Finds bugs.\nbaseRole: reviewer\n---\n\nYou are {{agentName}}.');
+    const roles = loadRolesFromDisk([{ name: 'auditor', path: p }]);
+    assert.equal(roles.length, 1);
+    assert.equal(roles[0].slug, 'auditor');
+    assert.equal(roles[0].name, 'Security Auditor');
+    assert.equal(roles[0].blurb, 'Finds bugs.');
+    assert.equal(roles[0].baseRole, 'reviewer');
+    assert.equal(roles[0].systemTemplate, 'You are {{agentName}}.');
+  });
+
+  it('preserves {{agentName}} in systemTemplate without substituting it', () => {
+    const p = path.join(tmpDir, 'helper.md');
+    fs.writeFileSync(p, '---\nname: Helper\n---\n\nYou are {{agentName}}\'s helper.');
+    const roles = loadRolesFromDisk([{ name: 'helper', path: p }]);
+    assert.ok(roles[0].systemTemplate.includes('{{agentName}}'));
+    assert.ok(!roles[0].systemTemplate.includes('undefined'));
+  });
+
+  it('uses defaults when frontmatter fields are absent', () => {
+    const p = path.join(tmpDir, 'my-role.md');
+    fs.writeFileSync(p, '---\n---\n\nDo stuff.');
+    const roles = loadRolesFromDisk([{ name: 'my-role', path: p }]);
+    assert.equal(roles[0].slug, 'my-role');
+    assert.equal(roles[0].name, 'my-role');
+    assert.equal(roles[0].blurb, '');
+    assert.equal(roles[0].baseRole, 'worker');
+    assert.equal(roles[0].systemTemplate, 'Do stuff.');
+  });
+
+  it('falls back to worker for an unknown baseRole and warns', () => {
+    const p = path.join(tmpDir, 'weird.md');
+    fs.writeFileSync(p, '---\nbaseRole: nonexistent\n---\n\nBody.');
+    // suppress warning output in test
+    const warn = console.warn;
+    const warnings: string[] = [];
+    console.warn = (...args) => warnings.push(args.join(' '));
+    const roles = loadRolesFromDisk([{ name: 'weird', path: p }]);
+    console.warn = warn;
+    assert.equal(roles[0].baseRole, 'worker');
+    assert.ok(warnings.some((w) => w.includes('nonexistent')));
+  });
+
+  it('handles body-only files with no frontmatter delimiters', () => {
+    const p = path.join(tmpDir, 'plain.md');
+    fs.writeFileSync(p, 'Just a plain body with no frontmatter.');
+    const roles = loadRolesFromDisk([{ name: 'plain', path: p }]);
+    assert.equal(roles[0].name, 'plain');
+    assert.equal(roles[0].baseRole, 'worker');
+    assert.equal(roles[0].systemTemplate, 'Just a plain body with no frontmatter.');
+  });
+
+  it('skips unreadable files without throwing', () => {
+    const roles = loadRolesFromDisk([{ name: 'missing', path: '/nonexistent/path.md' }]);
+    assert.equal(roles.length, 0);
   });
 });
