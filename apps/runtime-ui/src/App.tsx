@@ -10,22 +10,18 @@ import {
   IconLayoutSidebarRight,
   IconLayoutSidebarRightCollapse,
 } from '@tabler/icons-react';
-import {
-  NavLink as RouterNavLink,
-  Route,
-  Routes,
-  useLocation,
-} from 'react-router-dom';
+import { Navigate, NavLink as RouterNavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { useRuntimeState } from './api/hooks';
 
 const MOCK_MODE = import.meta.env.VITE_MOCK_API === 'true';
 import { ActivityFeed } from './components/ActivityFeed';
+import { QuotaBanner } from './components/QuotaBanner';
 import { BenchPage } from './pages/BenchPage';
 import { BenchRunPage } from './pages/BenchRunPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { MemoriesPage } from './pages/MemoriesPage';
 import { MessageCostPage } from './pages/MessageCostPage';
-import { ModelsPage } from './pages/ModelsPage';
+import { ProvidersPage } from './pages/ProvidersPage';
 import { UsagePage } from './pages/UsagePage';
 import { WorkstreamDetailPage } from './pages/WorkstreamDetailPage';
 import { WorkstreamsPage } from './pages/WorkstreamsPage';
@@ -36,7 +32,7 @@ const NAV = [
   { to: '/bench', label: 'Benchmark', icon: IconFlask },
   { to: '/memories', label: 'Memories', icon: IconBook },
   { to: '/usage', label: 'Usage', icon: IconCoin },
-  { to: '/models', label: 'Models', icon: IconCpu },
+  { to: '/providers', label: 'Providers', icon: IconCpu },
 ];
 
 export function App() {
@@ -71,6 +67,7 @@ export function App() {
                 : <IconLayoutSidebarRight size={18} />}
             </Button>
             <ThemeToggle />
+            <QuotaBanner />
             {state?.busy ? (
               <Badge color="blue" variant="light">
                 working · {state.queue.running} running / {state.queue.pending} queued
@@ -115,7 +112,8 @@ export function App() {
           <Route path="/bench/:instanceId" element={<BenchRunPage />} />
           <Route path="/memories" element={<MemoriesPage />} />
           <Route path="/usage" element={<UsagePage />} />
-          <Route path="/models" element={<ModelsPage />} />
+          <Route path="/providers" element={<ProvidersPage />} />
+          <Route path="/models" element={<Navigate to="/providers" replace />} />
           <Route path="/messages/:id/cost" element={<MessageCostPage />} />
         </Routes>
       </AppShell.Main>

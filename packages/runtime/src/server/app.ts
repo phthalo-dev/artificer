@@ -15,6 +15,7 @@ import { runGithubWatchOnce as defaultRunGithubWatchOnce } from '../engine/githu
 import type { GithubWatchState } from '../engine/github-watch.js';
 import { type LlmSdkPackage, MODEL_CATALOG } from '../llm/catalog.js';
 import { listPresets } from '../engine/presets.js';
+import { primaryAccountIdFor } from '../engine/quota-config.js';
 import { readBenchOverview, readBenchRun, readBenchSuites } from './bench.js';
 import { bearerAuth } from './auth.js';
 import { serveUI } from './static.js';
@@ -77,6 +78,99 @@ const createMemorySchema = z.object({
   source: z.string().optional(),
   kind: z.enum(['note', 'document', 'preference']).optional(),
 });
+
+const quotaWindowSchema = z.object({
+  id: z.string().min(1),
+  unit: z.enum(['dollars', 'tokens', 'requests']),
+  period: z.enum(['rolling5h', 'daily', 'weekly', 'monthly', 'fixed']),
+  scope: z.enum(['global', 'workstream']).optional(),
+  limit: z.number().positive(),
+  warnAtPercent: z.number().min(0).max(100).optional(),
+  blockAtPercent: z.number().min(0).max(100).optional(),
+});
+
+const failoverLlmSchema = z.object({
+  baseURL: z.string().min(1),
+  apiKeyEnv: z.string().optional(),
+  preset: z.string().optional(),
+  models: z
+    .object({
+      low: z.string().optional(),
+      medium: z.string().optional(),
+      high: z.string().optional(),
+    })
+    .optional(),
+});
+
+const failoverTargetSchema = z.object({
+  id: z.string().min(1),
+  accountId: z.string().min(1),
+  roles: z.array(z.string()).optional(),
+  llm: failoverLlmSchema.optional(),
+  executor: z
+    .union([
+      z.literal('llm'),
+      z.literal('cursor-agent'),
+      z.literal('claude-code'),
+    ])
+    .optional(),
+  onExhausted: z.enum(['wait', 'failover']).optional(),
+});
+
+const modelTiersSchema = z.object({
+  low: z.string().min(1),
+  medium: z.string().min(1),
+  high: z.string().min(1),
+});
+
+const executionRouteSchema = z.object({
+  id: z.string().min(1),
+  accountId: z.string().min(1),
+  mode: z.enum(['metered', 'windowed', 'opaque']),
+  windows: z.array(quotaWindowSchema).min(1),
+  execution: z.union([
+    z.literal('llm'),
+    z.literal('cursor-agent'),
+    z.literal('claude-code'),
+  ]),
+  llm: z
+    .object({
+      baseURL: z.string().min(1),
+      apiKeyEnv: z.string().optional(),
+    })
+    .optional(),
+  presetId: z.string().optional(),
+  models: modelTiersSchema,
+  roleTiers: updateRoleTiersSchema.optional(),
+  roles: z.array(z.string()).optional(),
+  pollIntervalMs: z.number().positive().optional(),
+});
+
+const quotaAccountSchema = z.object({
+  id: z.string().min(1),
+  mode: z.enum(['metered', 'windowed', 'opaque']),
+  windows: z.array(quotaWindowSchema).min(1),
+  onExhausted: z.enum(['wait', 'failover']).optional(),
+  failover: z.array(failoverTargetSchema).optional(),
+  pollIntervalMs: z.number().positive().optional(),
+});
+
+const quotaConfigSchema = z
+  .object({
+    reservePercent: z.number().min(0).max(50).optional(),
+    defaultEstimateDollars: z
+      .object({
+        low: z.number().optional(),
+        medium: z.number().optional(),
+        high: z.number().optional(),
+      })
+      .optional(),
+    routes: z.array(executionRouteSchema).min(1).optional(),
+    accounts: z.array(quotaAccountSchema).min(1).optional(),
+  })
+  .refine((v) => (v.routes?.length ?? 0) > 0 || (v.accounts?.length ?? 0) > 0, {
+    message: 'provide routes or legacy accounts',
+  });
 
 export interface AppDeps {
   /** Runs one GitHub watch cycle and persists the resulting state. Overridable for tests. */
@@ -198,6 +292,50 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
         400,
       );
     }
+  });
+
+  api.get('/config/quota', (c) => {
+    const configured = engine.getConfiguredQuota() ?? null;
+    const effective = engine.getEffectiveQuotaConfig() ?? null;
+    const catalog = Object.values(MODEL_CATALOG).map((entry) => ({
+      id: entry.id,
+      provider: PROVIDER_LABEL[entry.npm],
+      pricing: entry.pricing,
+    }));
+    return c.json({
+      configured,
+      effective,
+      primaryAccountId: primaryAccountIdFor(engine.config),
+      catalog,
+      presets: listPresets().map((p) => ({
+        id: p.id,
+        name: p.name,
+        description: p.description,
+        tiers: p.tiers,
+        roleTiers: p.roleTiers,
+      })),
+    });
+  });
+
+  api.put('/config/quota', async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = quotaConfigSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+    try {
+      engine.setQuotaConfig(parsed.data);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      return c.json({ error: message }, 400);
+    }
+    void engine.persistProviderConfig();
+    return c.json({
+      configured: engine.getConfiguredQuota() ?? null,
+      effective: engine.getEffectiveQuotaConfig() ?? null,
+      primaryAccountId: primaryAccountIdFor(engine.config),
+      quota: engine.getQuotaSnapshot() ?? null,
+    });
   });
 
   api.post('/messages', async (c) => {
@@ -342,9 +480,27 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
       total: summarize(runs),
       byRole: summarizeByRole(runs),
       byModel: groupBy(runs, (r) => r.model),
+      byRoute: groupBy(runs, (r) => r.routeProfileId),
       byWorkstream: groupBy(runs, (r) => r.workstreamId),
       byMessage,
+      quota: engine.getQuotaSnapshot() ?? null,
     });
+  });
+
+  api.post('/quota/reset', async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const accountId =
+      typeof body.accountId === 'string' ? body.accountId : undefined;
+    const windowId =
+      typeof body.windowId === 'string' ? body.windowId : undefined;
+    const workstreamId =
+      typeof body.workstreamId === 'string' ? body.workstreamId : undefined;
+    if (!accountId || !windowId) {
+      return c.json({ error: 'accountId and windowId are required' }, 400);
+    }
+    const ok = engine.resetQuotaWindow(accountId, windowId, workstreamId);
+    if (!ok) return c.json({ error: 'window not found' }, 404);
+    return c.json({ ok: true, quota: engine.getQuotaSnapshot() ?? null });
   });
 
   api.get('/messages/:id/cost', async (c) => {

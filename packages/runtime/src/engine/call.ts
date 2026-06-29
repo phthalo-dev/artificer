@@ -106,6 +106,7 @@ export interface ExecuteCallDeps {
   engine: EngineApi;
   executor?: WorkerExecutor;
   registry: RoleRegistry;
+  route?: import('./quota-types.js').DispatchRoute;
 }
 
 /** Compose the context a call sees: its task plus a summary of its workstream. */

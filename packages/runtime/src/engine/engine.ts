@@ -18,6 +18,7 @@ import type {
 import { executeCall } from './call.js';
 import type { WorkerExecutor } from './executor.js';
 import { CursorAgentExecutor } from './cursor-executor.js';
+import { ClaudeCodeExecutor } from './claude-code-executor.js';
 import { findGitRepo } from './git-repo.js';
 import { cloneRepoIntoWorkspace, hasUncommittedChanges } from './git-ops.js';
 import {
@@ -31,6 +32,9 @@ import { buildGitEnv } from '../tools/git-env.js';
 import {
   insufficientBalanceUserMessage,
   isInsufficientBalanceError,
+  isQuotaExhaustedError,
+  quotaPausedUserMessage,
+  quotaRetryAfterMs,
 } from '../llm/errors.js';
 import { type ModelTier, type ModelTiers, pickModel } from './models.js';
 import {
@@ -41,6 +45,26 @@ import {
 import { Scheduler } from './scheduler.js';
 import { WorkstreamMemoryService } from './workstream-memory.js';
 import { RoleRegistry } from './role-registry.js';
+import { buildQuotaConfig, validateQuotaConfig } from './quota-config.js';
+import {
+  applyProviderConfigUpdate,
+  buildProviderConfigSnapshot,
+  type ProviderConfigSnapshot,
+  type ProviderConfigUpdate,
+} from './provider-config.js';
+import {
+  normalizeQuotaConfig,
+  stripDerivedQuotaFields,
+  syncPrimaryRouteToRuntime,
+} from './route-config.js';
+import type { QuotaConfig } from './quota-types.js';
+import { QuotaLedger } from './quota-ledger.js';
+import {
+  executorForRoute,
+  ProviderRouter,
+  type ResolveRouteInput,
+} from './provider-router.js';
+import type { DispatchRoute } from './quota-types.js';
 import type { RoleName } from '../storage/types.js';
 
 interface ActiveRun {
@@ -74,8 +98,13 @@ export class Engine implements EngineApi {
   private readonly memoryService?: WorkstreamMemoryService;
   private readonly executor?: WorkerExecutor;
   private readonly registry: RoleRegistry;
+  private quotaLedger?: QuotaLedger;
+  private providerRouter?: ProviderRouter;
+  private readonly runRoutes = new Map<string, DispatchRoute>();
+  private quotaResumeTimer?: ReturnType<typeof setTimeout>;
   /** Avoid spamming the user when many concurrent calls hit the same billing wall. */
   private readonly balanceNotified = new Set<string>();
+  private readonly quotaNotified = new Set<string>();
 
   constructor(
     config: RuntimeConfig,
@@ -88,9 +117,84 @@ export class Engine implements EngineApi {
     this.memoryService = memoryService;
     this.registry = registry ?? new RoleRegistry();
     this.executor = buildExecutor(config.executor);
+    this.reinitializeQuota();
+    if (this.quotaLedger) {
+      this.scheduleQuotaTick();
+    }
     this.scheduler = new Scheduler(config.concurrency, (runId) =>
       this.runOne(runId),
     );
+  }
+
+  getQuotaSnapshot(): ReturnType<QuotaLedger['snapshot']> | undefined {
+    return this.quotaLedger?.snapshot();
+  }
+
+  /** Explicit quota block from config (before env overrides). */
+  getConfiguredQuota(): QuotaConfig | undefined {
+    return this.config.quota;
+  }
+
+  /** Effective quota after auto-detect and env overrides. */
+  getEffectiveQuotaConfig(): QuotaConfig | undefined {
+    return buildQuotaConfig(this.config);
+  }
+
+  /** Replace quota config, reload ledger/router, and take effect on subsequent runs. */
+  setQuotaConfig(quota: QuotaConfig): QuotaConfig {
+    const normalized = normalizeQuotaConfig(quota, this.config);
+    validateQuotaConfig(normalized);
+    this.config.quota = stripDerivedQuotaFields(normalized);
+    syncPrimaryRouteToRuntime(this.config, normalized.routes?.[0]);
+    this.reinitializeQuota();
+    return normalized;
+  }
+
+  private reinitializeQuota(): void {
+    const quotaConfig = buildQuotaConfig(this.config);
+    if (!quotaConfig) {
+      this.quotaLedger = undefined;
+      this.providerRouter = undefined;
+      return;
+    }
+    this.quotaLedger = QuotaLedger.load(
+      quotaConfig,
+      this.store.layout.quotaStateFile(),
+    );
+    this.providerRouter = new ProviderRouter(
+      this.config,
+      this.quotaLedger,
+      quotaConfig.routes ?? [],
+      process.env,
+      buildExecutor,
+    );
+  }
+
+  resetQuotaWindow(
+    accountId: string,
+    windowId: string,
+    workstreamId?: string,
+  ): boolean {
+    if (!this.quotaLedger) return false;
+    const ok = this.quotaLedger.resetWindow(accountId, windowId, workstreamId);
+    if (ok) void this.resumePausedWorkstreams();
+    return ok;
+  }
+
+  getProviderConfig(): ProviderConfigSnapshot {
+    return buildProviderConfigSnapshot(this.config, this.getQuotaSnapshot());
+  }
+
+  /** Apply provider/model/quota changes from a user request. Persists to config. */
+  async updateProviderConfig(update: ProviderConfigUpdate): Promise<string> {
+    const changes = applyProviderConfigUpdate(this.config, update);
+    const normalized = normalizeQuotaConfig(this.config.quota, this.config);
+    validateQuotaConfig(normalized);
+    this.config.quota = stripDerivedQuotaFields(normalized);
+    syncPrimaryRouteToRuntime(this.config, normalized.routes?.[0]);
+    this.reinitializeQuota();
+    await this.persistProviderConfig();
+    return changes.join('; ');
   }
 
   /** Resolve a model id to an AI SDK model using the configured gateway. */
@@ -161,12 +265,26 @@ export class Engine implements EngineApi {
     });
     this.emit({ kind: 'message', at: message.createdAt, data: message });
 
+    const route = this.resolveDispatchRoute({
+      role: 'communicator',
+      tier: this.config.roleTiers.communicator,
+    });
+    if (this.providerRouter && !route) {
+      await this.reply(
+        quotaPausedUserMessage({ resumesAt: this.quotaLedger?.nextReset() }),
+      );
+      return message;
+    }
+
     const run = await this.store.createRun({
       role: 'communicator',
       task: content,
       originMessageId: message.id,
-      model: this.modelFor('communicator'),
+      model: this.modelForRoute('communicator', undefined, route),
+      routeProfileId: route?.profileId,
+      routeAccountId: route?.accountId,
     });
+    if (route) this.runRoutes.set(run.id, route);
     this.scheduler.enqueue(run.id);
     return message;
   }
@@ -180,6 +298,20 @@ export class Engine implements EngineApi {
   async spawnCall(
     input: SpawnCallInput,
   ): Promise<{ runId: string; taskId?: string }> {
+    const tier =
+      input.complexity ??
+      this.config.roleTiers[input.role as RoleName] ??
+      'medium';
+    const route = this.resolveDispatchRoute({
+      role: input.role,
+      workstreamId: input.workstreamId,
+      tier,
+    });
+    if (this.providerRouter && !route) {
+      await this.pauseAllForQuota();
+      throw new Error('Quota exhausted; workstreams paused until reset.');
+    }
+
     let taskId: string | undefined;
 
     if (input.workstreamId && input.role !== 'orchestrator') {
@@ -200,8 +332,12 @@ export class Engine implements EngineApi {
       taskId,
       parentRunId: input.parentRunId,
       originMessageId: input.originMessageId,
-      model: this.modelFor(input.role, input.complexity),
+      model: this.modelForRoute(input.role, input.complexity, route),
+      routeProfileId: route?.profileId,
+      routeAccountId: route?.accountId,
     });
+
+    if (route) this.runRoutes.set(run.id, route);
 
     if (taskId && input.workstreamId) {
       await this.store.updateTask(input.workstreamId, taskId, {
@@ -415,15 +551,123 @@ export class Engine implements EngineApi {
     }
   }
 
+  /**
+   * Write model preset/tiers and quota routes to artificer.config.json.
+   * Replaces separate persistConfig + persistQuotaConfig for agent-driven updates.
+   */
+  async persistProviderConfig(): Promise<void> {
+    const configPath = path.join(this.config.identityDir, 'artificer.config.json');
+
+    let existing: Record<string, unknown> = {};
+    try {
+      existing = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as Record<string, unknown>;
+    } catch { /* file may not exist yet */ }
+
+    const presetId = this.config.modelPresetId;
+    const { preset: _p, models: _m, roleTiers: _r, quota: _q, ...rest } = existing;
+    let updated: Record<string, unknown> = { ...rest };
+
+    if (presetId !== 'custom') {
+      updated.preset = presetId;
+    } else {
+      updated.models = { ...this.config.models };
+      updated.roleTiers = { ...this.config.roleTiers };
+    }
+
+    if (this.config.quota?.routes?.length) {
+      updated.quota = stripDerivedQuotaFields(
+        normalizeQuotaConfig(this.config.quota, this.config),
+      );
+    } else if (this.config.quota) {
+      updated.quota = this.config.quota;
+    }
+
+    try {
+      fs.writeFileSync(configPath, JSON.stringify(updated, null, 2) + '\n');
+    } catch (err) {
+      console.error('[engine] failed to write provider config:', err);
+      return;
+    }
+
+    if (!this.config.identity?.autoCommit) return;
+
+    const dir = this.config.identityDir;
+    const env = buildGitEnv(this.config.github);
+    const prefix = this.config.identity.commitPrefix ?? 'config:';
+    const message = `${prefix} update provider configuration`;
+
+    try {
+      await exec('git', ['-C', dir, 'add', 'artificer.config.json'], { env });
+    } catch (err) {
+      console.error('[engine] git add provider config failed:', err);
+      return;
+    }
+
+    try {
+      await exec('git', ['-C', dir, 'commit', '-m', message], { env });
+    } catch (err) {
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes('nothing to commit') && !msg.includes('nothing added')) {
+        console.error('[engine] git commit provider config failed:', err);
+      }
+      return;
+    }
+
+    if (!this.config.identity.autoPush) return;
+
+    try {
+      const remote = this.config.identity.remote ?? 'origin';
+      const pushArgs = ['push', remote];
+      if (this.config.identity.branch) {
+        pushArgs.push(this.config.identity.branch);
+      } else {
+        const { stdout } = await exec('git', ['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD'], { env });
+        const branch = stdout.trim();
+        if (branch && branch !== 'HEAD') pushArgs.push(branch);
+      }
+      await exec('git', ['-C', dir, ...pushArgs], { env });
+    } catch (err) {
+      console.error('[engine] git push provider config failed:', err);
+    }
+  }
+
   /** Resolve the model id for a role, honoring an optional complexity override. */
   private modelFor(role: RunRecord['role'], complexity?: ModelTier): string {
     return pickModel(
       this.config.models,
       this.config.roleTiers,
-      role,
+      role as RoleName,
       complexity,
     );
   }
+
+  private modelForRoute(
+    role: string,
+    complexity: ModelTier | undefined,
+    route?: DispatchRoute,
+  ): string {
+    if (!route) return this.modelFor(role, complexity);
+    return pickModel(
+      route.models,
+      route.roleTiers,
+      role as RoleName,
+      complexity,
+    );
+  }
+
+  private resolveDispatchRoute(
+    input: ResolveRouteInput,
+  ): DispatchRoute | undefined {
+    if (!this.providerRouter) return undefined;
+    return this.providerRouter.resolve(input) ?? undefined;
+  }
+
+  private resolveModelForRoute =
+    (route?: DispatchRoute) => (modelId: string) =>
+      resolveLanguageModel(modelId, {
+        apiKey: route?.apiKey ?? this.config.apiKey,
+        baseURL: route?.baseURL ?? this.config.baseURL,
+      });
 
   emit(event: RuntimeEvent): void {
     this.events.emit('event', event);
@@ -450,14 +694,19 @@ export class Engine implements EngineApi {
     });
 
     try {
+      const route = this.runRoutes.get(runId);
       const finished = await executeCall(run, {
-        resolveModel: this.resolveModel,
+        resolveModel: this.resolveModelForRoute(route),
         config: this.config,
         store: this.store,
         engine: this,
-        executor: this.executor,
+        executor: route
+          ? executorForRoute(route, buildExecutor, this.executor)
+          : this.executor,
         registry: this.registry,
+        route,
       });
+      this.runRoutes.delete(runId);
       await this.afterRun(finished);
     } finally {
       this.active.delete(runId);
@@ -470,6 +719,7 @@ export class Engine implements EngineApi {
     'blocked',
     'failed',
     'cancelled',
+    'paused_quota',
   ]);
 
   private static readonly STATUS_FOR_ROLE: Record<string, WorkstreamStatus> = {
@@ -691,6 +941,13 @@ export class Engine implements EngineApi {
       return;
     }
 
+    if (run.status === 'failed' && isQuotaExhaustedError(run.error)) {
+      await this.handleQuotaExhausted(run);
+      return;
+    }
+
+    this.recordRunQuotaUsage(run);
+
     // Only the generative work roles drive the state machine forward; the
     // deterministic FSM decides what (if anything) happens next.
     const isWork =
@@ -763,6 +1020,158 @@ export class Engine implements EngineApi {
     );
   }
 
+  private recordRunQuotaUsage(run: RunRecord): void {
+    if (!this.quotaLedger || run.status !== 'done') return;
+    const accountId =
+      run.routeAccountId ?? this.providerRouter?.getPrimaryAccountId();
+    if (!accountId) return;
+
+    if (run.executor) {
+      this.quotaLedger.recordExecutorInvocation(
+        accountId,
+        run.role,
+        run.workstreamId,
+      );
+      return;
+    }
+
+    const account = this.quotaLedger.getAccountConfig(accountId);
+    const source =
+      account?.mode === 'metered' ? 'metered' : ('estimated' as const);
+    this.quotaLedger.recordLlmRun(accountId, run, source);
+  }
+
+  private async handleQuotaExhausted(run: RunRecord): Promise<void> {
+    const accountId =
+      run.routeAccountId ?? this.providerRouter?.getPrimaryAccountId();
+    if (accountId) {
+      const retryMs = run.error ? quotaRetryAfterMs(run.error) : undefined;
+      const resetsAt = retryMs
+        ? new Date(Date.now() + retryMs).toISOString()
+        : this.quotaLedger?.nextReset();
+      this.quotaLedger?.markAccountExhausted(accountId, resetsAt);
+    }
+
+    const account = accountId
+      ? this.quotaLedger?.getAccountConfig(accountId)
+      : undefined;
+    if (account?.onExhausted === 'failover' && run.workstreamId) {
+      await this.stepWorkstream(
+        run.workstreamId,
+        run.originMessageId,
+        run.id,
+      );
+      return;
+    }
+
+    await this.pauseAllForQuota();
+  }
+
+  private async pauseAllForQuota(): Promise<void> {
+    if (!this.quotaLedger) return;
+    const resumesAt = this.quotaLedger.nextReset();
+    const notifyKey = resumesAt ?? 'quota';
+    if (!this.quotaNotified.has(notifyKey)) {
+      this.quotaNotified.add(notifyKey);
+      this.emit({
+        kind: 'quota',
+        at: new Date().toISOString(),
+        data: { event: 'exhausted', resumesAt },
+      });
+      await this.reply(quotaPausedUserMessage({ resumesAt }));
+    }
+
+    const workstreams = await this.store.listWorkstreams();
+    for (const ws of workstreams) {
+      if (!Store.isActiveStatus(ws.status) || ws.status === 'paused_quota') {
+        continue;
+      }
+      this.quotaLedger.recordPausedWorkstream(ws.id, ws.status);
+      await this.store.updateWorkstream(ws.id, {
+        status: 'paused_quota',
+        quotaPausedStatus: ws.status,
+        summary:
+          `${ws.summary}\n\n[System] Paused: usage quota reached.${resumesAt ? ` Resumes around ${resumesAt}.` : ''}`.trim(),
+      });
+      await this.emitWorkstream(ws.id);
+    }
+    this.scheduleQuotaResume();
+  }
+
+  private async resumePausedWorkstreams(): Promise<void> {
+    if (!this.quotaLedger) return;
+    const paused = this.quotaLedger.getPausedWorkstreams();
+    for (const [workstreamId, priorStatus] of Object.entries(paused)) {
+      const ws = await this.store.getWorkstream(workstreamId);
+      if (!ws || ws.status !== 'paused_quota') {
+        this.quotaLedger.clearPausedWorkstream(workstreamId);
+        continue;
+      }
+      await this.store.updateWorkstream(workstreamId, {
+        status: priorStatus as WorkstreamStatus,
+        quotaPausedStatus: undefined,
+      });
+      this.quotaLedger.clearPausedWorkstream(workstreamId);
+      await this.emitWorkstream(workstreamId);
+      const latest = await this.store.getWorkstream(workstreamId);
+      if (latest && !Engine.FSM_TERMINAL.has(latest.status)) {
+        await this.stepWorkstream(workstreamId);
+      }
+    }
+    this.quotaNotified.clear();
+    this.emit({
+      kind: 'quota',
+      at: new Date().toISOString(),
+      data: { event: 'resumed' },
+    });
+  }
+
+  private scheduleQuotaResume(): void {
+    if (!this.quotaLedger) return;
+    const ms = this.quotaLedger.nextResetMs();
+    if (ms === undefined) return;
+    if (this.quotaResumeTimer) clearTimeout(this.quotaResumeTimer);
+    this.quotaResumeTimer = setTimeout(() => {
+      this.quotaLedger?.tick();
+      void this.resumePausedWorkstreams();
+      this.scheduleQuotaResume();
+    }, Math.min(ms + 500, 2_147_483_647));
+  }
+
+  private scheduleQuotaTick(): void {
+    if (!this.quotaLedger) return;
+    const primary = this.providerRouter?.getPrimaryAccountId();
+    const pollMs =
+      (primary &&
+        this.quotaLedger.getAccountConfig(primary)?.pollIntervalMs) ??
+      300_000;
+    const timer = setInterval(() => {
+      this.quotaLedger?.tick();
+      const paused = this.quotaLedger?.getPausedWorkstreams() ?? {};
+      if (Object.keys(paused).length > 0) {
+        void this.resumePausedWorkstreams();
+      }
+      const primaryId = this.providerRouter?.getPrimaryAccountId();
+      if (
+        primaryId &&
+        this.quotaLedger &&
+        !this.quotaLedger.isAccountExhausted(primaryId)
+      ) {
+        const wasFailover =
+          this.quotaLedger.getActiveRoute(primaryId) !== 'primary';
+        this.quotaLedger.clearActiveRoute(primaryId);
+        if (wasFailover) {
+          this.emit({
+            kind: 'quota',
+            at: new Date().toISOString(),
+            data: { event: 'failover_cleared', accountId: primaryId },
+          });
+        }
+      }
+    }, pollMs);
+    timer.unref();
+  }
+
   // --- State snapshot ---
 
   async getState(): Promise<RuntimeState> {
@@ -788,6 +1197,8 @@ function buildExecutor(
 ): WorkerExecutor | undefined {
   if (!config || config === 'llm') return undefined;
   if (config === 'cursor-agent') return new CursorAgentExecutor();
+  if (config === 'claude-code') return new ClaudeCodeExecutor();
   if (config.type === 'cursor-agent') return new CursorAgentExecutor(config.model);
+  if (config.type === 'claude-code') return new ClaudeCodeExecutor(config.model);
   return undefined;
 }

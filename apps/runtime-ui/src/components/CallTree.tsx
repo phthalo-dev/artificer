@@ -30,8 +30,8 @@ function CallNode({ node, depth }: { node: RunNode; depth: number }) {
               {run.role}
             </Text>
             <StatusBadge status={run.status} />
-            {run.model && (
-              <Code style={{ fontSize: 11 }}>{run.model}</Code>
+            {(run.executor ?? run.model) && (
+              <Code style={{ fontSize: 11 }}>{run.executor ?? run.model}</Code>
             )}
           </Group>
           <Group gap="md" wrap="nowrap">

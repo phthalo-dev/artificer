@@ -12,6 +12,7 @@ import {
   DEFAULT_PRESET_ID,
   getPreset,
 } from './engine/presets.js';
+import type { QuotaConfig } from './engine/quota-types.js';
 import type { RoleName } from './storage/types.js';
 
 export interface ToolResultConfig {
@@ -81,6 +82,8 @@ export interface RuntimeConfig {
   identity?: IdentityConfig;
   /** Worker executor backend. Defaults to 'llm' (internal tool loop). */
   executor?: ExecutorConfig;
+  /** Quota windows, budgets, and failover routing. */
+  quota?: QuotaConfig;
 }
 
 /** The agent's GitHub identity, used to clone, push, and open/comment on PRs. */
@@ -277,5 +280,6 @@ export function mergeWithDefinition(
       : undefined,
     identity: definition.identity ?? base.identity,
     executor: definition.executor ?? base.executor,
+    quota: definition.quota ?? base.quota,
   };
 }

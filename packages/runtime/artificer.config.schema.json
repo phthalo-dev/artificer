@@ -99,11 +99,11 @@
       }
     },
     "executor": {
-      "description": "Worker executor backend for work roles (planner, worker, reviewer). Defaults to 'llm' (internal tool-use loop). Set to 'cursor-agent' to delegate work to the cursor agent CLI instead.",
+      "description": "Worker executor backend for work roles (planner, worker, reviewer). Defaults to 'llm' (internal tool-use loop). Set to 'cursor-agent' or 'claude-code' to delegate work to those CLIs instead.",
       "oneOf": [
         {
           "type": "string",
-          "enum": ["llm", "cursor-agent"]
+          "enum": ["llm", "cursor-agent", "claude-code"]
         },
         {
           "type": "object",
@@ -112,15 +112,36 @@
           "properties": {
             "type": {
               "type": "string",
-              "enum": ["cursor-agent"]
+              "enum": ["cursor-agent", "claude-code"]
             },
             "model": {
               "type": "string",
-              "description": "Model to pass to cursor agent via --model (e.g. 'claude-sonnet-4-5')."
+              "description": "Model to pass to the executor via --model (e.g. 'claude-sonnet-4-6')."
             }
           }
         }
       ]
+    },
+    "quota": {
+      "type": "object",
+      "description": "Usage quotas, budgets, and provider failover routing.",
+      "additionalProperties": false,
+      "properties": {
+        "reservePercent": {
+          "type": "number",
+          "description": "Percent of each window held for communicator replies. Default 10."
+        },
+        "routes": {
+          "type": "array",
+          "description": "Ordered execution chain — first route is primary, rest are failovers.",
+          "items": { "$ref": "#/$defs/executionRoute" }
+        },
+        "accounts": {
+          "type": "array",
+          "description": "Legacy quota accounts (migrated to routes at runtime).",
+          "items": { "$ref": "#/$defs/quotaAccount" }
+        }
+      }
     },
     "identity": {
       "type": "object",
@@ -155,6 +176,122 @@
       "type": "string",
       "enum": ["low", "medium", "high"],
       "description": "Complexity tier: low (cheap/fast), medium (balanced), high (most capable)."
+    },
+    "quotaAccount": {
+      "type": "object",
+      "required": ["id", "mode", "windows"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "mode": { "type": "string", "enum": ["metered", "windowed", "opaque"] },
+        "onExhausted": { "type": "string", "enum": ["wait", "failover"] },
+        "pollIntervalMs": { "type": "integer", "minimum": 1000 },
+        "windows": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/quotaWindow" }
+        },
+        "failover": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/failoverTarget" }
+        },
+        "unitWeights": {
+          "type": "object",
+          "additionalProperties": { "type": "number" }
+        }
+      }
+    },
+    "quotaWindow": {
+      "type": "object",
+      "required": ["id", "unit", "period", "limit"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "unit": { "type": "string", "enum": ["dollars", "tokens", "requests"] },
+        "period": {
+          "type": "string",
+          "enum": ["rolling5h", "daily", "weekly", "monthly", "fixed"]
+        },
+        "scope": { "type": "string", "enum": ["global", "workstream"] },
+        "limit": { "type": "number", "minimum": 0 },
+        "warnAtPercent": { "type": "number", "minimum": 0, "maximum": 100 },
+        "blockAtPercent": { "type": "number", "minimum": 0, "maximum": 100 }
+      }
+    },
+    "failoverTarget": {
+      "type": "object",
+      "required": ["id", "accountId"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "accountId": { "type": "string" },
+        "roles": { "type": "array", "items": { "type": "string" } },
+        "executor": {
+          "oneOf": [
+            { "type": "string", "enum": ["llm", "cursor-agent", "claude-code"] },
+            { "type": "object" }
+          ]
+        },
+        "onExhausted": { "type": "string", "enum": ["wait", "failover"] },
+        "llm": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "baseURL": { "type": "string" },
+            "apiKeyEnv": { "type": "string" },
+            "preset": { "type": "string" },
+            "models": {
+              "type": "object",
+              "properties": {
+                "low": { "type": "string" },
+                "medium": { "type": "string" },
+                "high": { "type": "string" }
+              }
+            }
+          }
+        }
+      }
+    },
+    "executionRoute": {
+      "type": "object",
+      "required": ["id", "accountId", "mode", "windows", "execution", "models"],
+      "additionalProperties": false,
+      "properties": {
+        "id": { "type": "string" },
+        "accountId": { "type": "string" },
+        "mode": { "type": "string", "enum": ["metered", "windowed", "opaque"] },
+        "windows": {
+          "type": "array",
+          "items": { "$ref": "#/$defs/quotaWindow" }
+        },
+        "execution": {
+          "type": "string",
+          "enum": ["llm", "cursor-agent", "claude-code"]
+        },
+        "llm": {
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "baseURL": { "type": "string" },
+            "apiKeyEnv": { "type": "string" }
+          }
+        },
+        "presetId": { "type": "string" },
+        "models": {
+          "type": "object",
+          "required": ["low", "medium", "high"],
+          "properties": {
+            "low": { "type": "string" },
+            "medium": { "type": "string" },
+            "high": { "type": "string" }
+          }
+        },
+        "roleTiers": {
+          "type": "object",
+          "additionalProperties": { "$ref": "#/$defs/modelTier" }
+        },
+        "roles": { "type": "array", "items": { "type": "string" } },
+        "pollIntervalMs": { "type": "integer", "minimum": 1000 }
+      }
     }
   }
 }

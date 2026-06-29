@@ -10,6 +10,8 @@ import type {
   Task,
   TokenUsage,
   UsageSummary,
+  QuotaSnapshot,
+  QuotaConfig,
   Workstream,
   WorkstreamDetail,
 } from '../api/types';
@@ -300,8 +302,10 @@ export const mockWorkstreams: Workstream[] = [
     id: MOCK_WORKSTREAM_IDS.planning,
     title: 'Public API v2 design',
     goal: 'Draft OpenAPI spec and migration guide for v2 breaking changes.',
-    status: 'planning',
-    summary: 'Orchestrator queued planner run.',
+    status: 'paused_quota',
+    quotaPausedStatus: 'planning',
+    summary:
+      '[System] Paused: usage quota reached. Resumes around 2026-06-28T20:00:00.000Z.',
     createdAt: T4,
     updatedAt: T4,
   },
@@ -679,6 +683,16 @@ export function buildUsageOverview(
   for (const [id, detail] of Object.entries(workstreamDetails)) {
     byWorkstream[id] = detail.usage.total;
   }
+  const byRoute: Record<string, UsageSummary> = {
+    primary: { ...total },
+    'zen-failover': usage({
+      inputTokens: 1200,
+      outputTokens: 400,
+      costUsd: 0.012,
+      runs: 1,
+      requests: 1,
+    }),
+  };
   return {
     total,
     byRole: byRole(allRuns),
@@ -709,5 +723,126 @@ export function buildUsageOverview(
           workstreamDetails[m.workstreamId ?? '']?.usage.total ??
           usage({ inputTokens: 0, outputTokens: 0, costUsd: 0, runs: 0, requests: 0 }),
       })),
+    byRoute,
+    quota: mockQuotaSnapshot,
   };
 }
+
+export const mockQuotaSnapshot: QuotaSnapshot = {
+  reservePercent: 10,
+  activeRoutes: { 'opencode-go': 'zen-failover' },
+  pausedWorkstreams: { [MOCK_WORKSTREAM_IDS.planning]: 'planning' },
+  accounts: {
+    'opencode-go': {
+      config: {
+        id: 'opencode-go',
+        mode: 'windowed',
+        onExhausted: 'failover',
+        windows: [
+          {
+            id: 'rolling5h',
+            unit: 'dollars',
+            period: 'rolling5h',
+            scope: 'global',
+            limit: 12,
+            blockAtPercent: 90,
+          },
+        ],
+        failover: [
+          {
+            id: 'zen-failover',
+            accountId: 'opencode-zen',
+            llm: {
+              baseURL: 'https://opencode.ai/zen/v1',
+              preset: 'zen-balanced',
+            },
+            onExhausted: 'wait',
+          },
+        ],
+      },
+      status: 'exhausted',
+      updatedAt: T4,
+      windows: [
+        {
+          config: {
+            id: 'rolling5h',
+            unit: 'dollars',
+            period: 'rolling5h',
+            scope: 'global',
+            limit: 12,
+            warnAtPercent: 70,
+            blockAtPercent: 90,
+          },
+          used: 11.2,
+          usedByWorkstream: {},
+          rollingEntries: [{ amount: 11.2, at: T4 }],
+          resetsAt: '2026-06-28T20:00:00.000Z',
+          source: 'estimated',
+        },
+      ],
+    },
+    'opencode-zen': {
+      config: {
+        id: 'opencode-zen',
+        mode: 'metered',
+        onExhausted: 'wait',
+        windows: [
+          {
+            id: 'daily-budget',
+            unit: 'dollars',
+            period: 'daily',
+            scope: 'global',
+            limit: 10,
+            blockAtPercent: 90,
+          },
+        ],
+      },
+      status: 'warning',
+      updatedAt: T4,
+      windows: [
+        {
+          config: {
+            id: 'daily-budget',
+            unit: 'dollars',
+            period: 'daily',
+            scope: 'global',
+            limit: 10,
+            warnAtPercent: 70,
+            blockAtPercent: 90,
+          },
+          used: 7.4,
+          usedByWorkstream: {},
+          rollingEntries: [],
+          resetsAt: '2026-06-29T00:00:00.000Z',
+          source: 'metered',
+        },
+      ],
+    },
+  },
+};
+
+export const mockQuotaConfig: QuotaConfig = {
+  reservePercent: mockQuotaSnapshot.reservePercent,
+  routes: [
+    {
+      id: 'primary',
+      accountId: 'opencode-go',
+      mode: 'windowed',
+      execution: 'llm',
+      llm: { baseURL: 'https://opencode.ai/zen/go/v1' },
+      presetId: 'go-economy',
+      models: { low: 'kimi-k2.5', medium: 'kimi-k2.6', high: 'kimi-k2.6' },
+      windows: mockQuotaSnapshot.accounts['opencode-go']!.windows.map((w) => w.config),
+    },
+    {
+      id: 'zen-failover',
+      accountId: 'opencode-zen',
+      mode: 'metered',
+      execution: 'llm',
+      llm: { baseURL: 'https://opencode.ai/zen/v1' },
+      presetId: 'zen-balanced',
+      models: { low: 'glm-4.7-flash', medium: 'glm-4.7', high: 'glm-4.7' },
+      windows: mockQuotaSnapshot.accounts['opencode-zen']!.windows.map((w) => w.config),
+    },
+  ],
+};

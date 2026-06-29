@@ -15,6 +15,7 @@ const WORKSTREAM_STATUSES: WorkstreamStatus[] = [
   'planning',
   'reviewing',
   'in_progress',
+  'paused_quota',
   'blocked',
   'done',
   'failed',

@@ -104,4 +104,8 @@ export class Layout {
   githubWatchStateFile(): string {
     return path.join(this.root, 'github-watch-state.json');
   }
+
+  quotaStateFile(): string {
+    return path.join(this.root, 'quota-state.json');
+  }
 }

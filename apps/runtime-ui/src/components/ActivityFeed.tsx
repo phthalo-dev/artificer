@@ -20,6 +20,7 @@ const DOT_COLOR: Record<ActivityEntry['kind'], string> = {
   workstream: color.violet,
   run: color.orange,
   tool: color.gray,
+  quota: color.yellow,
 };
 
 function FeedRow({ entry }: { entry: ActivityEntry }) {
