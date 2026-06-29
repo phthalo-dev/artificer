@@ -57,6 +57,8 @@ export interface RuntimeConfig {
   resumeOnStartup: boolean;
   /** Human-facing name of this agent entity. */
   agentName: string;
+  /** Global instruction suffix appended to every role's system prompt. From agent/instructions.md. */
+  globalInstructions?: string;
   /**
    * The agent's own GitHub credentials. When set, git/gh/run_shell commands
    * authenticate as this account (separate from the user's). Undefined when no

@@ -13,8 +13,8 @@ import type { RunRecord } from '../storage/types.js';
 import { emptyUsage } from '../storage/types.js';
 import { toolsForRole } from '../tools/registry.js';
 import { findGitRepo } from './git-repo.js';
-import { getRole } from './roles.js';
 import type { WorkerExecutor } from './executor.js';
+import { RoleRegistry } from './role-registry.js';
 
 const execAsync = promisify(exec);
 
@@ -105,6 +105,7 @@ export interface ExecuteCallDeps {
   store: Store;
   engine: EngineApi;
   executor?: WorkerExecutor;
+  registry: RoleRegistry;
 }
 
 /** Compose the context a call sees: its task plus a summary of its workstream. */
@@ -113,6 +114,7 @@ async function buildContext(
   run: RunRecord,
   workspaceDir: string,
   config: RuntimeConfig,
+  effectiveBaseRole: string,
 ): Promise<string> {
   const sections: string[] = [`Your task:\n${run.task}`];
 
@@ -141,7 +143,7 @@ async function buildContext(
     // Give the roles that touch the repo continuity on what has already been
     // done, so they pick up where the last call left off instead of starting a
     // fresh investigation every time.
-    if (WORK_ROLES.has(run.role)) {
+    if (WORK_ROLES.has(effectiveBaseRole)) {
       const findings = await findingsBlock(store, run.workstreamId);
       if (findings) sections.push(findings);
 
@@ -149,7 +151,7 @@ async function buildContext(
       if (recent) sections.push(recent);
       const changed = await changedFilesSummary(
         workspaceDir,
-        run.role === 'reviewer',
+        effectiveBaseRole === 'reviewer',
       );
       if (changed) sections.push(changed);
 
@@ -229,8 +231,10 @@ export async function executeCall(
     : store.layout.workspaceDir;
 
   const ctx: ToolContext = { engine, run, workspaceDir };
-  const tools = toolsForRole(run.role, ctx);
-  const role = getRole(run.role);
+  const roleDef = deps.registry.getRole(run.role);
+  if (!roleDef) throw new Error(`Unknown role: '${run.role}'`);
+  const effectiveBaseRole = roleDef.baseRole ?? run.role;
+  const tools = toolsForRole(effectiveBaseRole, ctx);
 
   run.status = 'running';
   run.startedAt = new Date().toISOString();
@@ -238,12 +242,18 @@ export async function executeCall(
   engine.emit({ kind: 'run', at: run.startedAt, data: { ...run } });
 
   try {
-    const userMessage = await buildContext(store, run, workspaceDir, config);
+    const userMessage = await buildContext(
+      store,
+      run,
+      workspaceDir,
+      config,
+      effectiveBaseRole,
+    );
 
     let resultText: string;
     let resultUsage: RunRecord['usage'];
 
-    if (deps.executor && WORK_ROLES.has(run.role)) {
+    if (deps.executor && WORK_ROLES.has(effectiveBaseRole)) {
       const execContext = userMessage + EXECUTOR_STATUS_INSTRUCTION;
       const execResult = await deps.executor.execute({ context: execContext, workspaceDir, run });
       resultText = execResult.text;
@@ -293,20 +303,24 @@ export async function executeCall(
       // The planner gets a tighter iteration cap so it commits to write_plan
       // instead of investigating until the wall-clock/instance timeout.
       const maxIterations =
-        run.role === 'planner'
+        effectiveBaseRole === 'planner'
           ? Math.min(config.maxPlannerIterations, config.maxIterationsPerCall)
           : config.maxIterationsPerCall;
 
+      const system = config.globalInstructions
+        ? `${roleDef.system(config.agentName)}\n\n${config.globalInstructions}`
+        : roleDef.system(config.agentName);
+
       const result = await runToolLoop({
         model: resolveModel(run.model ?? config.model),
-        system: role.system(config.agentName),
+        system,
         userMessage,
         tools,
         maxIterations,
         maxRunMs: config.maxRunMs,
         // The planner may emit a long plan in one response; give it room so the
         // plan isn't truncated mid-write.
-        maxTokens: run.role === 'planner' ? 8192 : 4096,
+        maxTokens: effectiveBaseRole === 'planner' ? 8192 : 4096,
         toolResultSpill: {
           layout: store.layout,
           runId: run.id,

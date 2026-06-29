@@ -40,6 +40,7 @@ import {
 } from './presets.js';
 import { Scheduler } from './scheduler.js';
 import { WorkstreamMemoryService } from './workstream-memory.js';
+import { RoleRegistry } from './role-registry.js';
 import type { RoleName } from '../storage/types.js';
 
 interface ActiveRun {
@@ -72,13 +73,20 @@ export class Engine implements EngineApi {
   private readonly active = new Map<string, ActiveRun>();
   private readonly memoryService?: WorkstreamMemoryService;
   private readonly executor?: WorkerExecutor;
+  private readonly registry: RoleRegistry;
   /** Avoid spamming the user when many concurrent calls hit the same billing wall. */
   private readonly balanceNotified = new Set<string>();
 
-  constructor(config: RuntimeConfig, store: Store, memoryService?: WorkstreamMemoryService) {
+  constructor(
+    config: RuntimeConfig,
+    store: Store,
+    memoryService?: WorkstreamMemoryService,
+    registry?: RoleRegistry,
+  ) {
     this.config = config;
     this.store = store;
     this.memoryService = memoryService;
+    this.registry = registry ?? new RoleRegistry();
     this.executor = buildExecutor(config.executor);
     this.scheduler = new Scheduler(config.concurrency, (runId) =>
       this.runOne(runId),
@@ -444,6 +452,7 @@ export class Engine implements EngineApi {
         store: this.store,
         engine: this,
         executor: this.executor,
+        registry: this.registry,
       });
       await this.afterRun(finished);
     } finally {
