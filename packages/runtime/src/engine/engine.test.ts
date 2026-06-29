@@ -6,6 +6,8 @@ import { test } from 'node:test';
 import { loadConfig } from '../config.js';
 import { Store } from '../storage/store.js';
 import { Engine } from './engine.js';
+import { RoleRegistry } from './role-registry.js';
+import type { IdentityRole } from '../discover/loader.js';
 import { MAX_FAILED_RUNS } from './workstream-machine.js';
 
 async function buildEngine() {
@@ -58,4 +60,29 @@ test('resumeInterruptedWorkstreams advances the FSM instead of spawning an LLM o
     !allRuns.some((r) => r.role === 'orchestrator'),
     'should not spawn an orchestrator run',
   );
+});
+
+test('Engine.listRoles includes built-ins and custom roles from registry', async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-engine-roles-'));
+  const config = loadConfig({
+    ARTIFICER_EXEC_DIR: dataDir,
+    LLM_API_KEY: 'test-key-not-used',
+    PORT: '0',
+  });
+  const store = new Store(config.execDir);
+  await store.init();
+
+  const customRole: IdentityRole = {
+    slug: 'security-auditor',
+    name: 'Security Auditor',
+    blurb: 'Finds bugs.',
+    baseRole: 'reviewer',
+    systemTemplate: 'You are {{agentName}} auditor.',
+  };
+  const registry = new RoleRegistry([customRole]);
+  const engine = new Engine(config, store, undefined, registry);
+
+  const roles = engine.listRoles();
+  assert.ok(roles.includes('worker'), 'should include built-in worker');
+  assert.ok(roles.includes('security-auditor'), 'should include custom role');
 });

@@ -173,6 +173,10 @@ export class Engine implements EngineApi {
 
   // --- EngineApi: used by tools ---
 
+  listRoles(): string[] {
+    return this.registry.listRoleNames();
+  }
+
   async spawnCall(
     input: SpawnCallInput,
   ): Promise<{ runId: string; taskId?: string }> {
