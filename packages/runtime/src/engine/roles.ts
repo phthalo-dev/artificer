@@ -1,9 +1,11 @@
 import type { RoleName } from '../storage/types.js';
 
 export interface RoleDefinition {
-  name: RoleName;
+  name: string;
   /** One-line description used in status snapshots and context. */
   blurb: string;
+  /** Which built-in role's tool set to inherit; absent = own slug. */
+  baseRole?: string;
   /** System prompt that defines how this role behaves. */
   system: (agentName: string) => string;
 }

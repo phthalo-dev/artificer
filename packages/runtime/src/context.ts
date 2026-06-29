@@ -2,14 +2,13 @@ import type { RuntimeConfig } from './config.js';
 import type { ModelTier } from './engine/models.js';
 import type { Store } from './storage/store.js';
 import type {
-  RoleName,
   RunRecord,
   ToolInvocation,
   Workstream,
 } from './storage/types.js';
 
 export interface SpawnCallInput {
-  role: RoleName;
+  role: string;
   description: string;
   workstreamId?: string;
   parentRunId?: string;

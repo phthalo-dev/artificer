@@ -13,6 +13,7 @@ export interface AgentManifest {
   channels: ModuleRef[];
   skills: ModuleRef[];
   memories: ModuleRef[];
+  roles: ModuleRef[];
 }
 
 function listByExt(dir: string, ext: string): ModuleRef[] {
@@ -28,6 +29,7 @@ export function scanAgentDirectory(rootDir: string): AgentManifest {
     channels: [],
     skills: [],
     memories: [],
+    roles: [],
   };
 
   const configPath = path.join(rootDir, 'artificer.config.json');
@@ -46,6 +48,7 @@ export function scanAgentDirectory(rootDir: string): AgentManifest {
     ...listByExt(path.join(rootDir, 'agent', 'skills'), '.md'),
     ...listByExt(path.join(rootDir, 'agent', 'skills'), '.ts'),
   ];
+  manifest.roles = listByExt(path.join(rootDir, 'agent', 'roles'), '.md');
   manifest.memories = listByExt(
     path.join(rootDir, 'identity', 'memories'),
     '.md',
