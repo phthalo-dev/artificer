@@ -7,10 +7,8 @@ import {
   plannerSpawnBlocked,
   reviewerSpawnBlocked,
 } from '../engine/spawn-guards.js';
-import type { RoleName, WorkstreamStatus } from '../storage/types.js';
+import type { WorkstreamStatus } from '../storage/types.js';
 import { isModelTier } from '../engine/models.js';
-
-const SPAWNABLE_ROLES: RoleName[] = ['planner', 'reviewer', 'worker', 'orchestrator'];
 
 const WORKSTREAM_STATUSES: WorkstreamStatus[] = [
   'pending',
@@ -148,8 +146,8 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
         properties: {
           role: {
             type: 'string',
-            enum: SPAWNABLE_ROLES,
-            description: 'The role of the call to spawn.',
+            description:
+              'The role of the call to spawn. Built-in roles: planner, worker, reviewer, orchestrator. Custom roles defined in agent/roles/ are also available.',
           },
           description: {
             type: 'string',
@@ -171,9 +169,10 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
         required: ['role', 'description'],
       },
       handler: async (input) => {
-        const role = String(input.role) as RoleName;
-        if (!SPAWNABLE_ROLES.includes(role)) {
-          return `Error: role must be one of ${SPAWNABLE_ROLES.join(', ')}.`;
+        const role = String(input.role);
+        const availableRoles = engine.listRoles();
+        if (!availableRoles.includes(role)) {
+          return `Error: unknown role "${role}". Available roles: ${availableRoles.join(', ')}.`;
         }
         const workstreamId =
           (input.workstreamId as string | undefined) ?? run.workstreamId;

@@ -43,6 +43,7 @@ export interface EngineApi {
   }): Promise<Workstream>;
   reply(content: string, workstreamId?: string): Promise<void>;
   emit(event: RuntimeEvent): void;
+  listRoles(): string[];
 }
 
 /** Everything a tool factory needs about the call it is serving. */

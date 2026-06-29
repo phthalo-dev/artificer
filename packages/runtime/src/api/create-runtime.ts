@@ -11,7 +11,8 @@ import { IdentityGitSync } from '../storage/identity-git-sync.js';
 import { ToolRegistry } from './tool-registry.js';
 import { WorkstreamMemoryService } from '../engine/workstream-memory.js';
 import { scanAgentDirectory } from '../discover/discover.js';
-import { loadSkillsFromDisk, loadInstructionsFromDisk } from '../discover/loader.js';
+import { loadSkillsFromDisk, loadInstructionsFromDisk, loadRolesFromDisk } from '../discover/loader.js';
+import { RoleRegistry } from '../engine/role-registry.js';
 import { mountChannels } from '../channels/mount.js';
 import type { ArtificerRuntime, ArtificerChannel, ArtificerSkill, RuntimeOptions } from './types.js';
 
@@ -45,18 +46,21 @@ export async function createRuntime(
     ?? (syntheticEnv.ARTIFICER_EXEC_DIR ? path.resolve(syntheticEnv.ARTIFICER_EXEC_DIR) : null)
     ?? path.join(os.homedir(), '.artificer', agentName);
 
+  const skills: ArtificerSkill[] = loadSkillsFromDisk(manifest.skills);
+  const instructions = manifest.instructions
+    ? loadInstructionsFromDisk(manifest.instructions.path)
+    : null;
+  const identityRoles = loadRolesFromDisk(manifest.roles);
+  const registry = new RoleRegistry(identityRoles);
+
   const config: RuntimeConfig = {
     ...baseConfig,
     ...options.config,
     agentName,
     execDir,
     identityDir: rootDir,
+    globalInstructions: instructions?.content ?? undefined,
   } as RuntimeConfig;
-
-  const skills: ArtificerSkill[] = loadSkillsFromDisk(manifest.skills);
-  const instructions = manifest.instructions
-    ? loadInstructionsFromDisk(manifest.instructions.path)
-    : null;
 
   const store = new Store(execDir);
   await store.init();
@@ -70,7 +74,7 @@ export async function createRuntime(
   const channels: ArtificerChannel[] = [];
 
   const memoryService = new WorkstreamMemoryService(identity, store);
-  const engine = new Engine(config, store, memoryService);
+  const engine = new Engine(config, store, memoryService, registry);
   const app = createApp(engine, { identity });
 
   if (channels.length > 0) {
