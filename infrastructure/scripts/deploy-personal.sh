@@ -124,17 +124,17 @@ if ! aws ssm wait command-executed --command-id "$CMD_ID" --instance-id "$INSTAN
 fi
 echo "    Host bootstrap complete"
 
-echo "==> Build runtime-ui"
+echo "==> Build UI"
 (
   cd "$ROOT"
   VITE_RUNTIME_URL="${CF_URL}" \
   VITE_WAKE_API_URL="${WAKE_URL}" \
   VITE_WAKE_API_TOKEN="${WAKE_TOKEN}" \
-  pnpm --filter @artificer/runtime-ui build
+  pnpm --filter @artificer-ai/ui build
 )
 
 echo "==> Sync UI to S3"
-aws s3 sync "$ROOT/apps/runtime-ui/dist/" "s3://${BUCKET}/" --delete --region "$REGION"
+aws s3 sync "$ROOT/packages/ui/dist/" "s3://${BUCKET}/" --delete --region "$REGION"
 
 echo "==> Invalidate CloudFront"
 aws cloudfront create-invalidation \

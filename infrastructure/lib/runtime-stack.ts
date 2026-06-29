@@ -46,7 +46,7 @@ const RUNTIME_API_PATHS = [
 ];
 
 /**
- * Personal runtime stack: EC2 + ECR + SQS + wake API + CloudFront console (runtime-ui).
+ * Personal runtime stack: EC2 + ECR + SQS + wake API + CloudFront console (@artificer-ai/ui).
  */
 export class RuntimeStack extends cdk.Stack {
   public readonly vpc: ec2.Vpc;
@@ -332,7 +332,7 @@ export class RuntimeStack extends cdk.Stack {
       ),
     });
 
-    // --- runtime-ui on S3 + CloudFront, API paths proxied to EC2 ---
+    // --- UI on S3 + CloudFront, API paths proxied to EC2 ---
 
     this.uiBucket = new s3.Bucket(this, 'UiBucket', {
       bucketName: `artificer-${environment}-ui-${cdk.Aws.ACCOUNT_ID}`,

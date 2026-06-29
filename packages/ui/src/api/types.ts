@@ -1,4 +1,4 @@
-// Local mirror of the @artificer/runtime HTTP API response shapes.
+// Local mirror of the @artificer-ai/runtime HTTP API response shapes.
 
 export type RoleName =
   | 'communicator'

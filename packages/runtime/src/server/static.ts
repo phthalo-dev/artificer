@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import type { MiddlewareHandler } from 'hono';
 import type { Context, Next } from 'hono';
 
 const MIME_TYPES: Record<string, string> = {
@@ -16,7 +17,7 @@ const MIME_TYPES: Record<string, string> = {
   '.map': 'application/json',
 };
 
-export function serveUI(distDir: string) {
+export function serveUI(distDir: string): MiddlewareHandler {
   return async (c: Context, next: Next) => {
     if (
       c.req.path.startsWith('/api/') ||

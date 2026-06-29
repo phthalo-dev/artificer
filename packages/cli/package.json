@@ -1,14 +1,30 @@
 {
   "name": "@artificer-ai/cli",
-  "version": "0.1.0",
+  "version": "0.1.1",
+  "description": "Artificer CLI — init, develop, and run local AI agents",
   "type": "module",
+  "engines": {
+    "node": ">=21"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
   "bin": {
     "artificer": "./bin/artificer.js"
   },
+  "files": [
+    "dist",
+    "bin"
+  ],
   "scripts": {
     "build": "tsc",
+    "prepublishOnly": "pnpm run build",
     "dev": "tsx src/index.ts",
     "link:global": "pnpm link --global"
+  },
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts"
   },
   "dependencies": {
     "@artificer-ai/runtime": "workspace:*"

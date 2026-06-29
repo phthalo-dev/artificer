@@ -124,7 +124,7 @@ test('provider config self-service: engine API, communicator tools, and persiste
 
   onDisk = JSON.parse(await fs.readFile(configPath, 'utf-8')) as {
     preset: string;
-    quota: { routes: ExecutionRouteConfig[] };
+    quota: { routes: ExecutionRouteConfig[]; reservePercent?: number };
   };
   assert.equal(onDisk.preset, 'go-economy');
   assert.equal(onDisk.quota.routes[0]?.presetId, 'go-economy');
@@ -134,7 +134,8 @@ test('provider config self-service: engine API, communicator tools, and persiste
   assert.match(reserveResult, /reservePercent.*15/);
 
   onDisk = JSON.parse(await fs.readFile(configPath, 'utf-8')) as {
-    quota: { reservePercent: number };
+    preset: string;
+    quota: { routes: ExecutionRouteConfig[]; reservePercent?: number };
   };
   assert.equal(onDisk.quota.reservePercent, 15);
 

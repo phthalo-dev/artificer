@@ -1,6 +1,7 @@
 import type { ToolRegistry } from '../api/tool-registry.js';
 import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
+import type { RoleName } from '../storage/types.js';
 import { createArtifactTools } from './artifacts.js';
 import { createCommunicatorTools, createReplyTool } from './communication.js';
 import { createProviderConfigTools } from './config.js';
@@ -126,7 +127,7 @@ export function toolsForRole(
   }
 
   if (customRegistry) {
-    const custom = customRegistry.toolsForRole(role).map((t) => t.toToolDef(ctx));
+    const custom = customRegistry.toolsForRole(role as RoleName).map((t) => t.toToolDef(ctx));
     result.push(...custom);
   }
   return result;

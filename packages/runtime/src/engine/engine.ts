@@ -1142,9 +1142,9 @@ export class Engine implements EngineApi {
     if (!this.quotaLedger) return;
     const primary = this.providerRouter?.getPrimaryAccountId();
     const pollMs =
-      (primary &&
-        this.quotaLedger.getAccountConfig(primary)?.pollIntervalMs) ??
-      300_000;
+      (primary
+        ? this.quotaLedger.getAccountConfig(primary)?.pollIntervalMs
+        : undefined) ?? 300_000;
     const timer = setInterval(() => {
       this.quotaLedger?.tick();
       const paused = this.quotaLedger?.getPausedWorkstreams() ?? {};

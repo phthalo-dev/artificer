@@ -4,7 +4,7 @@ export async function dev(rootDir?: string): Promise<void> {
   const dir = rootDir ?? process.cwd();
   const resolved = path.resolve(dir);
 
-  const { createRuntime } = await import('@artificer/runtime');
+  const { createRuntime } = await import('@artificer-ai/runtime');
 
   const runtime = await createRuntime({ rootDir: resolved });
   await runtime.start();

@@ -327,11 +327,11 @@ export class QuotaLedger {
 
   /** Advance calendar windows, prune rolling entries, refresh statuses. */
   tick(now = new Date()): string | undefined {
-    for (const account of Object.values(this.state.accounts)) {
+    for (const [accountId, account] of Object.entries(this.state.accounts)) {
       for (const window of account.windows) {
         this.maybeRolloverWindow(window, now);
       }
-      this.refreshAccountStatus(account.id);
+      this.refreshAccountStatus(accountId);
     }
     void this.persist();
     return this.nextReset();

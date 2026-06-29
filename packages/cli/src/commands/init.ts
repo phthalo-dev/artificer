@@ -82,7 +82,7 @@ LLM_API_KEY=
 # AGENT_NAME=                                # overrides the name in artificer.config.ts
 
 # Model selection (preset covers all tiers by default; override individual tiers here)
-# MODEL_PRESET=async-economy                 # see presets in @artificer/runtime
+# MODEL_PRESET=async-economy                 # see presets in @artificer-ai/runtime
 # LLM_MODEL=                                 # medium-complexity tier (planner, reviewer)
 # LLM_MODEL_LOW=                             # low-complexity tier (communicator)
 # LLM_MODEL_HIGH=                            # high-complexity tier (worker)

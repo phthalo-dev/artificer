@@ -7,7 +7,6 @@ import {
   defaultWindowsForPrimary,
   executorAccountId,
   primaryAccountId,
-  primaryAccountIdFor,
 } from './quota-config-helpers.js';
 import {
   accountsFromRoutes,
@@ -18,6 +17,7 @@ import type {
   OnExhaustedPolicy,
   QuotaAccountConfig,
   QuotaConfig,
+  QuotaWindowConfig,
 } from './quota-types.js';
 
 function applyEnvOverrides(
@@ -29,7 +29,7 @@ function applyEnvOverrides(
     ? Number(env.QUOTA_RESERVE_PERCENT)
     : config.reservePercent;
 
-  let accounts = [...config.accounts];
+  let accounts = [...(config.accounts ?? [])];
   const dailyBudget = env.QUOTA_DAILY_BUDGET_USD
     ? Number(env.QUOTA_DAILY_BUDGET_USD)
     : undefined;
@@ -53,7 +53,9 @@ function applyEnvOverrides(
   } else if (dailyBudget) {
     accounts = accounts.map((account) => {
       if (account.id !== primaryId && account.id !== 'opencode-zen') return account;
-      const hasDaily = account.windows.some((w) => w.id === 'daily-budget');
+      const hasDaily = account.windows.some(
+        (w: QuotaWindowConfig) => w.id === 'daily-budget',
+      );
       if (hasDaily) return account;
       return {
         ...account,

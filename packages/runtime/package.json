@@ -1,7 +1,7 @@
 {
   "name": "@artificer-ai/runtime",
-  "version": "0.1.0",
-  "private": true,
+  "version": "0.1.1",
+  "description": "Artificer agent runtime — HTTP API and orchestration engine with bundled dashboard",
   "type": "module",
   "engines": {
     "node": ">=21"
@@ -11,9 +11,17 @@
   "exports": {
     ".": "./src/index.ts"
   },
+  "files": [
+    "dist",
+    "ui-dist",
+    "artificer.config.schema.json"
+  ],
   "scripts": {
+    "build": "tsc",
+    "build:ui": "pnpm --filter @artificer-ai/ui build && rm -rf ui-dist && cp -r ../ui/dist ui-dist",
+    "prepublishOnly": "pnpm run build && pnpm run build:ui",
     "dev": "tsx watch src/index.ts",
-    "start": "tsx src/index.ts",
+    "start": "node dist/index.js",
     "models": "tsx src/scripts/list-models.ts",
     "bench": "tsx bench/src/main.ts",
     "bench:run": "tsx bench/src/main.ts",
@@ -44,12 +52,22 @@
     "bench:deepswe:go-quality": "tsx bench/src/main.ts --suite tasks/deepswe-mini-suite.json --preset go-quality",
     "bench:deepswe:typescript:go-economy": "tsx bench/src/main.ts --suite tasks/deepswe-typescript-mini.json --preset go-economy",
     "bench:deepswe:typescript:go-quality": "tsx bench/src/main.ts --suite tasks/deepswe-typescript-mini.json --preset go-quality",
-    "build:ui": "cd ../ui && pnpm build && cd ../runtime && rm -rf ui-dist && cp -r ../ui/dist ui-dist",
     "type-check": "tsc --noEmit",
     "test": "node --import tsx --test \"src/**/*.test.ts\"",
-    "clean": "rm -rf dist",
+    "clean": "rm -rf dist ui-dist",
     "docker:build": "docker build -t artificer-runtime:dev .",
     "docker:run": "docker compose up"
+  },
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      }
+    }
   },
   "dependencies": {
     "@ai-sdk/anthropic": "^3.0.81",
