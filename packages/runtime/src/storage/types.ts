@@ -48,7 +48,7 @@ export type TaskStatus = 'pending' | 'running' | 'done' | 'failed';
 export interface Task {
   id: string;
   workstreamId: string;
-  role: RoleName;
+  role: string;
   description: string;
   status: TaskStatus;
   result?: string;
@@ -86,7 +86,7 @@ export interface Review {
 export interface Finding {
   id: string;
   workstreamId: string;
-  role: RoleName;
+  role: string;
   /** The file or area the finding concerns, when applicable. */
   file?: string;
   note: string;
@@ -127,7 +127,7 @@ export function emptyUsage(): TokenUsage {
 
 export interface RunRecord {
   id: string;
-  role: RoleName;
+  role: string;
   /** The prompt/task handed to this call. */
   task: string;
   workstreamId?: string;
