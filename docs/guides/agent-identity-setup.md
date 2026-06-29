@@ -2,128 +2,135 @@
 
 This guide walks through creating a dedicated GitHub account for an Artificer agent and scaffolding its identity repo. The agent gets its own git identity — separate from yours — so its commits, PRs, and activity appear as a distinct person.
 
-## Prerequisites
+## Before you start
 
-- Node.js >= 21
-- `artificer` CLI installed (`cd packages/cli && pnpm link:global`)
-- A new GitHub account for the agent (e.g., `atlas-eng`)
+You will need:
+
+- **Node.js 21+**
+- **The Artificer CLI** installed globally:
+  ```bash
+  npm install -g @artificer-ai/cli
+  ```
+- **A GitHub account for the agent** (e.g. `atlas-eng`) — not your personal account
 
 ---
 
-## Step 1: Create a GitHub PAT for the Agent Account
+## 1. Create a GitHub token for the agent
 
 Log in to GitHub as the agent account and create a **fine-grained personal access token** at [github.com/settings/tokens?type=beta](https://github.com/settings/tokens?type=beta).
 
-### PAT Scoping Checklist
+### Token settings
 
-**Token name:** `artificer-runtime` (or whatever helps you identify it)
-**Expiration:** 90 days (rotate before expiry)
-**Repository access:** All repositories (or limit to specific repos the agent will work on)
+| Setting | Recommendation |
+|---------|----------------|
+| Token name | `artificer-runtime` (or anything you'll recognize) |
+| Expiration | 90 days — rotate before it expires |
+| Repository access | All repositories, or only repos the agent will work on |
 
 **Required permissions:**
 
 | Permission | Access | Why |
-|---|---|---|
-| **Contents** | Read and write | Clone repos, push commits, read files |
-| **Pull requests** | Read and write | Open PRs, comment, merge |
-| **Issues** | Read and write | Read assigned issues, comment |
-| **Metadata** | Read-only | Required by GitHub for all tokens |
+|------------|--------|-----|
+| Contents | Read and write | Clone repos, push commits, read files |
+| Pull requests | Read and write | Open PRs, comment, merge |
+| Issues | Read and write | Read assigned issues, comment |
+| Metadata | Read-only | Required by GitHub for all tokens |
 
 **Optional permissions (enable as needed):**
 
 | Permission | Access | Why |
-|---|---|---|
-| **Workflows** | Read and write | Trigger or monitor CI/CD workflows |
-| **Actions** | Read-only | Check CI status on PRs |
-| **Commit statuses** | Read-only | Read check/status results |
-| **Webhooks** | Read and write | If the agent manages its own webhook config |
+|------------|--------|-----|
+| Workflows | Read and write | Trigger or monitor CI/CD workflows |
+| Actions | Read-only | Check CI status on PRs |
+| Commit statuses | Read-only | Read check/status results |
+| Webhooks | Read and write | If the agent manages its own webhook config |
 
-Copy the token — you'll need it for `.env`.
+Copy the token — you'll add it to `.env` in a later step.
 
-### Agent Profile Setup
+### Set up the agent's GitHub profile
 
 While logged in as the agent account:
 
-1. **Display name** — Set to the agent's name (e.g., "Atlas")
-2. **Avatar** — Upload a distinctive image so the agent is recognizable in PRs and commits
-3. **Bio** — Optional, e.g., "Engineering agent for the payments team. Powered by Artificer."
-4. **Noreply email** — Note the account's noreply email from [github.com/settings/emails](https://github.com/settings/emails). It looks like `123456+atlas-eng@users.noreply.github.com`. You'll use this as `GITHUB_USER_EMAIL`.
+1. **Display name** — e.g. "Atlas"
+2. **Avatar** — something distinctive so the agent is recognizable in PRs and commits
+3. **Bio** — optional, e.g. "Engineering agent for the payments team"
+4. **Noreply email** — from [github.com/settings/emails](https://github.com/settings/emails). It looks like `123456+atlas-eng@users.noreply.github.com`. You'll use this as `GITHUB_USER_EMAIL`.
 
 ---
 
-## Step 2: Scaffold the Agent Repo
+## 2. Scaffold the agent project
 
 ```bash
 artificer init atlas
 cd atlas
+npm install
 ```
 
 This creates:
 
 ```
 atlas/
-├── artificer.config.ts          # agent configuration
+├── artificer.config.json      # agent configuration
 ├── agent/
-│   ├── instructions.md          # system prompt additions
-│   ├── tools/                   # custom tools (defineTool)
-│   ├── channels/                # channel adapters (defineChannel)
-│   └── skills/                  # on-demand knowledge
+│   ├── instructions.md        # standing context for the agent
+│   ├── tools/                 # custom tools
+│   ├── channels/              # Slack, Discord, etc.
+│   └── skills/                # on-demand knowledge
 ├── identity/
-│   └── memories/                # agent-written, git-tracked
+│   └── memories/              # agent-written, git-tracked
 ├── package.json
-├── .env                         # secrets (gitignored)
+├── .env                       # secrets (gitignored)
 ├── .env.example
-└── .gitignore                   # ignores .artificer/ and .env
+└── .gitignore
 ```
 
 ---
 
-## Step 3: Configure Credentials
+## 3. Configure credentials
 
-Edit `.env` with the agent's credentials:
+Edit `.env` with the agent's secrets:
 
 ```bash
-# LLM gateway (required — pick one)
-LLM_API_KEY=zen_sk_...                    # OpenCode Zen key
-# LLM_API_KEY=sk-ant-...                  # or direct Anthropic key
-# LLM_BASE_URL=https://opencode.ai/zen/v1 # default, change for other providers
+# LLM gateway (required)
+LLM_API_KEY=zen_sk_...
+# LLM_BASE_URL=https://opencode.ai/zen/v1   # default; override for other providers
 
 # Agent GitHub identity
-GITHUB_TOKEN=github_pat_...                # PAT from Step 1
-GITHUB_USER_NAME=Atlas                     # commit author name
-GITHUB_USER_EMAIL=123456+atlas-eng@users.noreply.github.com  # noreply email
+GITHUB_TOKEN=github_pat_...
+GITHUB_USER_NAME=Atlas
+GITHUB_USER_EMAIL=123456+atlas-eng@users.noreply.github.com
 
 # API authentication (optional locally, required in production)
-# ARTIFICER_API_KEY=generate-a-random-secret-here
+# ARTIFICER_API_KEY=
 
-# Channel credentials (add as needed)
+# Channel credentials (add when connecting Slack/Discord — see guide below)
 # SLACK_BOT_TOKEN=xoxb-...
-# SLACK_SIGNING_SECRET=abc123...
+# SLACK_SIGNING_SECRET=...
 ```
 
 The `.env` file is gitignored — credentials never enter the repo.
 
 ---
 
-## Step 4: Customize the Agent Identity
+## 4. Customize the agent
 
 ### Configuration
 
-Edit `artificer.config.ts`:
+Edit `artificer.config.json`:
 
-```ts
-import { defineConfig } from '@artificer/runtime';
-
-export default defineConfig({
-  name: 'Atlas',
-  description: 'Engineering agent for the payments team',
-  preset: 'quality-first',
-  identity: {
-    autoCommit: true,
-    autoPush: false,
-  },
-});
+```json
+{
+  "name": "Atlas",
+  "description": "Engineering agent for the payments team",
+  "preset": "quality-first",
+  "identity": {
+    "autoCommit": true,
+    "autoPush": false
+  }
+}
 ```
+
+Your editor should offer autocomplete if the `$schema` path in the file resolves to `@artificer-ai/runtime`.
 
 ### Instructions
 
@@ -139,12 +146,12 @@ You work with the payments team at Acme Corp. Our main services are:
 When opening PRs, always tag @payments-reviewers.
 ```
 
-### Custom Tools (optional)
+### Custom tools (optional)
 
 Add tools to `agent/tools/`. Example — `agent/tools/search-jira.ts`:
 
 ```ts
-import { defineTool } from '@artificer/runtime';
+import { defineTool } from '@artificer-ai/runtime';
 
 export default defineTool({
   name: 'search_jira',
@@ -161,40 +168,48 @@ export default defineTool({
     const resp = await fetch(`${process.env.JIRA_URL}/rest/api/2/search`, {
       method: 'POST',
       headers: {
-        'Authorization': `Basic ${process.env.JIRA_TOKEN}`,
+        Authorization: `Basic ${process.env.JIRA_TOKEN}`,
         'Content-Type': 'application/json',
       },
       body: JSON.stringify({ jql: input.query, maxResults: 10 }),
     });
     const data = await resp.json();
-    return JSON.stringify(data.issues.map((i: any) => ({
-      key: i.key,
-      summary: i.fields.summary,
-      status: i.fields.status.name,
-    })));
+    return JSON.stringify(
+      data.issues.map((i: { key: string; fields: { summary: string; status: { name: string } } }) => ({
+        key: i.key,
+        summary: i.fields.summary,
+        status: i.fields.status.name,
+      })),
+    );
   },
 });
 ```
 
+Add any tool-specific secrets (like `JIRA_TOKEN`) to `.env`.
+
 ---
 
-## Step 5: Create the Remote Repo
+## 5. Push to GitHub
 
-### Option A: Using `gh` CLI (logged in as the agent account)
+Create a remote repo for the agent identity and push the initial commit.
+
+### Option A: Using the GitHub CLI
+
+Authenticate as the agent account, then:
 
 ```bash
-gh auth login                    # authenticate as the agent account
+gh auth login
 git init
 git add .
 git commit -m "Initial agent identity"
 gh repo create atlas --private --source=. --push
 ```
 
-### Option B: Create in GitHub UI, push locally
+### Option B: Create the repo in the GitHub UI
 
 1. Log in as the agent account on github.com
-2. Create a new private repo (e.g., `atlas`)
-3. Push from your local machine:
+2. Create a new private repo (e.g. `atlas`)
+3. Push from your machine:
 
 ```bash
 git init
@@ -204,18 +219,17 @@ git remote add origin https://github.com/atlas-eng/atlas.git
 git push -u origin main
 ```
 
-For the push to authenticate as the agent, you can use the PAT in the URL:
+To authenticate the one-time push as the agent, you can embed the PAT in the remote URL:
+
 ```bash
 git remote set-url origin https://atlas-eng:github_pat_...@github.com/atlas-eng/atlas.git
 ```
 
-Or configure a credential helper scoped to this repo.
-
-> **Note:** The runtime's `buildGitEnv` injects the agent's PAT automatically when tools run git commands. The manual push above is a one-time setup step — after this, the runtime handles auth.
+After setup, the runtime injects the agent's PAT automatically when git tools run — you only need to do this for the initial push.
 
 ---
 
-## Step 6: Start the Runtime
+## 6. Start the agent
 
 ```bash
 artificer dev
@@ -224,47 +238,78 @@ artificer dev
 You should see:
 
 ```
-[artificer] Starting Atlas in dev mode
-[artificer] Atlas listening on http://localhost:4100
-[artificer] identity: /Users/you/atlas
-[artificer] execution: /Users/you/atlas/.artificer
+[artificer] Atlas ready
+
+  API   http://localhost:4100/api
+  UI    http://localhost:4100
+  SSE   http://localhost:4100/events
+
+  identity  /Users/you/atlas
+  exec      /Users/you/.artificer/Atlas
 ```
 
-- **UI:** http://localhost:4100
-- **API:** http://localhost:4100/api
-- **SSE:** http://localhost:4100/events
+Open **http://localhost:4100** in your browser to interact with the agent, view workstreams, and monitor activity.
+
+For verbose logging:
+
+```bash
+ARTIFICER_VERBOSE=true artificer dev
+```
 
 ---
 
-## Verifying the Identity Split
+## Verify the identity split
 
-After the agent does some work (clones a repo, makes commits, opens a PR):
+After the agent clones a repo, makes commits, or opens a PR:
 
-1. **Commits** should show the agent's name and email, not yours
-2. **PRs** should be opened by the agent's GitHub account
-3. **Memories** written by the agent appear in `identity/memories/` as markdown files
-4. **Execution state** (messages, workstreams, runs) lives in `.artificer/` and is gitignored
+1. **Commits** show the agent's name and email, not yours
+2. **PRs** are opened by the agent's GitHub account
+3. **Memories** the agent writes appear in `identity/memories/` as markdown files
+4. **Execution state** (messages, workstreams, workspace checkouts) lives in `~/.artificer/<agent-name>/` by default — separate from the identity repo
 
-Check the agent's commit identity:
+To confirm commit authorship inside a workstream workspace:
+
 ```bash
-cd .artificer/workspace/<workstream-id>/<repo>/
+cd ~/.artificer/Atlas/workspace/<workstream-id>/<repo>/
 git log --format="%an <%ae>" -1
-# Should show: Atlas <123456+atlas-eng@users.noreply.github.com>
+# Atlas <123456+atlas-eng@users.noreply.github.com>
 ```
+
+If you prefer execution data inside the project directory, set `ARTIFICER_EXEC_DIR=./.artificer` in `.env` and uncomment `.artificer/` in `.gitignore`.
 
 ---
 
-## Production Deployment
+## Production deployment
 
-For production, set `ARTIFICER_API_KEY` and use `artificer start`:
+For production, protect the API and run in start mode:
 
 ```bash
-# Generate a secret
-export ARTIFICER_API_KEY=$(openssl rand -hex 32)
+# Add to .env
+ARTIFICER_API_KEY=<output of: openssl rand -hex 32>
 
 artificer start
 ```
 
-The API now requires `Authorization: Bearer <key>` on all `/api/*` routes. The UI at `/` is unauthenticated (it includes the key in API calls client-side).
+All `/api/*` routes then require `Authorization: Bearer <key>`. The web UI at `/` handles this client-side.
 
-Clone the agent repo on a new machine, provide a fresh `.env`, and the same agent identity runs in a new environment — that's the portability of agent-as-a-repo.
+To run the same agent elsewhere, clone the identity repo, copy `.env` (or recreate the secrets), run `npm install`, and `artificer start`. That's the portability of agent-as-a-repo.
+
+---
+
+## Next steps
+
+- [Connect Slack & Discord](./slack-discord-connections.md) — let your team message the agent in chat
+
+---
+
+## Environment variables reference
+
+| Variable | Required | Purpose |
+|----------|----------|---------|
+| `LLM_API_KEY` | Yes | LLM gateway API key |
+| `GITHUB_TOKEN` | For git/PR work | Agent's GitHub PAT |
+| `GITHUB_USER_NAME` | For git/PR work | Commit author name |
+| `GITHUB_USER_EMAIL` | For git/PR work | Commit author email (use noreply) |
+| `ARTIFICER_API_KEY` | Production | API bearer token |
+| `ARTIFICER_EXEC_DIR` | No | Override execution data location |
+| `PORT` | No | HTTP port (default `4100`) |

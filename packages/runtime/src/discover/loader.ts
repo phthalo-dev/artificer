@@ -1,6 +1,41 @@
 import fs from 'node:fs';
-import type { ArtificerSkill } from '../api/types.js';
+import { pathToFileURL } from 'node:url';
+import type { ArtificerChannel, ArtificerSkill } from '../api/types.js';
 import type { ModuleRef } from './discover.js';
+
+function isArtificerChannel(value: unknown): value is ArtificerChannel {
+  if (!value || typeof value !== 'object') return false;
+  const channel = value as ArtificerChannel;
+  return (
+    typeof channel.name === 'string' &&
+    typeof channel.receive === 'function' &&
+    typeof channel.format === 'function'
+  );
+}
+
+export async function loadChannelsFromDisk(
+  refs: ModuleRef[],
+): Promise<ArtificerChannel[]> {
+  const channels: ArtificerChannel[] = [];
+
+  for (const ref of refs) {
+    try {
+      const mod = await import(pathToFileURL(ref.path).href);
+      const channel = mod.default;
+      if (!isArtificerChannel(channel)) {
+        console.warn(
+          `[artificer] channel "${ref.name}": default export must be an ArtificerChannel`,
+        );
+        continue;
+      }
+      channels.push(channel);
+    } catch (err) {
+      console.warn(`[artificer] failed to load channel "${ref.path}":`, err);
+    }
+  }
+
+  return channels;
+}
 
 export function loadSkillsFromDisk(refs: ModuleRef[]): ArtificerSkill[] {
   return refs

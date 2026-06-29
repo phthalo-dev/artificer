@@ -123,5 +123,42 @@ describe('mountChannels', () => {
 
     assert.equal(res.status, 200);
     assert.equal(engineCalled, false);
+    const body = await res.json();
+    assert.deepEqual(body, { ok: true });
+  });
+
+  it('returns formatted PONG for _ping before _skip handling', async () => {
+    const app = new Hono();
+    const channel = defineChannel({
+      name: 'discord-like',
+      description: 'Discord-like ping channel',
+      receive: async () => ({
+        content: '',
+        metadata: { _ping: true, _skip: true },
+      }),
+      format: async (output) => {
+        if (output.metadata?._ping) return { type: 1 };
+        return { text: output.content };
+      },
+    });
+
+    let engineCalled = false;
+    mountChannels(app, [channel], {
+      receiveMessage: async () => {
+        engineCalled = true;
+        return {};
+      },
+    } as any);
+
+    const res = await app.request('/channels/discord-like', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ type: 1 }),
+    });
+
+    assert.equal(res.status, 200);
+    assert.equal(engineCalled, false);
+    const body = await res.json();
+    assert.deepEqual(body, { type: 1 });
   });
 });

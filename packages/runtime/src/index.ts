@@ -23,7 +23,7 @@ export { ToolRegistry } from './api/tool-registry.js';
 export { createRuntime } from './api/create-runtime.js';
 export type { RuntimeOptions, ArtificerRuntime } from './api/types.js';
 export { scanAgentDirectory, type AgentManifest, type ModuleRef } from './discover/discover.js';
-export { loadSkillsFromDisk, loadInstructionsFromDisk } from './discover/loader.js';
+export { loadSkillsFromDisk, loadInstructionsFromDisk, loadChannelsFromDisk } from './discover/loader.js';
 export { defineChannel } from './api/define-channel.js';
 export { defineSkill } from './api/define-skill.js';
 export type {

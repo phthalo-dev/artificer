@@ -19,6 +19,8 @@ import { primaryAccountIdFor } from '../engine/quota-config.js';
 import { readBenchOverview, readBenchRun, readBenchSuites } from './bench.js';
 import { bearerAuth } from './auth.js';
 import { serveUI } from './static.js';
+import { mountChannels } from '../channels/mount.js';
+import type { ArtificerChannel } from '../api/types.js';
 import type { IdentityStore } from '../storage/identity-store.js';
 
 const sendMessageSchema = z.object({
@@ -182,6 +184,8 @@ export interface AppDeps {
   uiDistDir?: string;
   /** Persistent identity store. Required for /api/memories routes. */
   identity?: IdentityStore;
+  /** Channel adapters mounted at /channels/{name} before static UI. */
+  channels?: ArtificerChannel[];
 }
 
 /** Builds the Hono app exposing the agent's "person-like" HTTP surface. */
@@ -551,6 +555,10 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
   });
 
   app.route('/api', api);
+
+  if (deps.channels?.length) {
+    mountChannels(app, deps.channels, engine);
+  }
 
   // --- Static UI serving ---
 

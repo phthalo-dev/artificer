@@ -7,6 +7,7 @@ import {
   IconCpu,
   IconFlask,
   IconLayoutDashboard,
+  IconMessage,
   IconLayoutSidebarRight,
   IconLayoutSidebarRightCollapse,
 } from '@tabler/icons-react';
@@ -20,6 +21,7 @@ import { BenchPage } from './pages/BenchPage';
 import { BenchRunPage } from './pages/BenchRunPage';
 import { DashboardPage } from './pages/DashboardPage';
 import { MemoriesPage } from './pages/MemoriesPage';
+import { MessagesPage } from './pages/MessagesPage';
 import { MessageCostPage } from './pages/MessageCostPage';
 import { ProvidersPage } from './pages/ProvidersPage';
 import { UsagePage } from './pages/UsagePage';
@@ -28,6 +30,7 @@ import { WorkstreamsPage } from './pages/WorkstreamsPage';
 
 const NAV = [
   { to: '/', label: 'Dashboard', icon: IconLayoutDashboard },
+  { to: '/messages', label: 'Messages', icon: IconMessage },
   { to: '/workstreams', label: 'Workstreams', icon: IconActivity },
   { to: '/bench', label: 'Benchmark', icon: IconFlask },
   { to: '/memories', label: 'Memories', icon: IconBook },
@@ -106,6 +109,7 @@ export function App() {
       <AppShell.Main>
         <Routes>
           <Route path="/" element={<DashboardPage />} />
+          <Route path="/messages" element={<MessagesPage />} />
           <Route path="/workstreams" element={<WorkstreamsPage />} />
           <Route path="/workstreams/:id" element={<WorkstreamDetailPage />} />
           <Route path="/bench" element={<BenchPage />} />
