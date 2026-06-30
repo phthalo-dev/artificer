@@ -116,10 +116,199 @@ LLM_API_KEY=
 # SLACK_SIGNING_SECRET=
 `;
 
-const INSTRUCTIONS_TEMPLATE = `## Agent Instructions
+const INSTRUCTIONS_TEMPLATE = `## Identity
 
-Add context about your team, codebase, and conventions here.
-The agent includes this in its system prompt for all roles.
+This file is loaded as system context for every role in the runtime. Edit it to establish standing conventions, preferences, and context that should always be in scope.
+
+---
+
+## Project layout
+
+This directory is the agent's identity root. Everything here defines who the agent is and how it operates.
+
+\`\`\`
+agent/
+  instructions.md     ← this file; loaded into every role's system prompt
+  tools/              ← custom tools (*.ts, default export from defineTool)
+  skills/             ← reusable procedures (*.md titles become skill names)
+  channels/           ← inbound message channels (*.ts, default export from defineChannel)
+  roles/              ← role overrides (*.md with frontmatter)
+identity/
+  memories/           ← persistent memories (*.md with frontmatter, managed via API)
+artificer.config.json ← agent name, model preset, quota configuration
+\`\`\`
+
+**What takes effect immediately:** memory changes (created or deleted via the API or by editing files directly).
+
+**What requires a restart:** changes to instructions, skills, tools, channels, or roles.
+
+---
+
+## Roles
+
+The runtime has six built-in roles. Each runs as a separate LLM call with its own system prompt and tool access:
+
+- **communicator** — receives inbound messages, decides whether to respond directly or create a workstream
+- **orchestrator** — breaks a goal into parallel workstreams and coordinates their execution
+- **planner** — writes a detailed task plan for a single workstream
+- **worker** — executes individual tasks (edits files, runs commands, calls tools)
+- **reviewer** — reviews completed work against the original goal and plan
+- **librarian** — manages memories; searches and writes to \`identity/memories/\`
+
+Custom roles can be defined in \`agent/roles/\` to override or extend these.
+
+---
+
+## Memories
+
+Memories are markdown files in \`identity/memories/\` with this structure:
+
+\`\`\`markdown
+---
+id: "mem_abc123"
+title: "Short label"
+summary: "One-line gist used for search ranking"
+tags: ["tag1", "tag2"]
+kind: "note"
+createdAt: "2024-01-01T00:00:00.000Z"
+---
+
+Memory content here.
+\`\`\`
+
+Valid \`kind\` values: \`note\`, \`document\`, \`preference\`.
+
+Memories are created and searched by the librarian role, and can also be managed via the UI (Memories page) or \`POST /api/memories\`. Do not edit the \`id\` or \`createdAt\` fields of existing memories.
+
+---
+
+## Skills
+
+A skill is a reusable procedure the agent can invoke by name. Add markdown files to \`agent/skills/\` — the filename (without \`.md\`) becomes the skill name, and the first heading becomes the description shown to the agent.
+
+Example \`agent/skills/write-adr.md\`:
+
+\`\`\`markdown
+# Write an architecture decision record
+
+When asked to document a decision, create a file in \`docs/decisions/\` following the standard ADR format:
+title, status, context, decision, consequences.
+\`\`\`
+
+---
+
+## Tools
+
+Tools extend what the worker role can do. Add a \`.ts\` file to \`agent/tools/\` with a default export created by \`defineTool\`:
+
+\`\`\`typescript
+import { defineTool } from '@artificer-ai/runtime';
+
+export default defineTool({
+  name: 'my_tool',
+  description: 'What this tool does',
+  input: {
+    type: 'object',
+    properties: {
+      value: { type: 'string', description: 'Input value' },
+    },
+    required: ['value'],
+  },
+  execute: async ({ value }, ctx) => {
+    // ctx.workspaceDir is the scoped workspace for this run
+    return \`result: \${value}\`;
+  },
+});
+\`\`\`
+
+---
+
+## Channels
+
+Channels receive messages from external services (Slack, Discord, webhooks, etc.). Add a \`.ts\` file to \`agent/channels/\` with a default export created by \`defineChannel\`:
+
+\`\`\`typescript
+import { defineChannel } from '@artificer-ai/runtime';
+
+export default defineChannel({
+  name: 'my-channel',
+  description: 'Receives messages from ...',
+  receive: async (payload) => ({
+    content: String(payload.text ?? ''),
+  }),
+  format: async (output) => ({
+    text: output.content,
+  }),
+});
+\`\`\`
+
+The channel is mounted at \`POST /channels/my-channel\` on the runtime server.
+
+---
+
+## Role overrides
+
+To customize how a built-in role behaves, add a \`.md\` file to \`agent/roles/\` with frontmatter:
+
+\`\`\`markdown
+---
+name: "Senior Worker"
+blurb: "Worker with stricter code quality rules"
+baseRole: worker
+---
+
+Always write tests before implementation. Prefer small, focused functions.
+Never leave TODO comments in committed code.
+\`\`\`
+
+Valid \`baseRole\` values: \`communicator\`, \`orchestrator\`, \`planner\`, \`worker\`, \`reviewer\`, \`librarian\`.
+
+---
+
+## About this agent
+
+<!-- Add standing context here: team name, codebase conventions, preferred tools, etc. -->
+`;
+
+const DOCKERFILE_TEMPLATE = `FROM node:22-bookworm-slim
+ENV DEBIAN_FRONTEND=noninteractive
+ENV ARTIFICER_DATA_DIR=/data
+ENV PORT=4100
+
+# The agent shells out to git and gh for repository operations
+RUN apt-get update \\
+    && apt-get install -y --no-install-recommends \\
+    git \\
+    openssh-client \\
+    ca-certificates \\
+    curl \\
+    gnupg \\
+    && curl -fsSL https://cli.github.com/packages/githubcli-archive-keyring.gpg -o /usr/share/keyrings/githubcli-archive-keyring.gpg \\
+    && chmod go+r /usr/share/keyrings/githubcli-archive-keyring.gpg \\
+    && echo "deb [arch=\$(dpkg --print-architecture) signed-by=/usr/share/keyrings/githubcli-archive-keyring.gpg] https://cli.github.com/packages stable main" > /etc/apt/sources.list.d/github-cli.list \\
+    && apt-get update \\
+    && apt-get install -y --no-install-recommends gh \\
+    && rm -rf /var/lib/apt/lists/*
+
+WORKDIR /app
+COPY package.json package-lock.json* ./
+RUN npm install --omit=dev
+
+COPY artificer.config.json ./
+COPY agent ./agent
+COPY identity ./identity
+
+RUN mkdir -p /data
+VOLUME ["/data"]
+EXPOSE 4100
+
+CMD ["node_modules/.bin/artificer", "start"]
+`;
+
+const DOCKERIGNORE_TEMPLATE = `node_modules
+.env
+.git
+*.log
 `;
 
 export function init(name: string, targetDir?: string): void {
@@ -146,6 +335,8 @@ export function init(name: string, targetDir?: string): void {
     path.join(dir, 'agent', 'instructions.md'),
     INSTRUCTIONS_TEMPLATE,
   );
+  fs.writeFileSync(path.join(dir, 'Dockerfile'), DOCKERFILE_TEMPLATE);
+  fs.writeFileSync(path.join(dir, '.dockerignore'), DOCKERIGNORE_TEMPLATE);
   fs.writeFileSync(
     path.join(dir, 'package.json'),
     JSON.stringify(
@@ -153,11 +344,18 @@ export function init(name: string, targetDir?: string): void {
         name,
         private: true,
         type: 'module',
-        dependencies: { '@artificer-ai/runtime': 'latest' },
+        scripts: {
+          start: 'artificer start',
+          dev: 'artificer dev',
+        },
+        dependencies: {
+          '@artificer-ai/runtime': 'latest',
+          '@artificer-ai/cli': 'latest',
+        },
       },
       null,
       2,
-    ),
+    ) + '\n',
   );
 
   console.log(`Created ${name} at ${dir}`);
@@ -167,4 +365,6 @@ export function init(name: string, targetDir?: string): void {
   console.log('  cp .env.example .env     # add your API keys');
   console.log('  npm install');
   console.log('  artificer dev');
+  console.log('');
+  console.log('To deploy to Fly.io, see https://github.com/artificer-ai/artificer/blob/main/docs/deploy-fly.md');
 }
