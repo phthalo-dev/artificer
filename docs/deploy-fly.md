@@ -58,17 +58,12 @@ fly secrets set LLM_API_KEY=sk-...
 
 # API key protecting your instance's UI and API (required for cloud deployment)
 # Anyone with this key can send messages to your agent — keep it private.
-fly secrets set ARTIFICER_API_KEY=$(openssl rand -hex 32)
+ARTIFICER_API_KEY=$(openssl rand -hex 32)
+echo "$ARTIFICER_API_KEY"   # copy this now — Fly won't show it again
+fly secrets set ARTIFICER_API_KEY="$ARTIFICER_API_KEY"
 ```
 
-To view your API key later (e.g. to enter it in the UI):
-
-```bash
-fly secrets list   # shows key names but not values
-# To retrieve the value, check where you stored it — Fly does not show secret values after creation.
-```
-
-Save the value of `ARTIFICER_API_KEY` somewhere safe (password manager, 1Password, etc.) — you'll need to enter it the first time you open the UI.
+Save the printed `ARTIFICER_API_KEY` somewhere safe (password manager, 1Password, etc.) before closing the terminal — you'll need it the first time you open the UI. Fly stores secret names but not values, so you can't retrieve it later.
 
 Optional secrets:
 

@@ -174,7 +174,7 @@ Persist to `{execDir}/quota-state.json`. Survive restarts so paused workstreams 
 
 ### Primary route
 
-The runtime's normal `LLM_BASE_URL` / `executor` config is seeded from **`quota.routes[0]`** when routes exist, otherwise from env + auto-detection. `artificer init` writes an explicit primary Zen route with `async-economy` preset and a $10/day daily budget.
+The runtime's normal `LLM_BASE_URL` / `executor` config is seeded from **`quota.routes[0]`** when routes exist, otherwise from env + auto-detection. `artificer init` writes a Go primary route (`go-economy` preset, subscription windows) with Zen metered failover (`async-economy`, $10/day cap).
 
 ---
 
@@ -893,7 +893,7 @@ Phase 0 is independently valuable even without estimation.
 - `packages/runtime/src/storage/types.ts` — `paused_quota` status, `routeProfileId` / `routeAccountId` on RunRecord
 - `packages/runtime/artificer.config.schema.json` — `executionRoute` + routes schema
 - `packages/runtime/src/server/app.ts` — `/usage` extension, `GET/PUT /config/quota`, `POST /quota/reset`
-- `packages/cli/src/commands/init.ts` — default `quota.routes` primary Zen route
+- `packages/cli/src/commands/init.ts` — default `quota.routes`: Go primary + Zen failover
 - `apps/runtime-ui` — Providers page, quota display on Usage, paused state copy
 
 ---

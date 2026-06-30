@@ -1,14 +1,30 @@
 import fs from 'node:fs';
 import path from 'node:path';
 
-/** Keep in sync with the async-economy preset in @artificer-ai/runtime. */
-const DEFAULT_PRESET_ID = 'async-economy';
+/** Keep in sync with the go-economy preset in @artificer-ai/runtime. */
+const DEFAULT_PRESET_ID = 'go-economy';
 const DEFAULT_MODELS = {
+  low: 'deepseek-v4-flash',
+  medium: 'kimi-k2.6',
+  high: 'deepseek-v4-pro',
+} as const;
+const DEFAULT_ROLE_TIERS = {
+  communicator: 'low',
+  orchestrator: 'medium',
+  planner: 'medium',
+  reviewer: 'medium',
+  worker: 'medium',
+  librarian: 'low',
+} as const;
+
+/** Zen failover preset/models — keep in sync with async-economy in @artificer-ai/runtime. */
+const ZEN_FALLBACK_PRESET_ID = 'async-economy';
+const ZEN_FALLBACK_MODELS = {
   low: 'gpt-5-nano',
   medium: 'gpt-5.4-mini',
   high: 'gpt-5.4',
 } as const;
-const DEFAULT_ROLE_TIERS = {
+const ZEN_FALLBACK_ROLE_TIERS = {
   communicator: 'low',
   orchestrator: 'low',
   planner: 'medium',
@@ -17,10 +33,42 @@ const DEFAULT_ROLE_TIERS = {
   librarian: 'low',
 } as const;
 
-/** Default daily spend cap for the primary Zen route (overridable via QUOTA_DAILY_BUDGET_USD). */
+/** Default daily spend cap on the Zen failover route (overridable via QUOTA_DAILY_BUDGET_USD). */
 const DEFAULT_DAILY_BUDGET_USD = 10;
 
-const DEFAULT_LLM_BASE_URL = 'https://opencode.ai/zen/v1';
+/** Keep in sync with GO_WINDOWS in @artificer-ai/runtime quota-config-helpers. */
+const GO_QUOTA_WINDOWS = [
+  {
+    id: 'rolling5h',
+    unit: 'dollars',
+    period: 'rolling5h',
+    scope: 'global',
+    limit: 12,
+    warnAtPercent: 70,
+    blockAtPercent: 90,
+  },
+  {
+    id: 'weekly',
+    unit: 'dollars',
+    period: 'weekly',
+    scope: 'global',
+    limit: 30,
+    warnAtPercent: 70,
+    blockAtPercent: 90,
+  },
+  {
+    id: 'monthly',
+    unit: 'dollars',
+    period: 'monthly',
+    scope: 'global',
+    limit: 60,
+    warnAtPercent: 80,
+    blockAtPercent: 95,
+  },
+] as const;
+
+const DEFAULT_GO_BASE_URL = 'https://opencode.ai/zen/go/v1';
+const DEFAULT_ZEN_BASE_URL = 'https://opencode.ai/zen/v1';
 
 export function makeConfigJson(name: string): string {
   return (
@@ -40,13 +88,25 @@ export function makeConfigJson(name: string): string {
           routes: [
             {
               id: 'primary',
-              accountId: 'opencode-zen',
-              mode: 'metered',
+              accountId: 'opencode-go',
+              mode: 'windowed',
               execution: 'llm',
-              llm: { baseURL: DEFAULT_LLM_BASE_URL },
+              llm: { baseURL: DEFAULT_GO_BASE_URL },
               presetId: DEFAULT_PRESET_ID,
               models: { ...DEFAULT_MODELS },
               roleTiers: { ...DEFAULT_ROLE_TIERS },
+              windows: [...GO_QUOTA_WINDOWS],
+            },
+            {
+              id: 'zen-failover',
+              accountId: 'opencode-zen',
+              mode: 'metered',
+              execution: 'llm',
+              llm: { baseURL: DEFAULT_ZEN_BASE_URL },
+              presetId: ZEN_FALLBACK_PRESET_ID,
+              models: { ...ZEN_FALLBACK_MODELS },
+              roleTiers: { ...ZEN_FALLBACK_ROLE_TIERS },
+              roles: ['planner', 'worker', 'reviewer'],
               windows: [
                 {
                   id: 'daily-budget',
@@ -74,15 +134,15 @@ node_modules/
 # .artificer/
 `;
 
-const ENV_EXAMPLE = `# LLM gateway (required)
+const ENV_EXAMPLE = `# LLM gateway (required — OpenCode Go subscription key for the default primary route)
 LLM_API_KEY=
-# LLM_BASE_URL=https://opencode.ai/zen/v1   # default; override for a different gateway
+# LLM_BASE_URL=https://opencode.ai/zen/go/v1   # default primary; Zen failover is in artificer.config.json
 
 # Agent identity
 # AGENT_NAME=                                # overrides the name in artificer.config.ts
 
 # Model selection (preset covers all tiers by default; override individual tiers here)
-# MODEL_PRESET=async-economy                 # see presets in @artificer-ai/runtime
+# MODEL_PRESET=go-economy                    # default; see presets in @artificer-ai/runtime
 # LLM_MODEL=                                 # medium-complexity tier (planner, reviewer)
 # LLM_MODEL_LOW=                             # low-complexity tier (communicator)
 # LLM_MODEL_HIGH=                            # high-complexity tier (worker)
@@ -107,8 +167,8 @@ LLM_API_KEY=
 # RUNTIME_MAX_ITERATIONS=24                  # tool-use iterations per call
 # RUNTIME_RESUME_ON_STARTUP=true             # resume interrupted workstreams on restart
 
-# Quota & provider routes (defaults in artificer.config.json; env overrides at runtime)
-# QUOTA_DAILY_BUDGET_USD=10                  # overrides the daily-budget window limit
+# Quota & provider routes (defaults in artificer.config.json: Go primary → Zen failover)
+# QUOTA_DAILY_BUDGET_USD=10                  # Zen failover daily-budget window limit
 # QUOTA_RESERVE_PERCENT=10                   # % held for communicator replies near cap
 # QUOTA_ON_EXHAUSTED=wait                    # wait | failover (meaningful with 2+ routes)
 
@@ -302,7 +362,7 @@ RUN mkdir -p /data
 VOLUME ["/data"]
 EXPOSE 4100
 
-CMD ["node_modules/.bin/artificer", "start"]
+CMD ["npm", "start"]
 `;
 
 const DOCKERIGNORE_TEMPLATE = `node_modules
