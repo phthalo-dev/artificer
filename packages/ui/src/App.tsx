@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { AppShell, Badge, Button, Group, NavLink, Text, ThemeToggle, Title, headerInner, navFooter, space } from './ds';
+import { useEffect, useState } from 'react';
+import { AppShell, Badge, Button, Group, Loader, NavLink, Text, ThemeToggle, Title, headerInner, navFooter, space } from './ds';
 import {
   IconActivity,
   IconBook,
@@ -13,6 +13,9 @@ import {
 } from '@tabler/icons-react';
 import { Navigate, NavLink as RouterNavLink, Route, Routes, useLocation } from 'react-router-dom';
 import { useRuntimeState } from './api/hooks';
+import { clearApiKey, getApiKey } from './api/auth';
+import { RUNTIME_URL } from './api/client';
+import { LoginPage } from './pages/LoginPage';
 
 const MOCK_MODE = import.meta.env.VITE_MOCK_API === 'true';
 import { ActivityFeed } from './components/ActivityFeed';
@@ -38,7 +41,7 @@ const NAV = [
   { to: '/providers', label: 'Providers', icon: IconCpu },
 ];
 
-export function App() {
+function AppShellContent() {
   const { data: state } = useRuntimeState();
   const location = useLocation();
   const [asideOpen, setAsideOpen] = useState(true);
@@ -129,4 +132,42 @@ export function App() {
       )}
     </AppShell>
   );
+}
+
+type AuthStatus = 'checking' | 'login' | 'ready';
+
+export function App() {
+  const [authStatus, setAuthStatus] = useState<AuthStatus>('checking');
+
+  useEffect(() => {
+    const key = getApiKey();
+    fetch(`${RUNTIME_URL}/health`, {
+      headers: key ? { authorization: `Bearer ${key}` } : {},
+    })
+      .then((r) => {
+        if (r.ok) {
+          setAuthStatus('ready');
+        } else if (r.status === 401) {
+          clearApiKey();
+          setAuthStatus('login');
+        } else {
+          setAuthStatus('ready');
+        }
+      })
+      .catch(() => setAuthStatus('ready'));
+  }, []);
+
+  if (authStatus === 'checking') {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+        <Loader size="md" />
+      </div>
+    );
+  }
+
+  if (authStatus === 'login') {
+    return <LoginPage onSuccess={() => setAuthStatus('ready')} />;
+  }
+
+  return <AppShellContent />;
 }
