@@ -17,7 +17,7 @@ import { listPresets } from '../engine/presets.js';
 import { primaryAccountIdFor } from '../engine/quota-config.js';
 import type { QuotaConfig } from '../engine/quota-types.js';
 import { readBenchOverview, readBenchRun, readBenchSuites } from './bench.js';
-import { bearerAuth } from './auth.js';
+import { bearerAuth, sseAuth } from './auth.js';
 import { serveUI } from './static.js';
 import { resolveUiDistDir } from './ui-dist.js';
 import { mountChannels } from '../channels/mount.js';
@@ -197,7 +197,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
 
   // --- Live event stream (at root level, not under /api) ---
 
-  app.get('/events', (c) =>
+  app.get('/events', sseAuth(engine.config.apiAuthKey), (c) =>
     streamSSE(c, async (stream) => {
       let open = true;
       const unsubscribe = engine.subscribe((event) => {

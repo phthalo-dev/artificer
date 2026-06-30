@@ -5,6 +5,7 @@ import {
 } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { api, baseOrigin, sendWork } from './client';
+import { getApiKey } from './auth';
 import type {
   BenchOverview,
   BenchRunDetail,
@@ -288,7 +289,9 @@ export function useSSEEvents(): ActivityEntry[] {
   const qc = useQueryClient();
 
   useEffect(() => {
-    const url = `${baseOrigin.replace(/\/$/, '')}/events`;
+    const key = getApiKey();
+    const eventsBase = `${baseOrigin.replace(/\/$/, '')}/events`;
+    const url = key ? `${eventsBase}?key=${encodeURIComponent(key)}` : eventsBase;
     let es: EventSource;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     let closed = false;
