@@ -1,0 +1,13 @@
+node_modules
+**/node_modules
+dist
+packages/runtime/dist
+packages/ui/dist
+packages/cli/dist
+packages/runtime/ui-dist
+.git
+.env
+.env.*
+*.log
+cdk.out
+infrastructure/cdk.out

@@ -1,3 +1,5 @@
+import { getApiKey } from './auth';
+
 export const baseOrigin =
   import.meta.env.VITE_MOCK_API === 'true'
     ? window.location.origin
@@ -26,9 +28,14 @@ export class ApiError extends Error {
 }
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
+  const key = getApiKey();
   const res = await fetch(`${RUNTIME_URL}${path}`, {
-    headers: { 'content-type': 'application/json' },
     ...init,
+    headers: {
+      'content-type': 'application/json',
+      ...(key ? { authorization: `Bearer ${key}` } : {}),
+      ...(init?.headers as Record<string, string> | undefined),
+    },
   });
   if (!res.ok) {
     let detail = res.statusText;
