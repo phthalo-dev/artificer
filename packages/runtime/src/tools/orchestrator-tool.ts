@@ -291,10 +291,13 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
           : undefined;
         const limit =
           typeof input.limit === 'number' ? input.limit : undefined;
-        const memories = await store.queryMemories(
-          input.query ? String(input.query) : '',
-          { tags, limit },
-        );
+        const query = input.query ? String(input.query) : '';
+        let memories = engine.identity
+          ? await engine.identity.queryMemories(query, limit)
+          : await store.queryMemories(query, { tags, limit });
+        if (engine.identity && tags) {
+          memories = memories.filter((m) => tags.some((t) => m.tags.includes(t)));
+        }
         if (memories.length === 0) return '(no memories)';
         return memories
           .map((m) => {
@@ -343,7 +346,8 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
           input.kind === 'preference'
             ? input.kind
             : undefined;
-        const memory = await store.addMemory({
+        const memStore = engine.identity ?? store;
+        const memory = await memStore.addMemory({
           content: String(input.content),
           tags,
           title: input.title ? String(input.title) : undefined,

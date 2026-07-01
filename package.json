@@ -20,7 +20,8 @@
     "changeset": "changeset",
     "version-packages": "changeset version",
     "publish-packages": "pnpm --filter @artificer-ai/runtime build && pnpm --filter @artificer-ai/runtime build:ui && pnpm --filter @artificer-ai/cli build && changeset publish",
-    "ci:packages": "pnpm --filter @artificer-ai/runtime type-check && pnpm --filter @artificer-ai/runtime test && pnpm --filter @artificer-ai/ui build && pnpm --filter @artificer-ai/runtime build && pnpm --filter @artificer-ai/runtime build:ui && pnpm --filter @artificer-ai/cli build"
+    "ci:packages": "pnpm --filter @artificer-ai/runtime type-check && pnpm --filter @artificer-ai/runtime test && pnpm --filter @artificer-ai/ui build && pnpm --filter @artificer-ai/runtime build && pnpm --filter @artificer-ai/runtime build:ui && pnpm --filter @artificer-ai/cli build",
+    "release": "node scripts/publish.mjs"
   },
   "devDependencies": {
     "@changesets/cli": "^2.29.0",

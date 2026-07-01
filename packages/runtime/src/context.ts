@@ -5,6 +5,7 @@ import type {
   ProviderConfigUpdate,
 } from './engine/provider-config.js';
 import type { Store } from './storage/store.js';
+import type { IdentityStore } from './storage/identity-store.js';
 import type {
   RunRecord,
   ToolInvocation,
@@ -36,6 +37,7 @@ export type RuntimeEvent =
  */
 export interface EngineApi {
   readonly store: Store;
+  readonly identity?: IdentityStore;
   readonly config: RuntimeConfig;
   spawnCall(input: SpawnCallInput): Promise<{ runId: string; taskId?: string }>;
   startWorkstream(input: {

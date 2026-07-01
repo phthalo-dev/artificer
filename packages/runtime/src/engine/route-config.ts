@@ -232,15 +232,17 @@ export function validateRoutes(routes: ExecutionRouteConfig[]): void {
       throw new Error(`duplicate route accountId "${route.accountId}"`);
     }
     accountIds.add(route.accountId);
-    if (!route.models?.low || !route.models?.medium || !route.models?.high) {
-      throw new Error(`route "${route.id}" must define low, medium, and high models`);
-    }
     const usesLlm =
       route.execution === 'llm' ||
       route.execution === undefined ||
       route.execution === null;
-    if (usesLlm && !route.llm?.baseURL) {
-      throw new Error(`route "${route.id}" requires llm.baseURL`);
+    if (usesLlm) {
+      if (!route.models?.low || !route.models?.medium || !route.models?.high) {
+        throw new Error(`route "${route.id}" must define low, medium, and high models`);
+      }
+      if (!route.llm?.baseURL) {
+        throw new Error(`route "${route.id}" requires llm.baseURL`);
+      }
     }
     if (route.windows.length === 0) {
       throw new Error(`route "${route.id}" must define at least one quota window`);
