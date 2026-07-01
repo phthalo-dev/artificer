@@ -27,7 +27,7 @@ RUN mkdir -p packages/runtime/ui-dist && cp -r packages/ui/dist/* packages/runti
 # --- Runtime image ---
 FROM node:22-bookworm-slim
 ENV DEBIAN_FRONTEND=noninteractive
-ENV ARTIFICER_DATA_DIR=/data
+ENV ARTIFICER_EXEC_DIR=/data
 ENV PORT=4100
 
 RUN apt-get update \

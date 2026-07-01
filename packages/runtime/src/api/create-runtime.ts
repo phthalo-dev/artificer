@@ -78,7 +78,7 @@ export async function createRuntime(
   const channels = await loadChannelsFromDisk(manifest.channels);
 
   const memoryService = new WorkstreamMemoryService(identity, store);
-  const engine = new Engine(config, store, memoryService, registry);
+  const engine = new Engine(config, store, memoryService, registry, identity);
   const app = createApp(engine, { identity, channels });
 
   return {

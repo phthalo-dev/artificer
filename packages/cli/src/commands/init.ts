@@ -149,9 +149,13 @@ LLM_API_KEY=
 
 # Agent GitHub identity (optional — enables git push, gh pr create, and PR watching)
 # GITHUB_TOKEN=
-# GITHUB_USER_NAME=
-# GITHUB_USER_EMAIL=
 # GITHUB_WATCH_INTERVAL_MS=                  # poll interval for the agent's own PRs (ms)
+
+# Docker / cloud deployment — clone identity repo on startup
+# IDENTITY_REPO=org/my-agent-identity        # e.g. myorg/atlas-identity (GitHub repo)
+# IDENTITY_DIR=/data/identity                # where to clone (default: /data/identity)
+# GITHUB_USER_NAME=                          # override commit author name  (default: from GITHUB_TOKEN account)
+# GITHUB_USER_EMAIL=                         # override commit author email (default: from GITHUB_TOKEN account)
 
 # API authentication (required in production)
 # ARTIFICER_API_KEY=
@@ -332,7 +336,7 @@ Valid \`baseRole\` values: \`communicator\`, \`orchestrator\`, \`planner\`, \`wo
 
 const DOCKERFILE_TEMPLATE = `FROM node:22-bookworm-slim
 ENV DEBIAN_FRONTEND=noninteractive
-ENV ARTIFICER_DATA_DIR=/data
+ENV ARTIFICER_EXEC_DIR=/data
 ENV PORT=4100
 
 # The agent shells out to git and gh for repository operations
@@ -357,6 +361,14 @@ RUN npm install --omit=dev
 COPY artificer.config.json ./
 COPY agent ./agent
 COPY identity ./identity
+
+# Initialize a local git repo so identity.autoCommit works at runtime.
+# Credentials for push are injected via GITHUB_TOKEN at runtime.
+RUN git init \\
+    && git config user.email "agent@artificer.local" \\
+    && git config user.name "Artificer" \\
+    && git add -A \\
+    && git commit -m "init: agent identity"
 
 RUN mkdir -p /data
 VOLUME ["/data"]

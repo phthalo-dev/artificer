@@ -370,6 +370,7 @@ export async function executeCall(
     run.status = 'failed';
     run.error = formatCallError(err);
     run.finishedAt = new Date().toISOString();
+    console.error(`[run:${run.id}] ${run.role} failed:`, run.error);
     await store.saveRun(run);
     engine.emit({ kind: 'run', at: run.finishedAt, data: { ...run } });
     return run;

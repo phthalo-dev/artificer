@@ -9,6 +9,7 @@ const exec = promisify(execFile);
 import type { EngineApi, RuntimeEvent, SpawnCallInput } from '../context.js';
 import { resolveLanguageModel } from '../llm/provider.js';
 import { Store } from '../storage/store.js';
+import type { IdentityStore } from '../storage/identity-store.js';
 import type {
   Message,
   RunRecord,
@@ -91,6 +92,7 @@ export interface RuntimeState {
  */
 export class Engine implements EngineApi {
   readonly store: Store;
+  readonly identity?: IdentityStore;
   readonly config: RuntimeConfig;
   private readonly scheduler: Scheduler;
   private readonly events = new EventEmitter();
@@ -111,9 +113,11 @@ export class Engine implements EngineApi {
     store: Store,
     memoryService?: WorkstreamMemoryService,
     registry?: RoleRegistry,
+    identity?: IdentityStore,
   ) {
     this.config = config;
     this.store = store;
+    this.identity = identity;
     this.memoryService = memoryService;
     this.registry = registry ?? new RoleRegistry();
     this.executor = buildExecutor(config.executor);
