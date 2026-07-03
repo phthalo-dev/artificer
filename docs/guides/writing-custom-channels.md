@@ -56,7 +56,7 @@ Each field:
 
 - **`name`** — sets the route path. A channel named `webhook` is mounted at `/channels/webhook`.
 - **`description`** — shown in the startup banner and used for logging.
-- **`verify`** — optional. Receives the raw request headers and raw body string. Return `true` to allow the request; `false` to reject it with `401 Verification failed`.
+- **`verify`** — optional. Receives the raw request headers and raw body string. Return `true` to allow the request; `false` to reject it — the runtime responds with `401 { "error": "Verification failed" }`.
 - **`receive`** — receives the parsed JSON payload as `Record<string, unknown>`. Must return a `ChannelMessage` with at least a `content` string. Pass additional context in `metadata`.
 - **`format`** — receives a `ChannelOutput` containing the agent's reply and the original metadata. Return any `Record<string, unknown>` — this becomes the HTTP response body.
 
