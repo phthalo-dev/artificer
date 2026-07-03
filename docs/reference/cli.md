@@ -1,3 +1,5 @@
+# CLI Reference
+
 The Artificer CLI (`artificer`) manages the agent lifecycle.
 
 ## `artificer init <name>`

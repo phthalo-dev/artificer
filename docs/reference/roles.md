@@ -167,9 +167,9 @@ Roles run at one of three complexity tiers — `low`, `medium`, or `high` — wh
 
 | Tier | Env var |
 |---|---|
-| low | `ANTHROPIC_MODEL_LOW` (or `LLM_MODEL_LOW`) |
-| medium | `ANTHROPIC_MODEL` (or `LLM_MODEL`) |
-| high | `ANTHROPIC_MODEL_HIGH` (or `LLM_MODEL_HIGH`) |
+| low | `LLM_MODEL_LOW` (alias: `ANTHROPIC_MODEL_LOW`) |
+| medium | `LLM_MODEL` (alias: `ANTHROPIC_MODEL`) |
+| high | `LLM_MODEL_HIGH` (alias: `ANTHROPIC_MODEL_HIGH`) |
 
 **Overriding a role's tier.** Set `RUNTIME_TIER_<ROLE>=<tier>` to change the tier for a specific role:
 
