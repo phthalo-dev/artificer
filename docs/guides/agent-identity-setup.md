@@ -4,6 +4,8 @@ This guide walks through creating a dedicated GitHub account for an Artificer ag
 
 ## Before you start
 
+New to Artificer? Start with the [Quickstart](../getting-started/quickstart.md) to get a local agent running before following this guide.
+
 You will need:
 
 - **Node.js 21+**
