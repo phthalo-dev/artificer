@@ -211,7 +211,7 @@ Cancel an active workstream. No-op if the workstream is already in a terminal st
 
 | Status | Condition |
 |---|---|
-| 404 | Workstream not found or already in a terminal state |
+| 404 | Workstream not found or already in a terminal state (the cancel could not be fulfilled) |
 
 ---
 
@@ -510,7 +510,7 @@ Each route object (`routes[]`):
 | `execution` | string | yes | `llm`, `cursor-agent`, or `claude-code` |
 | `llm` | object | no | `{ baseURL, apiKeyEnv }` for custom LLM endpoints |
 | `presetId` | string | no | Model preset to use for this route |
-| `models` | object | yes | `{ low, medium, high }` model IDs |
+| `models` | object | yes | `{ low, medium, high }` model IDs — all three sub-fields (`low`, `medium`, `high`) are required |
 | `roleTiers` | object | no | Per-role tier overrides for this route |
 | `roles` | string[] | no | Restrict route to specific roles |
 | `pollIntervalMs` | number | no | How often to poll quota state (milliseconds) |
