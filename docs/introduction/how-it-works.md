@@ -54,12 +54,12 @@ Each role picks a model by complexity tier rather than using one model everywher
 | Role | Default tier |
 |---|---|
 | communicator | low |
-| orchestrator | medium |
-| planner | high |
-| reviewer | medium |
-| worker | high |
+| orchestrator | low |
+| planner | medium |
+| reviewer | low |
+| worker | medium |
 
-Tiers map to model IDs via env vars: `ANTHROPIC_MODEL` for medium, `ANTHROPIC_MODEL_LOW` for low, and `ANTHROPIC_MODEL_HIGH` for high. Override a role's tier with `RUNTIME_TIER_<ROLE>` (e.g. `RUNTIME_TIER_WORKER=medium`).
+Tiers map to model IDs via env vars: `LLM_MODEL_LOW` for low, `LLM_MODEL` for medium, and `LLM_MODEL_HIGH` for high. Override a role's tier with `RUNTIME_TIER_<ROLE>` (e.g. `RUNTIME_TIER_WORKER=medium`).
 
 ## Executors
 

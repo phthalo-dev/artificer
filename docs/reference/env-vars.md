@@ -13,10 +13,10 @@ Environment variables configure the agent at runtime; set them in `.env` (develo
 | `LLM_MODEL_LOW` | No | preset default | Model ID for the low tier (communicator). Alias: `ANTHROPIC_MODEL_LOW` |
 | `LLM_MODEL_HIGH` | No | preset default | Model ID for the high tier (worker). Alias: `ANTHROPIC_MODEL_HIGH` |
 | `RUNTIME_TIER_COMMUNICATOR` | No | `low` | Override communicator role model tier (`low`, `medium`, or `high`) |
-| `RUNTIME_TIER_ORCHESTRATOR` | No | `medium` | Override orchestrator role model tier |
-| `RUNTIME_TIER_PLANNER` | No | `high` | Override planner role model tier |
-| `RUNTIME_TIER_REVIEWER` | No | `medium` | Override reviewer role model tier |
-| `RUNTIME_TIER_WORKER` | No | `high` | Override worker role model tier |
+| `RUNTIME_TIER_ORCHESTRATOR` | No | `low` | Override orchestrator role model tier |
+| `RUNTIME_TIER_PLANNER` | No | `medium` | Override planner role model tier |
+| `RUNTIME_TIER_REVIEWER` | No | `low` | Override reviewer role model tier |
+| `RUNTIME_TIER_WORKER` | No | `medium` | Override worker role model tier |
 
 ## GitHub identity
 
