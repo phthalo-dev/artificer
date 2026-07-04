@@ -98,3 +98,10 @@ Work history persists in the `runtime-data` volume (mounted at `/data`).
 See `.env.example`. Key variables: `ANTHROPIC_API_KEY`, `ANTHROPIC_MODEL`,
 `ARTIFICER_DATA_DIR`, `PORT`, `RUNTIME_CONCURRENCY`, `RUNTIME_MAX_ITERATIONS`,
 `RUNTIME_MAX_RUNS_PER_WORKSTREAM`, `AGENT_NAME`.
+
+## Benchmarking
+
+`bench/` runs SWE-bench/DeepSWE-style task suites against a preset (model tiers,
+concurrency, executor) and grades the results. See `bench/README.md` for the
+full task/preset/eval workflow; `pnpm bench:full:swebench` runs a full
+run-eval-report cycle end to end.

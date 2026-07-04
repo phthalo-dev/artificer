@@ -230,3 +230,4 @@ The agent UI is available at `http://localhost:4100`.
 
 - [Agent identity setup](./agent-identity-setup.md) — setting up the identity repo
 - [Environment variables reference](../reference/env-vars.md) — complete env var list
+- [infrastructure/README.md](../../infrastructure/README.md) — an alternative AWS path with hibernate-on-idle EC2, if you don't want an always-on Fly.io/Docker host
