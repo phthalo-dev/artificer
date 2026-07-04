@@ -43,6 +43,10 @@ async function setupIdentityRepo(): Promise<string | undefined> {
 
   if (fs.existsSync(path.join(identityDir, '.git'))) {
     console.log(`[artificer] Pulling identity from ${identityRepo}...`);
+    // Remove stale lock file left by a crashed git process
+    const lockFile = path.join(identityDir, '.git', 'index.lock');
+    if (fs.existsSync(lockFile)) fs.rmSync(lockFile);
+    await exec('git', ['-C', identityDir, 'reset', '--hard', 'HEAD']);
     await exec('git', ['-C', identityDir, 'pull', '--rebase', 'origin']);
   } else {
     console.log(`[artificer] Cloning identity from ${identityRepo}...`);

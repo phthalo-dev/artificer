@@ -1,176 +1,92 @@
 # Artificer
 
-A platform for managing remote AI coding agents running on EC2 instances. Each agent acts as an autonomous "developer" with its own GitHub account, SSH keys, and the ability to create commits, PRs, and review code.
+Artificer runs AI coding agents that have their own GitHub identity — their own account, commits, and PRs, not yours. The agent is a git repo (its "identity repo": config, instructions, custom tools, channels, and the memories it writes over time), so you can clone it anywhere and run the same agent in a new place. No state is locked inside a service.
 
-## Features
+You talk to the agent through a web UI, Slack, or Discord. Send it a message describing what you need — fix a bug, review a PR, clean up a module — and it plans the work, executes it in the background, and reports back.
 
-- 🤖 **Autonomous AI Agents**: Deploy AI coding agents with their own GitHub identities
-- ☁️ **EC2-Based**: Each agent runs on a dedicated EC2 instance
-- 🔍 **Full Observability**: Real-time monitoring and activity tracking
-- 💬 **Multi-Channel Communication**: Web UI and Slack integration
-- 🔒 **Secure**: Encrypted credential storage and isolated environments
-- 🚀 **Self-Hostable**: Open-source and ready to deploy on your own infrastructure
+Self-hostable and open-source. Runs anywhere Node.js runs.
 
-## Architecture
+## How it works
 
-Artificer uses a control plane architecture with:
-- **TanStack Start Web App**: Modern full-stack React framework for managing agents
-- **PostgreSQL Database**: Stores agent configurations and activity logs
-- **Orchestrator Service**: Manages EC2 instances and agent lifecycle
-- **OpenCode Agents**: AI coding agents running on EC2 instances
+Every role the agent plays — communicator, orchestrator, planner, reviewer, worker — is one LLM tool-use call. The shared `orchestrator` tool lets any call inspect system state and spawn child calls, which is what lets a single inbound message turn into a whole tree of planned, reviewed work:
 
-## Tech Stack
+```
+inbound message
+      │
+      ▼
+ communicator ── reply ──▶ you
+      │  (start / steer / status)
+      ▼
+ orchestrator ◀────────────────┐  (re-invoked after every child finishes)
+   │ invoke_call               │
+   ├──▶ planner  ── plan.md ───┤
+   ├──▶ worker   ── 1 file ────┤
+   └──▶ reviewer ── notes ─────┘
+```
 
-- **Frontend Framework**: TanStack Start (React + TanStack Router)
-- **UI Components**: React Aria (Adobe's accessible component library)
-- **Backend API**: tRPC v11
-- **Database**: PostgreSQL with Prisma ORM
-- **Authentication**: Auth.js
-- **Cloud**: AWS (EC2, VPC, CloudWatch)
-- **Agent Framework**: OpenCode
-- **LLM Provider**: Anthropic (Claude)
-- **Build Tool**: Vite/Vinxi
-- **Monorepo**: Turborepo with pnpm
+See [How it works](docs/introduction/how-it-works.md) for the full mental model, and [Core concepts](docs/getting-started/core-concepts.md) for the vocabulary (workstreams, channels, executors, memories).
 
-## Project Structure
+## Project structure
+
+This is a pnpm/Turborepo monorepo:
 
 ```
 artificer/
-├── apps/
-│   ├── web/              # TanStack Start web application
-│   │   ├── app/          # Application code
-│   │   │   ├── routes/   # File-based routes
-│   │   │   ├── components/ # React Aria components
-│   │   │   ├── server/   # tRPC API & database
-│   │   │   └── lib/      # Utilities
-│   │   └── prisma/       # Database schema
-│   └── orchestrator/     # Agent orchestrator service (Phase 2)
 ├── packages/
-│   ├── shared/           # Shared TypeScript code
-│   ├── agent-setup/      # EC2 agent setup scripts (Phase 2)
-│   └── slack-bot/        # Slack integration (Phase 5)
-└── infrastructure/       # Terraform configs (Phase 2)
+│   ├── runtime/   # @artificer-ai/runtime — the agent itself: HTTP server, role
+│   │               # engine, tools, storage, benchmarking suite (bench/)
+│   ├── cli/       # @artificer-ai/cli — `artificer init|dev|start`
+│   └── ui/        # @artificer-ai/ui — the web dashboard, built into runtime/ui-dist
+├── infrastructure/ # AWS CDK stack for a personal, hibernating EC2 deployment
+├── docker/         # Sidecar images used by the infrastructure deployment
+└── docs/           # End-user documentation (see below)
 ```
 
-## Getting Started
+There is no separate control-plane app and no database — a running agent is a single Node.js process that persists everything as files under `ARTIFICER_EXEC_DIR` (default `~/.artificer/<name>/`).
 
-### Prerequisites
+## Quick start
 
-- Node.js 20+
-- pnpm 8+
-- PostgreSQL 14+
-- AWS Account (for EC2 deployment, Phase 2)
-- Anthropic API Key (for agents)
-
-### Quick Start
-
-1. **Clone the repository:**
 ```bash
-git clone https://github.com/yourusername/artificer.git
-cd artificer
+npm install -g @artificer-ai/cli
+artificer init my-agent
+cd my-agent
+npm install
+# add your LLM key to .env (LLM_API_KEY — an OpenCode Zen key or a provider key)
+artificer dev
 ```
 
-2. **Install dependencies:**
+Open `http://localhost:4100` and send it a message. Full walkthrough: [Quickstart](docs/getting-started/quickstart.md).
+
+### Working on Artificer itself
+
+To develop the runtime/CLI/UI packages in this repo (rather than a scaffolded agent project):
+
 ```bash
 pnpm install
+pnpm dev          # turbo run dev across packages
+pnpm build        # build all packages
+pnpm lint         # lint all packages
+pnpm type-check   # type-check all packages
+pnpm ci:packages  # what CI runs: type-check, test, and build the publishable packages
 ```
-
-3. **Set up environment:**
-```bash
-cp apps/web/.env.example apps/web/.env
-# Edit .env with your DATABASE_URL and ENCRYPTION_KEY
-```
-
-Required environment variables:
-- `DATABASE_URL` - PostgreSQL connection string
-- `ENCRYPTION_KEY` - 32-character hex string (generate with: `openssl rand -hex 32`)
-
-4. **Initialize database:**
-```bash
-pnpm db:generate  # Generate Prisma client
-pnpm db:push      # Create database tables
-```
-
-5. **Start development:**
-```bash
-pnpm dev
-```
-
-6. **Open in browser:**
-Visit [http://localhost:3000](http://localhost:3000)
-
-### First Steps
-
-1. **Sign Up** - Create an account at `/auth/signup`
-2. **Create Agent** - Set up your first AI coding agent
-3. **View Dashboard** - Monitor agent activity and status
-
-> **Note:** EC2 provisioning is not yet implemented (Phase 2). Agents are created in the database with encrypted credentials but won't provision actual instances yet.
-
-## Development
-
-```bash
-pnpm dev          # Start all services in development mode
-pnpm build        # Build all apps and packages
-pnpm lint         # Lint all packages
-pnpm type-check   # Run TypeScript type checking
-
-# Database commands
-pnpm db:generate  # Generate Prisma client
-pnpm db:push      # Push schema changes to database
-pnpm db:migrate   # Create and run migrations
-pnpm db:studio    # Open Prisma Studio (database GUI)
-```
-
-## Key Technologies
-
-### TanStack Start
-Modern full-stack React framework with:
-- File-based routing with type safety
-- Server functions for API endpoints
-- Built-in data loading and caching
-- Powered by Vite for fast builds
-
-### React Aria
-Adobe's accessible component library:
-- Headless components (full styling control)
-- WCAG 2.1 Level AA compliant
-- Excellent keyboard navigation
-- Mobile-friendly touch interactions
-
-### tRPC
-End-to-end type-safe API:
-- Full TypeScript inference
-- Auto-generated types
-- Integrated with TanStack Query
-- No code generation needed
-
-## Deployment
-
-### Self-Hosted
-
-See [docs/self-hosting.md](docs/self-hosting.md) for detailed self-hosting instructions.
-
-### Managed Service
-
-Visit [artificer.io](https://artificer.io) to use the hosted version.
 
 ## Documentation
 
-- [Architecture Overview](docs/architecture.md)
-- [API Documentation](docs/api.md)
-- [Self-Hosting Guide](docs/self-hosting.md)
+- [What is Artificer?](docs/introduction/what-is-artificer.md) / [How it works](docs/introduction/how-it-works.md)
+- [Quickstart](docs/getting-started/quickstart.md) / [Core concepts](docs/getting-started/core-concepts.md)
+- Guides: [agent identity setup](docs/guides/agent-identity-setup.md), [Slack & Discord](docs/guides/slack-discord-connections.md), [custom tools](docs/guides/writing-custom-tools.md), [custom channels](docs/guides/writing-custom-channels.md), [managing memories](docs/guides/managing-memories.md), [custom CLI executors](docs/guides/custom-cli-executor.md), [deploying to production](docs/guides/deploying-to-production.md)
+- Reference: [CLI](docs/reference/cli.md), [config](docs/reference/config.md), [env vars](docs/reference/env-vars.md), [HTTP API](docs/reference/api.md), [roles](docs/reference/roles.md)
+
+## Deployment
+
+For a scaffolded agent project, [Deploying to production](docs/guides/deploying-to-production.md) covers Fly.io and plain Docker — the fastest paths to a self-hosted instance ($3–8/month).
+
+`infrastructure/` in this repo is a separate path: an AWS CDK stack the maintainers use for a personal, hibernating EC2 deployment (wakes on message via SQS, ~$3–8/month idle). See [infrastructure/README.md](infrastructure/README.md) if you specifically want the AWS route instead of Fly.io/Docker.
 
 ## Contributing
 
-Contributions are welcome! Please read our contributing guidelines before submitting PRs.
+Issues and PRs are welcome. `docs/` covers usage; the code under `packages/runtime/src/` is the best starting point for understanding the implementation (colocated `*.test.ts` files next to the code they test).
 
 ## License
 
-MIT License - see [LICENSE](LICENSE) for details.
-
-## Support
-
-- Documentation: [docs/](docs/)
-- Issues: [GitHub Issues](https://github.com/yourusername/artificer/issues)
-- Discussions: [GitHub Discussions](https://github.com/yourusername/artificer/discussions)
+MIT License — see [LICENSE](LICENSE) for details.

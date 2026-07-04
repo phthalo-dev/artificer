@@ -2,6 +2,8 @@
 
 Environment variables configure the agent at runtime; set them in `.env` (development) or as container/platform secrets (production).
 
+Where a variable lists an "Alias", that alias exists for compatibility with earlier naming (e.g. `ANTHROPIC_MODEL*`, `GH_TOKEN`) and is read as a fallback — prefer the primary name (`LLM_*`, `GITHUB_TOKEN`) in new configs.
+
 ## LLM / model configuration
 
 | Variable | Required | Default | Description |
