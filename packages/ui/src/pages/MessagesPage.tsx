@@ -4,6 +4,7 @@ import {
 import { Link } from 'react-router-dom';
 import { useMessages } from '../api/hooks';
 import { MessageComposer } from '../components/MessageComposer';
+import { MarkdownContent } from '../components/MarkdownContent';
 import type { Message } from '../api/types';
 import { formatTime } from '../format';
 
@@ -20,7 +21,7 @@ function Bubble({ message }: { message: Message }) {
           <Text size="xs" c="dimmed" fw={600}>{inbound ? 'You' : 'Agent'}</Text>
           <Text size="xs" c="dimmed">{formatTime(message.createdAt)}</Text>
         </Group>
-        <Text size="sm" preWrap>{message.content}</Text>
+        <MarkdownContent content={message.content} />
         {message.workstreamId && (
           <Text size="xs" mt={4}>
             <Link to={`/workstreams/${message.workstreamId}`}>View workstream →</Link>
