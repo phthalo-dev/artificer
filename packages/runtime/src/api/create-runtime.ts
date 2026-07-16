@@ -11,6 +11,7 @@ import { IdentityGitSync } from '../storage/identity-git-sync.js';
 import { ToolRegistry } from './tool-registry.js';
 import { WorkstreamMemoryService } from '../engine/workstream-memory.js';
 import { createScheduleRunnerForEngine } from '../engine/schedule-runner-host.js';
+import { runIdentityPullCycle } from '../engine/identity-pull.js';
 import { scanAgentDirectory } from '../discover/discover.js';
 import {
   loadSkillsFromDisk,
@@ -69,7 +70,7 @@ export async function createRuntime(
 
   const store = new Store(execDir);
   await store.init();
-  const identity = config.identity?.autoCommit
+  const identity = config.identity
     ? new IdentityGitSync(rootDir, config.identity, config.github)
     : new IdentityStore(rootDir);
   await identity.init();
@@ -94,6 +95,24 @@ export async function createRuntime(
     async start(port?: number) {
       const p = port ?? config.port;
       scheduleRunner.start();
+      const pullIntervalMs = config.identity?.pullIntervalMs;
+      if (pullIntervalMs && identity instanceof IdentityGitSync) {
+        const scheduleNextPull = () => {
+          setTimeout(() => {
+            runIdentityPullCycle({
+              identity,
+              reloadSchedules: () => engine.reloadSchedules(),
+              log: (message) =>
+                console.log(`[artificer] [identity-pull] ${message}`),
+            })
+              .catch((err) => {
+                console.error('[artificer] identity pull failed:', err);
+              })
+              .finally(scheduleNextPull);
+          }, pullIntervalMs);
+        };
+        scheduleNextPull();
+      }
       serve({ fetch: app.fetch, port: p }, (info) => {
         const base = `http://localhost:${info.port}`;
         console.log(`[artificer] ${config.agentName} ready\n`);
