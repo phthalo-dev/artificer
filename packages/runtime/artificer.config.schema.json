@@ -167,6 +167,11 @@
         "branch": {
           "type": "string",
           "description": "Branch to push to. Default: the current branch."
+        },
+        "pullInterval": {
+          "type": "string",
+          "pattern": "^\\d+(ms|s|m|h|d)$",
+          "description": "How often to pull identity from origin (e.g. '5m', '30s', '1d'). Omit to disable."
         }
       }
     }

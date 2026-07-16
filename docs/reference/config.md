@@ -53,6 +53,7 @@ Controls how the agent commits and pushes memories to the identity repo after ea
 | `identity.commitPrefix` | string | No | — | Prefix prepended to auto-commit messages |
 | `identity.remote` | string | No | `"origin"` | Git remote name to push to |
 | `identity.branch` | string | No | current branch | Branch to push to |
+| `identity.pullInterval` | string | No | — | How often to pull identity from origin. Accepts duration strings: `"30s"`, `"5m"`, `"1h"`, `"1d"`. Absent or unset disables periodic identity pull |
 
 ### `executor` block
 
