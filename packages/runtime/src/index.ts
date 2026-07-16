@@ -4,6 +4,7 @@ import { pathToFileURL } from 'node:url';
 import { loadConfig } from './config.js';
 import { Engine } from './engine/engine.js';
 import { runGithubWatchOnce } from './engine/github-watch-runner.js';
+import { createScheduleRunnerForEngine } from './engine/schedule-runner-host.js';
 import { createApp } from './server/app.js';
 import { Store } from './storage/store.js';
 
@@ -52,6 +53,7 @@ export async function startRuntime(): Promise<void> {
   await store.init();
 
   const engine = new Engine(config, store);
+  const scheduleRunner = createScheduleRunnerForEngine(engine);
 
   const recovered = await engine.recoverZombieRuns();
   if (recovered.length > 0) {
@@ -71,6 +73,10 @@ export async function startRuntime(): Promise<void> {
   }
 
   const app = createApp(engine);
+
+  scheduleRunner.start();
+  // eslint-disable-next-line no-console
+  console.log('[artificer-runtime] Schedule runner enabled');
 
   serve({ fetch: app.fetch, port: config.port }, (info) => {
     // eslint-disable-next-line no-console

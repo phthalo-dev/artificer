@@ -4,6 +4,8 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { EventEmitter } from 'node:events';
 import type { RuntimeConfig } from '../config.js';
+import { scanAgentDirectory } from '../discover/discover.js';
+import { loadSchedulesFromDisk } from '../discover/loader.js';
 
 const exec = promisify(execFile);
 import type { EngineApi, RuntimeEvent, SpawnCallInput } from '../context.js';
@@ -18,6 +20,7 @@ import type {
 } from '../storage/types.js';
 import { executeCall } from './call.js';
 import type { WorkerExecutor } from './executor.js';
+import type { ScheduleRunner } from './schedule-runner.js';
 import { CursorAgentExecutor } from './cursor-executor.js';
 import { ClaudeCodeExecutor } from './claude-code-executor.js';
 import { CliExecutor } from './cli-executor.js';
@@ -101,6 +104,7 @@ export class Engine implements EngineApi {
   private readonly memoryService?: WorkstreamMemoryService;
   private readonly executor?: WorkerExecutor;
   private readonly registry: RoleRegistry;
+  private scheduleRunner?: ScheduleRunner;
   private quotaLedger?: QuotaLedger;
   private providerRouter?: ProviderRouter;
   private readonly runRoutes = new Map<string, DispatchRoute>();
@@ -133,6 +137,15 @@ export class Engine implements EngineApi {
 
   getQuotaSnapshot(): ReturnType<QuotaLedger['snapshot']> | undefined {
     return this.quotaLedger?.snapshot();
+  }
+
+  attachScheduleRunner(runner: ScheduleRunner): void {
+    this.scheduleRunner = runner;
+  }
+
+  reloadSchedules(): void {
+    const manifest = scanAgentDirectory(this.config.identityDir);
+    this.scheduleRunner?.reload(loadSchedulesFromDisk(manifest.schedules));
   }
 
   /** Explicit quota block from config (before env overrides). */
