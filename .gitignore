@@ -60,3 +60,5 @@ cdk.out
 cost.json
 
 *.local
+# Git worktrees (local isolation)
+.worktrees/
