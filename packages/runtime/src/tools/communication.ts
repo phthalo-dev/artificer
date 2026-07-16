@@ -6,6 +6,99 @@ import {
   parseWorkstreamHeader,
 } from '../engine/task-intent.js';
 
+/** Conversation history tool — lets the communicator look back when the thread gets long. */
+export function createMessageHistoryTools(ctx: ToolContext): ToolDef[] {
+  const { engine } = ctx;
+  return [
+    {
+      name: 'get_recent_messages',
+      description:
+        'Search and retrieve messages from the conversation thread. Supports full-text search, date range filtering, pagination by index, and direction filtering. Use when you need to find something specific from earlier in the conversation or page through history.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          search: {
+            type: 'string',
+            description: 'Case-insensitive substring to search for in message content.',
+          },
+          direction: {
+            type: 'string',
+            enum: ['inbound', 'outbound', 'all'],
+            description: 'Filter by message direction. Defaults to "all".',
+          },
+          after: {
+            type: 'string',
+            description: 'ISO 8601 timestamp — only return messages created after this time.',
+          },
+          before: {
+            type: 'string',
+            description: 'ISO 8601 timestamp — only return messages created before this time.',
+          },
+          offset: {
+            type: 'number',
+            description: 'Skip this many messages from the end of the filtered list (for paging backwards). Default 0.',
+          },
+          limit: {
+            type: 'number',
+            description: 'Max number of messages to return (default 20, max 50).',
+          },
+        },
+      },
+      handler: async (input) => {
+        const limit = Math.min(
+          typeof input.limit === 'number' ? input.limit : 20,
+          50,
+        );
+        const offset = typeof input.offset === 'number' ? Math.max(0, input.offset) : 0;
+        const direction =
+          input.direction === 'inbound' || input.direction === 'outbound'
+            ? input.direction
+            : 'all';
+        const search = input.search ? String(input.search).toLowerCase() : undefined;
+        const after = input.after ? String(input.after) : undefined;
+        const before = input.before ? String(input.before) : undefined;
+
+        let messages = await engine.store.listMessages();
+
+        if (direction !== 'all') {
+          messages = messages.filter((m) => m.direction === direction);
+        }
+        if (after) {
+          messages = messages.filter((m) => m.createdAt > after);
+        }
+        if (before) {
+          messages = messages.filter((m) => m.createdAt < before);
+        }
+        if (search) {
+          messages = messages.filter((m) => m.content.toLowerCase().includes(search));
+        }
+
+        // Page from the end: drop `offset` from the tail, then take `limit`.
+        const end = messages.length - offset;
+        const page = end <= 0 ? [] : messages.slice(Math.max(0, end - limit), end);
+
+        if (page.length === 0) return '(no messages)';
+
+        const total = messages.length;
+        const header =
+          total > limit + offset
+            ? `(showing ${page.length} of ${total} matched — use offset to page further back)\n\n`
+            : '';
+
+        return (
+          header +
+          page
+            .map(
+              (m) =>
+                `[${m.direction === 'inbound' ? 'User' : 'Agent'}] ${m.createdAt}\n${m.content}`,
+            )
+            .join('\n\n---\n\n')
+        );
+      },
+    },
+  ];
+}
+
 /** Reply to the outside world. Available to the communicator and orchestrator. */
 export function createReplyTool(ctx: ToolContext): ToolDef[] {
   const { engine, run } = ctx;

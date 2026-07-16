@@ -3,7 +3,11 @@ import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
 import type { RoleName } from '../storage/types.js';
 import { createArtifactTools } from './artifacts.js';
-import { createCommunicatorTools, createReplyTool } from './communication.js';
+import {
+  createCommunicatorTools,
+  createMessageHistoryTools,
+  createReplyTool,
+} from './communication.js';
 import { createProviderConfigTools } from './config.js';
 import { createEditTool } from './edit.js';
 import { createFetchTools } from './fetch.js';
@@ -32,6 +36,7 @@ export function toolsForRole(
   const orchestrator = createOrchestratorTools(ctx);
   const reply = createReplyTool(ctx);
   const communicator = createCommunicatorTools(ctx);
+  const messageHistory = createMessageHistoryTools(ctx);
   const files = createFileTools(ctx);
   const edit = createEditTool(ctx);
   const shell = createShellTool(ctx);
@@ -49,6 +54,7 @@ export function toolsForRole(
       result = [
         ...reply,
         ...communicator,
+        ...messageHistory,
         ...providerConfig,
         ...byName(orchestrator, ['get_status', 'query_memories', 'add_memory']),
       ];

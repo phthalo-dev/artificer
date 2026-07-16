@@ -103,7 +103,7 @@ Task-oriented how-tos. Imperative, step-by-step.
 
 ### Existing guides (light refresh)
 
-Refresh scope: fix any references to old architecture, verify env var names match current code, ensure links between guides are consistent.
+Refresh scope: fix broken cross-links, verify env var names match current code, remove any references to the old web-app architecture described in the root README (EC2/PostgreSQL/TanStack Start). Content and structure of these guides is already good — no rewrite needed.
 
 - `guides/agent-identity-setup.md` — GitHub token setup, `artificer init`, config, pushing to GitHub, production deployment
 - `guides/slack-discord-connections.md` — Slack app + Discord app setup, channel files, webhook verification
@@ -122,7 +122,7 @@ Refresh scope: fix any references to old architecture, verify env var names matc
 **`guides/writing-custom-channels.md`**
 - What a channel is: an inbound message adapter
 - Where to put channel files: `agent/channels/<name>.ts`
-- `defineChannel()` API: the `receive` and `reply` contract
+- `defineChannel()` API: the `receive` function and reply handler (verify exact surface against `packages/runtime/src/api/define-channel.ts` during implementation)
 - Webhook verification pattern (Slack and Discord do this — custom channels may need it too)
 - Example: a simple HTTP webhook channel
 

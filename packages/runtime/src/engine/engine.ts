@@ -20,6 +20,7 @@ import { executeCall } from './call.js';
 import type { WorkerExecutor } from './executor.js';
 import { CursorAgentExecutor } from './cursor-executor.js';
 import { ClaudeCodeExecutor } from './claude-code-executor.js';
+import { CliExecutor } from './cli-executor.js';
 import { findGitRepo } from './git-repo.js';
 import { cloneRepoIntoWorkspace, hasUncommittedChanges } from './git-ops.js';
 import {
@@ -280,9 +281,25 @@ export class Engine implements EngineApi {
       return message;
     }
 
+    // Prepend recent thread history so the communicator can understand
+    // follow-up messages without asking for context that was already given.
+    const RECENT_MESSAGE_LIMIT = 15;
+    const allMessages = await this.store.listMessages();
+    const recentPrior = allMessages
+      .filter((m) => m.id !== message.id)
+      .slice(-RECENT_MESSAGE_LIMIT);
+
+    let task = content;
+    if (recentPrior.length > 0) {
+      const thread = recentPrior
+        .map((m) => `[${m.direction === 'inbound' ? 'User' : 'Agent'}]: ${m.content}`)
+        .join('\n\n');
+      task = `[Recent conversation]\n${thread}\n\n[New message]\n${content}`;
+    }
+
     const run = await this.store.createRun({
       role: 'communicator',
-      task: content,
+      task,
       originMessageId: message.id,
       model: this.modelForRoute('communicator', undefined, route),
       routeProfileId: route?.profileId,
@@ -1204,5 +1221,6 @@ function buildExecutor(
   if (config === 'claude-code') return new ClaudeCodeExecutor();
   if (config.type === 'cursor-agent') return new CursorAgentExecutor(config.model);
   if (config.type === 'claude-code') return new ClaudeCodeExecutor(config.model);
+  if (config.type === 'cli') return new CliExecutor(config);
   return undefined;
 }
