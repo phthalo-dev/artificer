@@ -158,4 +158,57 @@ describe('ScheduleRunner', () => {
     assert.equal(state.schedules.hb, undefined);
     assert.equal(runner.list()[0].inFlight, false);
   });
+
+  it('clears state when deletion is queued behind an in-flight tick', async () => {
+    let now = 0;
+    let state: ScheduleRuntimeState = { schedules: {} };
+    let releaseRead: (() => void) | undefined;
+    let reading: (() => void) | undefined;
+    const readStarted = new Promise<void>((resolve) => {
+      reading = resolve;
+    });
+    const readCanFinish = new Promise<void>((resolve) => {
+      releaseRead = resolve;
+    });
+    const messages: string[] = [];
+    const runner = new ScheduleRunner({
+      nowMs: () => now,
+      receiveMessage: async (content) => {
+        messages.push(content);
+        return { messageId: 'm1' };
+      },
+      createWorkstream: async () => ({ workstreamId: 'w1' }),
+      readState: async () => {
+        reading?.();
+        await readCanFinish;
+        return state;
+      },
+      writeState: async (nextState) => {
+        state = nextState;
+      },
+    });
+    await runner.reload([
+      {
+        id: 'hb',
+        name: 'HB',
+        everyMs: 1_000,
+        timezone: 'UTC',
+        action: 'communicator',
+        enabled: true,
+        body: 'Wake up',
+        sourcePath: '/tmp/hb.md',
+      },
+    ]);
+
+    now = 1_000;
+    const tick = runner.tick();
+    await readStarted;
+    const remove = runner.remove('hb');
+    releaseRead?.();
+    await Promise.all([tick, remove]);
+
+    assert.equal(messages.length, 1);
+    assert.equal(state.schedules.hb, undefined);
+    assert.deepEqual(runner.list(), []);
+  });
 });

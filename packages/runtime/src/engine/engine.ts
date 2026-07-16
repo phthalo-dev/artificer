@@ -151,9 +151,9 @@ export class Engine implements EngineApi {
     this.scheduleRunner = runner;
   }
 
-  reloadSchedules(): void {
+  async reloadSchedules(): Promise<void> {
     const manifest = scanAgentDirectory(this.config.identityDir);
-    this.scheduleRunner?.reload(loadSchedulesFromDisk(manifest.schedules));
+    await this.scheduleRunner?.reload(loadSchedulesFromDisk(manifest.schedules));
   }
 
   listSchedules(): Array<
@@ -182,7 +182,7 @@ export class Engine implements EngineApi {
     await fs.promises.mkdir(this.identity.layout.schedulesDir, { recursive: true });
     await fs.promises.writeFile(sourcePath, serializeSchedule(result.value), 'utf-8');
     await this.commitScheduleChange(`update schedule ${input.id}`);
-    this.reloadSchedules();
+    await this.reloadSchedules();
     return { ok: true };
   }
 
@@ -198,7 +198,7 @@ export class Engine implements EngineApi {
       'utf-8',
     );
     await this.commitScheduleChange(`set schedule ${id} ${enabled ? 'enabled' : 'disabled'}`);
-    this.reloadSchedules();
+    await this.reloadSchedules();
     return { ok: true };
   }
 
@@ -218,11 +218,15 @@ export class Engine implements EngineApi {
       }
       throw error;
     }
-    const state = await this.store.readScheduleState();
-    delete state.schedules[id];
-    await this.store.writeScheduleState(state);
+    if (this.scheduleRunner) {
+      await this.scheduleRunner.remove(id);
+    } else {
+      const state = await this.store.readScheduleState();
+      delete state.schedules[id];
+      await this.store.writeScheduleState(state);
+    }
     await this.commitScheduleChange(`delete schedule ${id}`);
-    this.reloadSchedules();
+    await this.reloadSchedules();
     return { ok: true };
   }
 

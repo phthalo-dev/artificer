@@ -8,12 +8,12 @@ export async function runIdentityPullCycle({
   log,
 }: {
   identity: PullableIdentity;
-  reloadSchedules: () => void;
+  reloadSchedules: () => void | Promise<void>;
   log?: (message: string) => void;
 }): Promise<void> {
   const result = await identity.pullFromRemote();
   if (result === 'updated') {
-    reloadSchedules();
+    await reloadSchedules();
     log?.('identity updated; schedules reloaded');
     return;
   }

@@ -27,6 +27,7 @@ export class ScheduleRunner {
   private readonly inFlight = new Map<string, InFlightFire>();
   private readonly firing = new Set<string>();
   private runtimeState: ScheduleRuntimeState = { schedules: {} };
+  private operation: Promise<void> = Promise.resolve();
   private startedAtMs: number;
   private timer: NodeJS.Timeout | undefined;
 
@@ -34,8 +35,23 @@ export class ScheduleRunner {
     this.startedAtMs = deps.nowMs();
   }
 
-  reload(definitions: ScheduleDefinition[]): void {
-    this.definitions = [...definitions];
+  reload(definitions: ScheduleDefinition[]): Promise<void> {
+    return this.enqueue(async () => {
+      this.definitions = [...definitions];
+    });
+  }
+
+  remove(id: string): Promise<void> {
+    return this.enqueue(async () => {
+      this.definitions = this.definitions.filter((definition) => definition.id !== id);
+      this.inFlight.delete(id);
+      this.firing.delete(id);
+
+      const state = await this.deps.readState();
+      const nextState = this.withLastFiredAt(state, id, null);
+      await this.deps.writeState(nextState);
+      this.runtimeState = nextState;
+    });
   }
 
   list(): Array<ScheduleDefinition & { lastFiredAt: number | null; inFlight: boolean }> {
@@ -47,6 +63,10 @@ export class ScheduleRunner {
   }
 
   async tick(): Promise<void> {
+    await this.enqueue(() => this.tickInternal());
+  }
+
+  private async tickInternal(): Promise<void> {
     await this.clearTerminalFires();
     let state = await this.deps.readState();
     this.runtimeState = state;
@@ -173,6 +193,15 @@ export class ScheduleRunner {
       schedules[id] = { lastFiredAt };
     }
     return { ...state, schedules };
+  }
+
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const next = this.operation.then(operation, operation);
+    this.operation = next.then(
+      () => undefined,
+      () => undefined,
+    );
+    return next;
   }
 
   private logFailure(id: string, error: unknown): void {
