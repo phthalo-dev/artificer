@@ -3,7 +3,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
 import os from 'node:os';
-import { loadSkillsFromDisk, loadInstructionsFromDisk, loadRolesFromDisk, loadChannelsFromDisk } from './loader.js';
+import {
+  loadSkillsFromDisk,
+  loadInstructionsFromDisk,
+  loadRolesFromDisk,
+  loadChannelsFromDisk,
+  loadSchedulesFromDisk,
+} from './loader.js';
 
 describe('loadSkillsFromDisk', () => {
   let tmpDir: string;
@@ -146,5 +152,74 @@ describe('loadChannelsFromDisk', () => {
       { name: 'missing', path: '/nonexistent/channel.ts' },
     ]);
     assert.equal(channels.length, 0);
+  });
+});
+
+describe('loadSchedulesFromDisk', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'artificer-schedules-'));
+  });
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('parses every + communicator schedule', () => {
+    const p = path.join(tmpDir, 'morning.md');
+    fs.writeFileSync(
+      p,
+      `---
+name: Morning check-in
+every: 1d
+action: communicator
+enabled: true
+---
+Check in.
+`,
+    );
+    const schedules = loadSchedulesFromDisk([{ name: 'morning', path: p }]);
+    assert.equal(schedules.length, 1);
+    assert.equal(schedules[0].id, 'morning');
+    assert.equal(schedules[0].name, 'Morning check-in');
+    assert.equal(schedules[0].everyMs, 86_400_000);
+    assert.equal(schedules[0].action, 'communicator');
+    assert.equal(schedules[0].enabled, true);
+    assert.match(schedules[0].body, /Check in/);
+  });
+
+  it('parses cron + timezone + workstream', () => {
+    const p = path.join(tmpDir, 'prune.md');
+    fs.writeFileSync(
+      p,
+      `---
+name: Weekly prune
+cron: 0 9 * * 1
+timezone: America/Los_Angeles
+action: workstream
+---
+Prune memories.
+`,
+    );
+    const schedules = loadSchedulesFromDisk([{ name: 'prune', path: p }]);
+    assert.equal(schedules[0].cron, '0 9 * * 1');
+    assert.equal(schedules[0].timezone, 'America/Los_Angeles');
+    assert.equal(schedules[0].action, 'workstream');
+  });
+
+  it('skips invalid files and keeps valid ones', () => {
+    const bad = path.join(tmpDir, 'bad.md');
+    const good = path.join(tmpDir, 'good.md');
+    fs.writeFileSync(bad, `---\naction: communicator\n---\nNo timing.\n`);
+    fs.writeFileSync(
+      good,
+      `---\nevery: 1h\naction: communicator\n---\nHi.\n`,
+    );
+    const schedules = loadSchedulesFromDisk([
+      { name: 'bad', path: bad },
+      { name: 'good', path: good },
+    ]);
+    assert.equal(schedules.length, 1);
+    assert.equal(schedules[0].id, 'good');
   });
 });

@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
 import type { ArtificerChannel, ArtificerSkill } from '../api/types.js';
+import {
+  validateScheduleFields,
+  type ScheduleDefinition,
+} from '../engine/schedules.js';
 import type { ModuleRef } from './discover.js';
 
 function isArtificerChannel(value: unknown): value is ArtificerChannel {
@@ -115,4 +119,49 @@ export function loadRolesFromDisk(refs: ModuleRef[]): IdentityRole[] {
     }
   }
   return roles;
+}
+
+function parseScheduleFrontmatter(raw: string): {
+  fm: Record<string, string>;
+  body: string;
+} {
+  const match = raw.match(/^---\n([\s\S]*?)(?:\n)?---\n?([\s\S]*)$/);
+  if (!match) return { fm: {}, body: raw.trim() };
+  const fm: Record<string, string> = {};
+  for (const line of match[1].split('\n')) {
+    const m = line.match(/^(\w+):\s*(.+)/);
+    if (m) fm[m[1].trim()] = m[2].trim();
+  }
+  return { fm, body: match[2].trim() };
+}
+
+export function loadSchedulesFromDisk(refs: ModuleRef[]): ScheduleDefinition[] {
+  const schedules: ScheduleDefinition[] = [];
+
+  for (const ref of refs) {
+    try {
+      const raw = fs.readFileSync(ref.path, 'utf-8');
+      const { fm, body } = parseScheduleFrontmatter(raw);
+      const result = validateScheduleFields({
+        id: ref.name,
+        name: fm.name,
+        every: fm.every,
+        cron: fm.cron,
+        timezone: fm.timezone,
+        action: fm.action,
+        enabled: fm.enabled,
+        body,
+        sourcePath: ref.path,
+      });
+      if (!result.ok) {
+        console.warn(`[artificer] schedule "${ref.path}": ${result.error}`);
+        continue;
+      }
+      schedules.push(result.value);
+    } catch {
+      console.warn(`[artificer] failed to load schedule file "${ref.path}"`);
+    }
+  }
+
+  return schedules;
 }
