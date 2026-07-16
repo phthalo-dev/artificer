@@ -10,6 +10,7 @@ import { IdentityStore } from '../storage/identity-store.js';
 import { IdentityGitSync } from '../storage/identity-git-sync.js';
 import { ToolRegistry } from './tool-registry.js';
 import { WorkstreamMemoryService } from '../engine/workstream-memory.js';
+import { createScheduleRunnerForEngine } from '../engine/schedule-runner-host.js';
 import { scanAgentDirectory } from '../discover/discover.js';
 import {
   loadSkillsFromDisk,
@@ -79,6 +80,7 @@ export async function createRuntime(
 
   const memoryService = new WorkstreamMemoryService(identity, store);
   const engine = new Engine(config, store, memoryService, registry, identity);
+  const scheduleRunner = createScheduleRunnerForEngine(engine);
   const app = createApp(engine, { identity, channels });
 
   return {
@@ -91,6 +93,7 @@ export async function createRuntime(
     instructions: instructions?.content ?? null,
     async start(port?: number) {
       const p = port ?? config.port;
+      scheduleRunner.start();
       serve({ fetch: app.fetch, port: p }, (info) => {
         const base = `http://localhost:${info.port}`;
         console.log(`[artificer] ${config.agentName} ready\n`);
