@@ -105,6 +105,11 @@ export class Layout {
     return path.join(this.root, 'github-watch-state.json');
   }
 
+  /** Last-fired timestamps for recurring schedules. */
+  scheduleStateFile(): string {
+    return path.join(this.root, 'schedule-state.json');
+  }
+
   quotaStateFile(): string {
     return path.join(this.root, 'quota-state.json');
   }
