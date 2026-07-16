@@ -2,7 +2,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { serve } from '@hono/node-server';
-import { loadConfig, mergeWithDefinition, type RuntimeConfig } from '../config.js';
+import {
+  loadConfig,
+  mergeWithDefinition,
+  resolveIdentityConfig,
+  type RuntimeConfig,
+} from '../config.js';
 import { Engine } from '../engine/engine.js';
 import { createApp } from '../server/app.js';
 import { Store } from '../storage/store.js';
@@ -59,12 +64,18 @@ export async function createRuntime(
   const identityRoles = loadRolesFromDisk(manifest.roles);
   const registry = new RoleRegistry(identityRoles);
 
+  const hasIdentityOverride = Boolean(
+    options.config && Object.hasOwn(options.config, 'identity'),
+  );
   const config: RuntimeConfig = {
     ...baseConfig,
     ...options.config,
     agentName,
     execDir,
     identityDir: rootDir,
+    identity: hasIdentityOverride
+      ? resolveIdentityConfig(options.config?.identity)
+      : baseConfig.identity,
     globalInstructions: instructions?.content ?? undefined,
   } as RuntimeConfig;
 

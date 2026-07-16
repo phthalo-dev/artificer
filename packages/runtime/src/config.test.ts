@@ -45,3 +45,24 @@ test('identity.pullInterval resolves to pullIntervalMs', () => {
   );
   assert.equal(config.identity?.pullIntervalMs, 300_000);
 });
+
+test('invalid identity.pullInterval emits a warning', () => {
+  const originalWarn = console.warn;
+  const warnings: unknown[][] = [];
+  console.warn = (...args: unknown[]) => warnings.push(args);
+  try {
+    mergeWithDefinition(
+      {
+        name: 'test',
+        identity: { pullInterval: 'later' },
+      },
+      { LLM_API_KEY: 'test-key' },
+    );
+  } finally {
+    console.warn = originalWarn;
+  }
+
+  assert.deepEqual(warnings, [
+    ['[artificer] invalid identity.pullInterval "later"; periodic pulling is disabled.'],
+  ]);
+});

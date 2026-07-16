@@ -93,7 +93,7 @@
       "properties": {
         "watchInterval": {
           "type": "string",
-          "pattern": "^\\d+(ms|s|m|h)$",
+          "pattern": "^\\d+(ms|s|m|h|d)$",
           "description": "Polling interval for the agent's own PRs and notifications (e.g. '5m', '30s'). Omit to disable."
         }
       }
