@@ -15,6 +15,7 @@ import { createFileTools } from './files.js';
 import { createGitTools } from './git.js';
 import { createOrchestratorTools } from './orchestrator-tool.js';
 import { createSearchTools } from './search.js';
+import { createScheduleTools } from './schedules.js';
 import { createShellTool } from './shell.js';
 import { createToolResultReadTools } from './tool-result-read.js';
 
@@ -47,6 +48,7 @@ export function toolsForRole(
   const providerConfig = createProviderConfigTools(ctx);
   const searchAll = createSearchTools(ctx);
   const searchGrepOnly = createSearchTools(ctx, { includeGlob: false });
+  const schedules = createScheduleTools(ctx);
 
   let result: ToolDef[];
   switch (role) {
@@ -56,6 +58,7 @@ export function toolsForRole(
         ...communicator,
         ...messageHistory,
         ...providerConfig,
+        ...schedules,
         ...byName(orchestrator, ['get_status', 'query_memories', 'add_memory']),
       ];
       break;

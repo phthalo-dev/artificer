@@ -34,6 +34,18 @@ export interface ScheduleFields {
   sourcePath: string;
 }
 
+export function serializeSchedule(definition: ScheduleDefinition): string {
+  const lines = [
+    `name: ${definition.name}`,
+    ...(definition.everyMs === undefined ? [] : [`every: ${definition.everyMs}ms`]),
+    ...(definition.cron === undefined ? [] : [`cron: ${definition.cron}`]),
+    `timezone: ${definition.timezone}`,
+    `action: ${definition.action}`,
+    `enabled: ${definition.enabled}`,
+  ];
+  return `---\n${lines.join('\n')}\n---\n\n${definition.body}\n`;
+}
+
 export function isSafeScheduleId(id: string): boolean {
   return /^[a-zA-Z0-9][a-zA-Z0-9_-]*$/.test(id);
 }
@@ -227,6 +239,15 @@ export function validateScheduleFields(
   const body = input.body.trim();
   if (!body) {
     return { ok: false, error: 'body is required' };
+  }
+
+  for (const [field, value] of Object.entries({
+    name: input.name,
+    timezone: input.timezone,
+  })) {
+    if (value?.includes('\n') || value?.includes('\r')) {
+      return { ok: false, error: `${field} must not contain a newline` };
+    }
   }
 
   return {

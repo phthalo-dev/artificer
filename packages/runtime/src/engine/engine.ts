@@ -6,6 +6,14 @@ import { EventEmitter } from 'node:events';
 import type { RuntimeConfig } from '../config.js';
 import { scanAgentDirectory } from '../discover/discover.js';
 import { loadSchedulesFromDisk } from '../discover/loader.js';
+import {
+  isSafeScheduleId,
+  serializeSchedule,
+  validateScheduleFields,
+  type ScheduleAction,
+  type ScheduleDefinition,
+} from './schedules.js';
+import { IdentityGitSync } from '../storage/identity-git-sync.js';
 
 const exec = promisify(execFile);
 import type { EngineApi, RuntimeEvent, SpawnCallInput } from '../context.js';
@@ -146,6 +154,82 @@ export class Engine implements EngineApi {
   reloadSchedules(): void {
     const manifest = scanAgentDirectory(this.config.identityDir);
     this.scheduleRunner?.reload(loadSchedulesFromDisk(manifest.schedules));
+  }
+
+  listSchedules(): Array<
+    ScheduleDefinition & { lastFiredAt: number | null; inFlight: boolean }
+  > {
+    return this.scheduleRunner?.list() ?? [];
+  }
+
+  async upsertSchedule(input: {
+    id: string;
+    name?: string;
+    every?: string;
+    cron?: string;
+    timezone?: string;
+    action: ScheduleAction;
+    enabled?: boolean;
+    body: string;
+  }): Promise<{ ok: true } | { ok: false; error: string }> {
+    if (!this.identity) {
+      return { ok: false, error: 'identity storage is not configured' };
+    }
+    const sourcePath = this.identity.layout.scheduleFile(input.id);
+    const result = validateScheduleFields({ ...input, sourcePath });
+    if (!result.ok) return result;
+
+    await fs.promises.mkdir(this.identity.layout.schedulesDir, { recursive: true });
+    await fs.promises.writeFile(sourcePath, serializeSchedule(result.value), 'utf-8');
+    await this.commitScheduleChange(`update schedule ${input.id}`);
+    this.reloadSchedules();
+    return { ok: true };
+  }
+
+  async setScheduleEnabled(
+    id: string,
+    enabled: boolean,
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    const schedule = this.listSchedules().find((item) => item.id === id);
+    if (!schedule) return { ok: false, error: `schedule "${id}" not found` };
+    await fs.promises.writeFile(
+      schedule.sourcePath,
+      serializeSchedule({ ...schedule, enabled }),
+      'utf-8',
+    );
+    await this.commitScheduleChange(`set schedule ${id} ${enabled ? 'enabled' : 'disabled'}`);
+    this.reloadSchedules();
+    return { ok: true };
+  }
+
+  async deleteSchedule(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
+    if (!this.identity) {
+      return { ok: false, error: 'identity storage is not configured' };
+    }
+    if (!isSafeScheduleId(id)) {
+      return { ok: false, error: 'id must be a safe schedule ID' };
+    }
+    const sourcePath = this.identity.layout.scheduleFile(id);
+    try {
+      await fs.promises.unlink(sourcePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return { ok: false, error: `schedule "${id}" not found` };
+      }
+      throw error;
+    }
+    const state = await this.store.readScheduleState();
+    delete state.schedules[id];
+    await this.store.writeScheduleState(state);
+    await this.commitScheduleChange(`delete schedule ${id}`);
+    this.reloadSchedules();
+    return { ok: true };
+  }
+
+  private async commitScheduleChange(action: string): Promise<void> {
+    if (this.identity instanceof IdentityGitSync) {
+      await this.identity.commitPaths(action, ['agent/schedules/']);
+    }
   }
 
   /** Explicit quota block from config (before env overrides). */
