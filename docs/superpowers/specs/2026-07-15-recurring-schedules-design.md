@@ -1,7 +1,7 @@
 # Recurring Schedules Design
 
 **Date:** 2026-07-15
-**Status:** Draft
+**Status:** Approved
 
 ## Problem
 
