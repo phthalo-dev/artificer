@@ -4,8 +4,10 @@ import { pathToFileURL } from 'node:url';
 import { loadConfig } from './config.js';
 import { Engine } from './engine/engine.js';
 import { runGithubWatchOnce } from './engine/github-watch-runner.js';
+import { runIdentityPullCycle } from './engine/identity-pull.js';
 import { createScheduleRunnerForEngine } from './engine/schedule-runner-host.js';
 import { createApp } from './server/app.js';
+import { IdentityGitSync } from './storage/identity-git-sync.js';
 import { Store } from './storage/store.js';
 
 export { loadConfig, mergeWithDefinition } from './config.js';
@@ -52,7 +54,11 @@ export async function startRuntime(): Promise<void> {
   const store = new Store(config.execDir);
   await store.init();
 
-  const engine = new Engine(config, store);
+  const identity = config.identity
+    ? new IdentityGitSync(config.identityDir, config.identity, config.github)
+    : undefined;
+  await identity?.init();
+  const engine = new Engine(config, store, undefined, undefined, identity);
   const scheduleRunner = createScheduleRunnerForEngine(engine);
 
   const recovered = await engine.recoverZombieRuns();
@@ -77,6 +83,31 @@ export async function startRuntime(): Promise<void> {
   scheduleRunner.start();
   // eslint-disable-next-line no-console
   console.log('[artificer-runtime] Schedule runner enabled');
+
+  const pullIntervalMs = config.identity?.pullIntervalMs;
+  if (pullIntervalMs && engine.identity instanceof IdentityGitSync) {
+    const scheduleNextPull = () => {
+      setTimeout(() => {
+        runIdentityPullCycle({
+          identity: engine.identity as IdentityGitSync,
+          reloadSchedules: () => engine.reloadSchedules(),
+          log: (message) =>
+            // eslint-disable-next-line no-console
+            console.log(`[artificer-runtime] [identity-pull] ${message}`),
+        })
+          .catch((err) => {
+            // eslint-disable-next-line no-console
+            console.error('[artificer-runtime] identity pull failed:', err);
+          })
+          .finally(scheduleNextPull);
+      }, pullIntervalMs);
+    };
+    scheduleNextPull();
+    // eslint-disable-next-line no-console
+    console.log(
+      `[artificer-runtime] Identity pull enabled (every ${pullIntervalMs}ms)`,
+    );
+  }
 
   serve({ fetch: app.fetch, port: config.port }, (info) => {
     // eslint-disable-next-line no-console
