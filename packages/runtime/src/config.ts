@@ -241,6 +241,21 @@ export function parseDuration(s: string): number | undefined {
   }
 }
 
+export function resolveIdentityConfig(
+  identity: ResolvedIdentityConfig | undefined,
+): ResolvedIdentityConfig | undefined {
+  if (!identity || identity.pullInterval === undefined) return identity;
+
+  const pullIntervalMs = parseDuration(identity.pullInterval);
+  if (pullIntervalMs === undefined) {
+    console.warn(
+      `[artificer] invalid identity.pullInterval "${identity.pullInterval}"; periodic pulling is disabled.`,
+    );
+  }
+
+  return { ...identity, pullIntervalMs };
+}
+
 export function mergeWithDefinition(
   definition: ArtificerConfig,
   env: NodeJS.ProcessEnv = process.env,
@@ -280,12 +295,7 @@ export function mergeWithDefinition(
         }
       : undefined,
     identity: definition.identity
-      ? {
-          ...definition.identity,
-          pullIntervalMs: definition.identity.pullInterval
-            ? parseDuration(definition.identity.pullInterval)
-            : undefined,
-        }
+      ? resolveIdentityConfig(definition.identity)
       : base.identity,
     executor: definition.executor ?? base.executor,
     quota: definition.quota ?? base.quota,

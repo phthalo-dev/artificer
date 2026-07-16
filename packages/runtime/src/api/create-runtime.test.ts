@@ -66,6 +66,20 @@ describe('createRuntime', () => {
     assert.equal(runtime.config.identityDir, tmpDir);
   });
 
+  it('resolves an SDK identity pullInterval to milliseconds', async () => {
+    const runtime = await createRuntime({
+      rootDir: tmpDir,
+      config: {
+        apiKey: 'test-key',
+        baseURL: 'http://localhost:9999',
+        execDir: path.join(tmpDir, 'exec'),
+        identity: { pullInterval: '5m' },
+      },
+    });
+
+    assert.equal(runtime.config.identity?.pullIntervalMs, 300_000);
+  });
+
   it('loads agentName and preset from artificer.config.json', async () => {
     fs.writeFileSync(
       path.join(tmpDir, 'artificer.config.json'),
