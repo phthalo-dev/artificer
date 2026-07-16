@@ -4,6 +4,7 @@ import type {
   ProviderConfigSnapshot,
   ProviderConfigUpdate,
 } from './engine/provider-config.js';
+import type { ScheduleAction, ScheduleDefinition } from './engine/schedules.js';
 import type { Store } from './storage/store.js';
 import type { IdentityStore } from './storage/identity-store.js';
 import type {
@@ -53,6 +54,24 @@ export interface EngineApi {
   listRoles(): string[];
   getProviderConfig(): ProviderConfigSnapshot;
   updateProviderConfig(update: ProviderConfigUpdate): Promise<string>;
+  listSchedules(): Array<
+    ScheduleDefinition & { lastFiredAt: number | null; inFlight: boolean }
+  >;
+  upsertSchedule(input: {
+    id: string;
+    name?: string;
+    every?: string;
+    cron?: string;
+    timezone?: string;
+    action: ScheduleAction;
+    enabled?: boolean;
+    body: string;
+  }): Promise<{ ok: true } | { ok: false; error: string }>;
+  setScheduleEnabled(
+    id: string,
+    enabled: boolean,
+  ): Promise<{ ok: true } | { ok: false; error: string }>;
+  deleteSchedule(id: string): Promise<{ ok: true } | { ok: false; error: string }>;
 }
 
 /** Everything a tool factory needs about the call it is serving. */

@@ -52,6 +52,10 @@ export class IdentityGitSync extends IdentityStore {
     return this.enqueue(() => this.doPullFromRemote());
   }
 
+  commitPaths(action: string, paths: string[]): Promise<void> {
+    return this.enqueue(() => this.doCommitAndPush(action, paths));
+  }
+
   private enqueue<T>(operation: () => Promise<T>): Promise<T> {
     const queued = this.gitQueue.then(operation, operation);
     this.gitQueue = queued.then(
@@ -65,8 +69,8 @@ export class IdentityGitSync extends IdentityStore {
     return this.enqueue(() => this.doCommitAndPush(action));
   }
 
-  private async doCommitAndPush(action: string): Promise<void> {
-    const committed = await this.commitDirty(action);
+  private async doCommitAndPush(action: string, paths?: string[]): Promise<void> {
+    const committed = await this.commitDirty(action, paths);
     if (!committed) return;
 
     if (!this.syncConfig.autoPush) return;
@@ -105,7 +109,7 @@ export class IdentityGitSync extends IdentityStore {
     }
   }
 
-  private async commitDirty(action: string): Promise<boolean> {
+  private async commitDirty(action: string, commitPaths?: string[]): Promise<boolean> {
     if (!this.syncConfig.autoCommit) return false;
 
     const prefix = this.syncConfig.commitPrefix ?? 'memory:';
@@ -114,9 +118,9 @@ export class IdentityGitSync extends IdentityStore {
     const env = buildGitEnv(this.github);
 
     try {
-      const paths = ['identity/'];
+      const paths = [...(commitPaths ?? ['identity/'])];
       if (fs.existsSync(path.join(dir, 'agent', 'schedules'))) {
-        paths.push('agent/schedules/');
+        if (!paths.includes('agent/schedules/')) paths.push('agent/schedules/');
       }
       await exec('git', ['-C', dir, 'add', ...paths], { env });
     } catch (err) {
