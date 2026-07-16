@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
@@ -6,7 +7,7 @@ import { FileCache } from './file-cache.js';
 import { Layout } from '../storage/layout.js';
 
 test('LRU evicts oldest when over max entries', async () => {
-  const dir = await fs.mkdtemp(path.join(process.cwd(), 'file-cache-test-'));
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-file-cache-test-'));
   try {
     const layout = new Layout(dir);
     const wsId = 'ws_lru';

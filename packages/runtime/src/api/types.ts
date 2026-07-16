@@ -28,7 +28,8 @@ export type ExecutorConfig =
   | 'cursor-agent'
   | 'claude-code'
   | { type: 'cursor-agent'; model?: string }
-  | { type: 'claude-code'; model?: string };
+  | { type: 'claude-code'; model?: string }
+  | { type: 'cli'; command: string; args: string[]; promptMode: 'stdin' | 'arg'; model?: string; timeout?: number; mcpConfigPath?: string };
 
 export interface ArtificerConfig {
   name: string;

@@ -11,6 +11,7 @@ const exec = promisify(execFile);
 export class IdentityGitSync extends IdentityStore {
   private readonly syncConfig: IdentityConfig;
   private readonly github: GitHubConfig | undefined;
+  private gitQueue: Promise<void> = Promise.resolve();
 
   constructor(
     rootDir: string,
@@ -45,7 +46,12 @@ export class IdentityGitSync extends IdentityStore {
     return deleted;
   }
 
-  private async commitAndPush(action: string): Promise<void> {
+  private commitAndPush(action: string): Promise<void> {
+    this.gitQueue = this.gitQueue.then(() => this.doCommitAndPush(action));
+    return this.gitQueue;
+  }
+
+  private async doCommitAndPush(action: string): Promise<void> {
     if (!this.syncConfig.autoCommit) return;
 
     const prefix = this.syncConfig.commitPrefix ?? 'memory:';

@@ -339,6 +339,13 @@ export const mockMessages: Message[] = [
     createdAt: '2026-06-25T14:00:00.000Z',
     workstreamId: MOCK_WORKSTREAM_IDS.done,
   },
+  {
+    id: 'msg-md-verify-temp',
+    direction: 'outbound',
+    content:
+      '**Markdown check:** here is a [link](https://example.com), a list:\n\n- one\n- two\n\nand some code:\n\n```ts\nconst x = 1;\n```',
+    createdAt: '2026-06-26T10:00:00.000Z',
+  },
 ];
 
 const authTasks: Task[] = [
