@@ -25,6 +25,21 @@ function minimalRun(id: string, n: number): RunRecord {
   };
 }
 
+test('readScheduleState defaults to empty, writeScheduleState persists it', async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-store-'));
+  const store = new Store(dataDir);
+  await store.init();
+
+  const empty = await store.readScheduleState();
+  assert.deepEqual(empty, { schedules: {} });
+
+  const next = {
+    schedules: { morning: { lastFiredAt: 123 } },
+  };
+  await store.writeScheduleState(next);
+  assert.deepEqual(await store.readScheduleState(), next);
+});
+
 test('readGithubWatchState defaults to empty, writeGithubWatchState persists it', async () => {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-store-'));
   const store = new Store(dataDir);

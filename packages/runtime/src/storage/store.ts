@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { emptyGithubWatchState, type GithubWatchState } from '../engine/github-watch.js';
+import { emptyScheduleRuntimeState, type ScheduleRuntimeState } from '../engine/schedules.js';
 import { Layout } from './layout.js';
 import {
   rankMemories,
@@ -550,6 +551,17 @@ export class Store {
 
   async writeGithubWatchState(state: GithubWatchState): Promise<void> {
     await writeJson(this.layout.githubWatchStateFile(), state);
+  }
+
+  // --- Schedule state ---
+
+  async readScheduleState(): Promise<ScheduleRuntimeState> {
+    const state = await readJson<ScheduleRuntimeState>(this.layout.scheduleStateFile());
+    return state ?? emptyScheduleRuntimeState();
+  }
+
+  async writeScheduleState(state: ScheduleRuntimeState): Promise<void> {
+    await writeJson(this.layout.scheduleStateFile(), state);
   }
 
   // --- Status helpers ---

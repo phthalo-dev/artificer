@@ -2,6 +2,14 @@ import { parseDuration } from '../config.js';
 
 export type ScheduleAction = 'communicator' | 'workstream';
 
+export interface ScheduleRuntimeState {
+  schedules: Record<string, { lastFiredAt: number }>;
+}
+
+export function emptyScheduleRuntimeState(): ScheduleRuntimeState {
+  return { schedules: {} };
+}
+
 export interface ScheduleDefinition {
   id: string;
   name: string;
