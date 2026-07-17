@@ -9,6 +9,7 @@
     "lint": "turbo run lint",
     "clean": "turbo run clean && rm -rf node_modules",
     "type-check": "turbo run type-check",
+    "test": "turbo run test",
     "infra:deploy": "pnpm --filter artificer-infrastructure deploy:personal",
     "infra:sync-env": "pnpm --filter artificer-infrastructure sync:runtime-env",
     "link": "cd packages/runtime && npm link && cd ../cli && npm link",
@@ -16,7 +17,8 @@
     "changeset": "changeset",
     "version-packages": "changeset version",
     "publish-packages": "pnpm --filter @artificer-ai/runtime build && pnpm --filter @artificer-ai/runtime build:ui && pnpm --filter @artificer-ai/cli build && changeset publish",
-    "ci:packages": "pnpm --filter @artificer-ai/runtime type-check && pnpm --filter @artificer-ai/runtime test && pnpm --filter @artificer-ai/ui build && pnpm --filter @artificer-ai/runtime build && pnpm --filter @artificer-ai/runtime build:ui && pnpm --filter @artificer-ai/cli build",
+    "ci": "turbo run lint type-check test build",
+    "ci:packages": "pnpm ci",
     "release": "node scripts/publish.mjs"
   },
   "devDependencies": {
