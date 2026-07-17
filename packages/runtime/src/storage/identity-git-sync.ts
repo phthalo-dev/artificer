@@ -1,4 +1,6 @@
 import { execFile } from 'node:child_process';
+import fs from 'node:fs';
+import path from 'node:path';
 import { promisify } from 'node:util';
 import type { GitHubConfig } from '../config.js';
 import { buildGitEnv } from '../tools/git-env.js';
@@ -46,39 +48,35 @@ export class IdentityGitSync extends IdentityStore {
     return deleted;
   }
 
-  private commitAndPush(action: string): Promise<void> {
-    this.gitQueue = this.gitQueue.then(() => this.doCommitAndPush(action));
-    return this.gitQueue;
+  pullFromRemote(): Promise<'updated' | 'unchanged' | 'conflict' | 'error'> {
+    return this.enqueue(() => this.doPullFromRemote());
   }
 
-  private async doCommitAndPush(action: string): Promise<void> {
-    if (!this.syncConfig.autoCommit) return;
+  commitPaths(action: string, paths: string[]): Promise<void> {
+    return this.enqueue(() => this.doCommitAndPush(action, paths));
+  }
 
-    const prefix = this.syncConfig.commitPrefix ?? 'memory:';
-    const message = `${prefix} ${action}`;
-    const dir = this.layout.root;
-    const env = buildGitEnv(this.github);
+  private enqueue<T>(operation: () => Promise<T>): Promise<T> {
+    const queued = this.gitQueue.then(operation, operation);
+    this.gitQueue = queued.then(
+      () => undefined,
+      () => undefined,
+    );
+    return queued;
+  }
 
-    try {
-      await exec('git', ['-C', dir, 'add', 'identity/'], { env });
-    } catch (err) {
-      console.error('[identity-git-sync] git add failed:', err);
-      return;
-    }
+  private commitAndPush(action: string): Promise<void> {
+    return this.enqueue(() => this.doCommitAndPush(action));
+  }
 
-    try {
-      await exec('git', ['-C', dir, 'commit', '-m', message], { env });
-    } catch (err) {
-      // "nothing to commit" exits with code 1 — not a real error
-      const msg = err instanceof Error ? err.message : String(err);
-      if (!msg.includes('nothing to commit') && !msg.includes('nothing added')) {
-        console.error('[identity-git-sync] git commit failed:', err);
-      }
-      return;
-    }
+  private async doCommitAndPush(action: string, paths?: string[]): Promise<void> {
+    const committed = await this.commitDirty(action, paths);
+    if (!committed) return;
 
     if (!this.syncConfig.autoPush) return;
 
+    const dir = this.layout.root;
+    const env = buildGitEnv(this.github);
     const remote = this.syncConfig.remote ?? 'origin';
     let branch = this.syncConfig.branch;
     if (!branch) {
@@ -108,6 +106,87 @@ export class IdentityGitSync extends IdentityStore {
       await exec('git', ['-C', dir, ...pushArgs], { env });
     } catch (err) {
       console.error('[identity-git-sync] git push failed:', err);
+    }
+  }
+
+  private async commitDirty(action: string, commitPaths?: string[]): Promise<boolean> {
+    if (!this.syncConfig.autoCommit) return false;
+
+    const prefix = this.syncConfig.commitPrefix ?? 'memory:';
+    const message = `${prefix} ${action}`;
+    const dir = this.layout.root;
+    const env = buildGitEnv(this.github);
+
+    try {
+      const paths = [...(commitPaths ?? ['identity/'])];
+      if (fs.existsSync(path.join(dir, 'agent', 'schedules'))) {
+        if (!paths.includes('agent/schedules/')) paths.push('agent/schedules/');
+      }
+      await exec('git', ['-C', dir, 'add', ...paths], { env });
+    } catch (err) {
+      console.error('[identity-git-sync] git add failed:', err);
+      return false;
+    }
+
+    try {
+      await exec('git', ['-C', dir, 'commit', '-m', message], { env });
+      return true;
+    } catch (err) {
+      // "nothing to commit" exits with code 1 — not a real error
+      const msg = err instanceof Error ? err.message : String(err);
+      if (!msg.includes('nothing to commit') && !msg.includes('nothing added')) {
+        console.error('[identity-git-sync] git commit failed:', err);
+      }
+      return false;
+    }
+  }
+
+  private async doPullFromRemote(): Promise<'updated' | 'unchanged' | 'conflict' | 'error'> {
+    await this.commitDirty('sync schedules');
+
+    const dir = this.layout.root;
+    const env = buildGitEnv(this.github);
+    const remote = this.syncConfig.remote ?? 'origin';
+    let branch = this.syncConfig.branch;
+
+    try {
+      const { stdout } = await exec(
+        'git',
+        ['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD'],
+        { env },
+      );
+      if (!branch) {
+        const currentBranch = stdout.trim();
+        branch = currentBranch && currentBranch !== 'HEAD' ? currentBranch : undefined;
+      }
+      const { stdout: before } = await exec(
+        'git',
+        ['-C', dir, 'rev-parse', 'HEAD'],
+        { env },
+      );
+      const pullArgs = ['pull', '--rebase', remote];
+      if (branch) pullArgs.push(branch);
+      await exec('git', ['-C', dir, ...pullArgs], { env });
+      const { stdout: after } = await exec(
+        'git',
+        ['-C', dir, 'rev-parse', 'HEAD'],
+        { env },
+      );
+      return before.trim() === after.trim() ? 'unchanged' : 'updated';
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (
+        /CONFLICT|could not apply|Resolve all conflicts|fix conflicts/i.test(message)
+      ) {
+        try {
+          await exec('git', ['-C', dir, 'rebase', '--abort'], { env });
+        } catch {
+          // Best effort: return the conflict status even if abort itself fails.
+        }
+        return 'conflict';
+      }
+      console.error('[identity-git-sync] git pull --rebase failed:', err);
+      return 'error';
     }
   }
 }

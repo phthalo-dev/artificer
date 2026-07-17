@@ -4,6 +4,16 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { EventEmitter } from 'node:events';
 import type { RuntimeConfig } from '../config.js';
+import { scanAgentDirectory } from '../discover/discover.js';
+import { loadSchedulesFromDisk } from '../discover/loader.js';
+import {
+  isSafeScheduleId,
+  serializeSchedule,
+  validateScheduleFields,
+  type ScheduleAction,
+  type ScheduleDefinition,
+} from './schedules.js';
+import { IdentityGitSync } from '../storage/identity-git-sync.js';
 
 const exec = promisify(execFile);
 import type { EngineApi, RuntimeEvent, SpawnCallInput } from '../context.js';
@@ -18,6 +28,7 @@ import type {
 } from '../storage/types.js';
 import { executeCall } from './call.js';
 import type { WorkerExecutor } from './executor.js';
+import type { ScheduleRunner } from './schedule-runner.js';
 import { CursorAgentExecutor } from './cursor-executor.js';
 import { ClaudeCodeExecutor } from './claude-code-executor.js';
 import { CliExecutor } from './cli-executor.js';
@@ -101,6 +112,7 @@ export class Engine implements EngineApi {
   private readonly memoryService?: WorkstreamMemoryService;
   private readonly executor?: WorkerExecutor;
   private readonly registry: RoleRegistry;
+  private scheduleRunner?: ScheduleRunner;
   private quotaLedger?: QuotaLedger;
   private providerRouter?: ProviderRouter;
   private readonly runRoutes = new Map<string, DispatchRoute>();
@@ -133,6 +145,95 @@ export class Engine implements EngineApi {
 
   getQuotaSnapshot(): ReturnType<QuotaLedger['snapshot']> | undefined {
     return this.quotaLedger?.snapshot();
+  }
+
+  attachScheduleRunner(runner: ScheduleRunner): void {
+    this.scheduleRunner = runner;
+  }
+
+  async reloadSchedules(): Promise<void> {
+    const manifest = scanAgentDirectory(this.config.identityDir);
+    await this.scheduleRunner?.reload(loadSchedulesFromDisk(manifest.schedules));
+  }
+
+  listSchedules(): Array<
+    ScheduleDefinition & { lastFiredAt: number | null; inFlight: boolean }
+  > {
+    return this.scheduleRunner?.list() ?? [];
+  }
+
+  async upsertSchedule(input: {
+    id: string;
+    name?: string;
+    every?: string;
+    cron?: string;
+    timezone?: string;
+    action: ScheduleAction;
+    enabled?: boolean;
+    body: string;
+  }): Promise<{ ok: true } | { ok: false; error: string }> {
+    if (!this.identity) {
+      return { ok: false, error: 'identity storage is not configured' };
+    }
+    const sourcePath = this.identity.layout.scheduleFile(input.id);
+    const result = validateScheduleFields({ ...input, sourcePath });
+    if (!result.ok) return result;
+
+    await fs.promises.mkdir(this.identity.layout.schedulesDir, { recursive: true });
+    await fs.promises.writeFile(sourcePath, serializeSchedule(result.value), 'utf-8');
+    await this.commitScheduleChange(`update schedule ${input.id}`);
+    await this.reloadSchedules();
+    return { ok: true };
+  }
+
+  async setScheduleEnabled(
+    id: string,
+    enabled: boolean,
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
+    const schedule = this.listSchedules().find((item) => item.id === id);
+    if (!schedule) return { ok: false, error: `schedule "${id}" not found` };
+    await fs.promises.writeFile(
+      schedule.sourcePath,
+      serializeSchedule({ ...schedule, enabled }),
+      'utf-8',
+    );
+    await this.commitScheduleChange(`set schedule ${id} ${enabled ? 'enabled' : 'disabled'}`);
+    await this.reloadSchedules();
+    return { ok: true };
+  }
+
+  async deleteSchedule(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
+    if (!this.identity) {
+      return { ok: false, error: 'identity storage is not configured' };
+    }
+    if (!isSafeScheduleId(id)) {
+      return { ok: false, error: 'id must be a safe schedule ID' };
+    }
+    const sourcePath = this.identity.layout.scheduleFile(id);
+    try {
+      await fs.promises.unlink(sourcePath);
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code === 'ENOENT') {
+        return { ok: false, error: `schedule "${id}" not found` };
+      }
+      throw error;
+    }
+    if (this.scheduleRunner) {
+      await this.scheduleRunner.remove(id);
+    } else {
+      const state = await this.store.readScheduleState();
+      delete state.schedules[id];
+      await this.store.writeScheduleState(state);
+    }
+    await this.commitScheduleChange(`delete schedule ${id}`);
+    await this.reloadSchedules();
+    return { ok: true };
+  }
+
+  private async commitScheduleChange(action: string): Promise<void> {
+    if (this.identity instanceof IdentityGitSync) {
+      await this.identity.commitPaths(action, ['agent/schedules/']);
+    }
   }
 
   /** Explicit quota block from config (before env overrides). */

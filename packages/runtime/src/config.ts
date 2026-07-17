@@ -1,6 +1,6 @@
 import os from 'node:os';
 import path from 'node:path';
-import type { ArtificerConfig, ExecutorConfig, IdentityConfig } from './api/types.js';
+import type { ArtificerConfig, ExecutorConfig, ResolvedIdentityConfig } from './api/types.js';
 import type { DiagnosticsConfig } from './diagnostics/types.js';
 import {
   isModelTier,
@@ -79,7 +79,7 @@ export interface RuntimeConfig {
   /** Bearer token for API authentication. Absent = no auth (local dev). */
   apiAuthKey?: string;
   /** Identity git sync settings (commit/push memories to git). */
-  identity?: IdentityConfig;
+  identity?: ResolvedIdentityConfig;
   /** Worker executor backend. Defaults to 'llm' (internal tool loop). */
   executor?: ExecutorConfig;
   /** Quota windows, budgets, and failover routing. */
@@ -227,8 +227,8 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
   };
 }
 
-function parseInterval(s: string): number | undefined {
-  const m = s.match(/^(\d+)(ms|s|m|h)$/);
+export function parseDuration(s: string): number | undefined {
+  const m = s.match(/^(\d+)(ms|s|m|h|d)$/);
   if (!m) return undefined;
   const n = Number(m[1]);
   switch (m[2]) {
@@ -236,8 +236,24 @@ function parseInterval(s: string): number | undefined {
     case 's': return n * 1000;
     case 'm': return n * 60_000;
     case 'h': return n * 3_600_000;
+    case 'd': return n * 86_400_000;
     default: return undefined;
   }
+}
+
+export function resolveIdentityConfig(
+  identity: ResolvedIdentityConfig | undefined,
+): ResolvedIdentityConfig | undefined {
+  if (!identity || identity.pullInterval === undefined) return identity;
+
+  const pullIntervalMs = parseDuration(identity.pullInterval);
+  if (pullIntervalMs === undefined) {
+    console.warn(
+      `[artificer] invalid identity.pullInterval "${identity.pullInterval}"; periodic pulling is disabled.`,
+    );
+  }
+
+  return { ...identity, pullIntervalMs };
 }
 
 export function mergeWithDefinition(
@@ -274,11 +290,13 @@ export function mergeWithDefinition(
           ...base.github,
           watchIntervalMs: base.github.watchIntervalMs ??
             (definition.github?.watchInterval
-              ? parseInterval(definition.github.watchInterval)
+              ? parseDuration(definition.github.watchInterval)
               : undefined),
         }
       : undefined,
-    identity: definition.identity ?? base.identity,
+    identity: definition.identity
+      ? resolveIdentityConfig(definition.identity)
+      : base.identity,
     executor: definition.executor ?? base.executor,
     quota: definition.quota ?? base.quota,
   };

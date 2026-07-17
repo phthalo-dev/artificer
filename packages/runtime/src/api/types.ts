@@ -17,6 +17,12 @@ export interface IdentityConfig {
   remote?: string;
   /** Branch to push to (default: current branch). */
   branch?: string;
+  /** How often to pull identity from origin. Duration string e.g. "5m". Absent disables. */
+  pullInterval?: string;
+}
+
+export interface ResolvedIdentityConfig extends IdentityConfig {
+  pullIntervalMs?: number;
 }
 
 export interface GitHubShorthand {

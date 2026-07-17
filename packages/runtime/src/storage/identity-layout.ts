@@ -27,6 +27,14 @@ export class IdentityLayout {
     return path.join(this.root, 'agent', 'channels');
   }
 
+  get schedulesDir(): string {
+    return path.join(this.root, 'agent', 'schedules');
+  }
+
+  scheduleFile(id: string): string {
+    return path.join(this.schedulesDir, `${id}.md`);
+  }
+
   get instructionsFile(): string {
     return path.join(this.root, 'agent', 'instructions.md');
   }
