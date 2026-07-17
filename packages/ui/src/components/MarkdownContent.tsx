@@ -10,7 +10,12 @@ export function MarkdownContent({ content }: { content: string }) {
         remarkPlugins={[remarkGfm]}
         components={{
           a: ({ href, children }) => (
-            <Anchor href={href} target="_blank" rel="noopener noreferrer" size="sm">
+            <Anchor
+              href={href}
+              target="_blank"
+              rel="noopener noreferrer"
+              size="sm"
+            >
               {children}
             </Anchor>
           ),

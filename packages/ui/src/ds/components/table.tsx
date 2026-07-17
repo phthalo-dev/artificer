@@ -57,11 +57,17 @@ function TableRoot({
   );
 }
 
-function Thead({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
+function Thead({
+  className,
+  ...props
+}: HTMLAttributes<HTMLTableSectionElement>) {
   return <thead className={cx(tableThead, className)} {...props} />;
 }
 
-function Tbody({ className, ...props }: HTMLAttributes<HTMLTableSectionElement>) {
+function Tbody({
+  className,
+  ...props
+}: HTMLAttributes<HTMLTableSectionElement>) {
   return <tbody className={className} {...props} />;
 }
 

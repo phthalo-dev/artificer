@@ -46,7 +46,9 @@ export function MessageComposer() {
         }}
       />
       <Group justify="space-between" mt="xs">
-        <Text size="xs" c="dimmed">⌘/Ctrl + Enter to send</Text>
+        <Text size="xs" c="dimmed">
+          ⌘/Ctrl + Enter to send
+        </Text>
         <Button
           leftSection={<IconSend size={16} />}
           onPress={submit}

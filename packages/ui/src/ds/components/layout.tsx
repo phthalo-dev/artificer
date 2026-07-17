@@ -1,8 +1,4 @@
-import {
-  type CSSProperties,
-  type HTMLAttributes,
-  forwardRef,
-} from 'react';
+import { type CSSProperties, type HTMLAttributes, forwardRef } from 'react';
 import { cx } from '../styles';
 import { space } from '../tokens';
 import {
@@ -34,7 +30,20 @@ export type BoxProps = HTMLAttributes<HTMLDivElement> & {
 };
 
 export const Box = forwardRef<HTMLDivElement, BoxProps>(function Box(
-  { component: Tag = 'div', w, h, maw, mah, ml, mr, mt, mb, p, style, ...props },
+  {
+    component: Tag = 'div',
+    w,
+    h,
+    maw,
+    mah,
+    ml,
+    mr,
+    mt,
+    mb,
+    p,
+    style,
+    ...props
+  },
   ref,
 ) {
   const s: CSSProperties = {
@@ -129,7 +138,10 @@ export const Group = forwardRef<HTMLDivElement, GroupProps>(function Group(
   const gapCls =
     typeof gap === 'string'
       ? groupCls({ gap, alignStretch: alignStretch ? 'true' : undefined })
-      : groupCls({ gap: 'sm', alignStretch: alignStretch ? 'true' : undefined });
+      : groupCls({
+          gap: 'sm',
+          alignStretch: alignStretch ? 'true' : undefined,
+        });
   return (
     <div
       ref={ref}
@@ -150,7 +162,10 @@ export type SimpleGridProps = HTMLAttributes<HTMLDivElement> & {
 };
 
 export const SimpleGrid = forwardRef<HTMLDivElement, SimpleGridProps>(
-  function SimpleGrid({ cols = 1, spacing: gridSpacing = 'md', className, style, ...props }, ref) {
+  function SimpleGrid(
+    { cols = 1, spacing: gridSpacing = 'md', className, style, ...props },
+    ref,
+  ) {
     const colCount =
       typeof cols === 'number'
         ? cols
@@ -163,7 +178,12 @@ export const SimpleGrid = forwardRef<HTMLDivElement, SimpleGridProps>(
       ...style,
     };
     return (
-      <div ref={ref} className={cx(simpleGrid, className)} style={s} {...props} />
+      <div
+        ref={ref}
+        className={cx(simpleGrid, className)}
+        style={s}
+        {...props}
+      />
     );
   },
 );
@@ -193,7 +213,9 @@ function ScrollAreaBase(
   );
 }
 
-const ScrollAreaForwardRef = forwardRef<HTMLDivElement, ScrollAreaProps>(ScrollAreaBase);
+const ScrollAreaForwardRef = forwardRef<HTMLDivElement, ScrollAreaProps>(
+  ScrollAreaBase,
+);
 
 export const ScrollArea = Object.assign(ScrollAreaForwardRef, {
   Autosize: ScrollAreaForwardRef,

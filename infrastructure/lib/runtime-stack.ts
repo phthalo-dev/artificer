@@ -281,8 +281,7 @@ export class RuntimeStack extends cdk.Stack {
         timeout: cdk.Duration.seconds(30),
         environment: {
           ...lambdaEnv,
-          GITHUB_WEBHOOK_SECRET:
-            githubWebhookSecret.secretValue.unsafeUnwrap(),
+          GITHUB_WEBHOOK_SECRET: githubWebhookSecret.secretValue.unsafeUnwrap(),
           AGENT_GITHUB_USERNAME: agentGithubUsername ?? 'artificer-bot',
           AGENT_GITHUB_TOKEN: 'configure-after-deploy',
           AGENT_REPO: agentRepo ?? 'owner/repo',

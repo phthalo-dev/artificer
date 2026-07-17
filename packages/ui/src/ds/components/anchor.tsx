@@ -10,17 +10,19 @@ export type AnchorProps = AnchorHTMLAttributes<HTMLAnchorElement> & {
   to?: string;
 };
 
-export const Anchor = forwardRef<HTMLAnchorElement, AnchorProps>(function Anchor(
-  { component: Tag = 'a', size = 'md', c, className, ...props },
-  ref,
-) {
-  return (
-    <Tag
-      ref={ref}
-      className={cx(anchorCls({ size, c: c as any }), className)}
-      {...props}
-    />
-  );
-});
+export const Anchor = forwardRef<HTMLAnchorElement, AnchorProps>(
+  function Anchor(
+    { component: Tag = 'a', size = 'md', c, className, ...props },
+    ref,
+  ) {
+    return (
+      <Tag
+        ref={ref}
+        className={cx(anchorCls({ size, c: c as any }), className)}
+        {...props}
+      />
+    );
+  },
+);
 
 export { anchorIcon };

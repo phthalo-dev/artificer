@@ -33,7 +33,11 @@ export function handleMockRequest(req: MockRequest): MockResponse {
     return { status: 202, body: { message } };
   }
 
-  if (method === 'GET' && pathname.startsWith('/messages/') && pathname.endsWith('/cost')) {
+  if (
+    method === 'GET' &&
+    pathname.startsWith('/messages/') &&
+    pathname.endsWith('/cost')
+  ) {
     const id = pathname.slice('/messages/'.length, -'/cost'.length);
     const cost = mockStore.getMessageCost(id);
     if (!cost) return { status: 404, body: { error: 'not found' } };
@@ -54,7 +58,8 @@ export function handleMockRequest(req: MockRequest): MockResponse {
   if (method === 'POST' && pathname.endsWith('/cancel')) {
     const id = pathname.slice('/workstreams/'.length, -'/cancel'.length);
     const ok = mockStore.cancelWorkstream(id);
-    if (!ok) return { status: 404, body: { error: 'not found or already terminal' } };
+    if (!ok)
+      return { status: 404, body: { error: 'not found or already terminal' } };
     return { status: 200, body: { ok: true } };
   }
 
@@ -66,11 +71,17 @@ export function handleMockRequest(req: MockRequest): MockResponse {
     const accountId = (body as { accountId?: string })?.accountId;
     const windowId = (body as { windowId?: string })?.windowId;
     if (!accountId || !windowId) {
-      return { status: 400, body: { error: 'accountId and windowId are required' } };
+      return {
+        status: 400,
+        body: { error: 'accountId and windowId are required' },
+      };
     }
     const ok = mockStore.resetQuotaWindow(accountId, windowId);
     if (!ok) return { status: 404, body: { error: 'window not found' } };
-    return { status: 200, body: { ok: true, quota: mockStore.getUsageOverview().quota } };
+    return {
+      status: 200,
+      body: { ok: true, quota: mockStore.getUsageOverview().quota },
+    };
   }
 
   if (method === 'GET' && pathname === '/config/models') {
@@ -92,7 +103,9 @@ export function handleMockRequest(req: MockRequest): MockResponse {
   }
 
   if (method === 'PUT' && pathname === '/config/role-tiers') {
-    const roleTiers = body as Partial<Record<RoleName, 'low' | 'medium' | 'high'>>;
+    const roleTiers = body as Partial<
+      Record<RoleName, 'low' | 'medium' | 'high'>
+    >;
     mockStore.modelConfig.roleTiers = {
       ...mockStore.modelConfig.roleTiers,
       ...roleTiers,

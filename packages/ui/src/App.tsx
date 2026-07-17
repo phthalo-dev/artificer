@@ -1,5 +1,18 @@
 import { useEffect, useState } from 'react';
-import { AppShell, Badge, Button, Group, Loader, NavLink, Text, ThemeToggle, Title, headerInner, navFooter, space } from './ds';
+import {
+  AppShell,
+  Badge,
+  Button,
+  Group,
+  Loader,
+  NavLink,
+  Text,
+  ThemeToggle,
+  Title,
+  headerInner,
+  navFooter,
+  space,
+} from './ds';
 import {
   IconActivity,
   IconBook,
@@ -11,7 +24,13 @@ import {
   IconLayoutSidebarRight,
   IconLayoutSidebarRightCollapse,
 } from '@tabler/icons-react';
-import { Navigate, NavLink as RouterNavLink, Route, Routes, useLocation } from 'react-router-dom';
+import {
+  Navigate,
+  NavLink as RouterNavLink,
+  Route,
+  Routes,
+  useLocation,
+} from 'react-router-dom';
 import { useRuntimeState } from './api/hooks';
 import { clearApiKey, getApiKey } from './api/auth';
 import { RUNTIME_URL } from './api/client';
@@ -54,7 +73,11 @@ function AppShellContent() {
       padding="md"
     >
       <AppShell.Header>
-        <Group className={headerInner} style={{ padding: `0 ${space.md}` }} justify="space-between">
+        <Group
+          className={headerInner}
+          style={{ padding: `0 ${space.md}` }}
+          justify="space-between"
+        >
           <Title order={4}>{state?.agentName ?? 'Artificer'} Runtime</Title>
           <Group gap="xs">
             {MOCK_MODE && (
@@ -68,15 +91,18 @@ function AppShellContent() {
               onPress={() => setAsideOpen((o) => !o)}
               aria-label={asideOpen ? 'Hide activity' : 'Show activity'}
             >
-              {asideOpen
-                ? <IconLayoutSidebarRightCollapse size={18} />
-                : <IconLayoutSidebarRight size={18} />}
+              {asideOpen ? (
+                <IconLayoutSidebarRightCollapse size={18} />
+              ) : (
+                <IconLayoutSidebarRight size={18} />
+              )}
             </Button>
             <ThemeToggle />
             <QuotaBanner />
             {state?.busy ? (
               <Badge color="blue" variant="light">
-                working · {state.queue.running} running / {state.queue.pending} queued
+                working · {state.queue.running} running / {state.queue.pending}{' '}
+                queued
               </Badge>
             ) : (
               <Badge color="gray" variant="light">
@@ -120,7 +146,10 @@ function AppShellContent() {
           <Route path="/memories" element={<MemoriesPage />} />
           <Route path="/usage" element={<UsagePage />} />
           <Route path="/providers" element={<ProvidersPage />} />
-          <Route path="/models" element={<Navigate to="/providers" replace />} />
+          <Route
+            path="/models"
+            element={<Navigate to="/providers" replace />}
+          />
           <Route path="/messages/:id/cost" element={<MessageCostPage />} />
         </Routes>
       </AppShell.Main>
@@ -159,7 +188,14 @@ export function App() {
 
   if (authStatus === 'checking') {
     return (
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+      <div
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          minHeight: '100vh',
+        }}
+      >
         <Loader size="md" />
       </div>
     );

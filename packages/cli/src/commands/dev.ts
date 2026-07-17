@@ -22,7 +22,9 @@ export async function dev(rootDir?: string): Promise<void> {
       }
       case 'workstream': {
         const ws = event.data as { status?: string; title?: string };
-        console.log(`[artificer] workstream:${ws.status ?? '?'} "${ws.title ?? ''}"`);
+        console.log(
+          `[artificer] workstream:${ws.status ?? '?'} "${ws.title ?? ''}"`,
+        );
         break;
       }
       case 'run': {

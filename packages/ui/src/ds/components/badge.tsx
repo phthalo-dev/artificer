@@ -24,7 +24,15 @@ export type BadgeProps = HTMLAttributes<HTMLSpanElement> & {
 };
 
 export const Badge = forwardRef<HTMLSpanElement, BadgeProps>(function Badge(
-  { color: c = 'gray', variant = 'light', size = 'sm', ml, className, style, ...props },
+  {
+    color: c = 'gray',
+    variant = 'light',
+    size = 'sm',
+    ml,
+    className,
+    style,
+    ...props
+  },
   ref,
 ) {
   return (

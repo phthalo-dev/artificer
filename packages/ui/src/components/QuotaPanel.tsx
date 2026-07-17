@@ -36,7 +36,10 @@ function WindowRow({ window }: { window: QuotaWindowState }) {
           {formatQuotaUnit(unit, used)} / {formatQuotaUnit(unit, limit)}
         </Text>
       </Group>
-      <Progress value={pct} color={pct >= blockPct ? 'red' : pct >= 70 ? 'yellow' : 'blue'} />
+      <Progress
+        value={pct}
+        color={pct >= blockPct ? 'red' : pct >= 70 ? 'yellow' : 'blue'}
+      />
       <Group justify="space-between">
         <Text size="xs" c="dimmed">
           {Math.round(pct)}% used · source: {window.source}
@@ -83,7 +86,10 @@ function AccountCard({ account }: { account: QuotaAccountState }) {
                 size="sm"
                 loading={reset.isPending}
                 onPress={() =>
-                  reset.mutate({ accountId: activeRoute, windowId: w.config.id })
+                  reset.mutate({
+                    accountId: activeRoute,
+                    windowId: w.config.id,
+                  })
                 }
               >
                 Reset window
@@ -93,8 +99,7 @@ function AccountCard({ account }: { account: QuotaAccountState }) {
         ))}
         {(account.config.failover?.length ?? 0) > 0 && (
           <Text size="xs" c="dimmed">
-            Failover:{' '}
-            {account.config.failover!.map((f) => f.id).join(' → ')}
+            Failover: {account.config.failover!.map((f) => f.id).join(' → ')}
           </Text>
         )}
       </Stack>

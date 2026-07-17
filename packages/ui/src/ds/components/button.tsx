@@ -36,11 +36,7 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(
         isDisabled={isDisabled || loading}
         {...props}
       >
-        {loading ? (
-          <span className={buttonSpinner} />
-        ) : (
-          leftSection
-        )}
+        {loading ? <span className={buttonSpinner} /> : leftSection}
         {children}
       </AriaButton>
     );

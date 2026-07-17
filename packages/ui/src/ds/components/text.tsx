@@ -90,9 +90,7 @@ export const Text = forwardRef<HTMLElement, TextProps>(function Text(
         }
       : {}),
     ...(ta ? { textAlign: ta } : {}),
-    ...(w !== undefined
-      ? { width: typeof w === 'number' ? `${w}px` : w }
-      : {}),
+    ...(w !== undefined ? { width: typeof w === 'number' ? `${w}px` : w } : {}),
     ...(maw !== undefined
       ? { maxWidth: typeof maw === 'number' ? `${maw}px` : maw }
       : {}),

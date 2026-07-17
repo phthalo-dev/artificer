@@ -18,20 +18,29 @@ export function formatUntil(iso: string): string {
   return `in ${days}d`;
 }
 
-export function windowUsed(window: QuotaWindowState, workstreamId?: string): number {
+export function windowUsed(
+  window: QuotaWindowState,
+  workstreamId?: string,
+): number {
   if (window.config.scope === 'workstream' && workstreamId) {
     return window.usedByWorkstream[workstreamId] ?? 0;
   }
   return window.used;
 }
 
-export function windowPercent(window: QuotaWindowState, workstreamId?: string): number {
+export function windowPercent(
+  window: QuotaWindowState,
+  workstreamId?: string,
+): number {
   const used = windowUsed(window, workstreamId);
   if (window.config.limit <= 0) return 100;
   return Math.min(100, (used / window.config.limit) * 100);
 }
 
-export function formatQuotaUnit(unit: QuotaWindowState['config']['unit'], value: number): string {
+export function formatQuotaUnit(
+  unit: QuotaWindowState['config']['unit'],
+  value: number,
+): string {
   if (unit === 'dollars') {
     if (value < 0.01) return `$${value.toFixed(4)}`;
     return `$${value.toFixed(2)}`;
@@ -43,7 +52,9 @@ export function formatQuotaUnit(unit: QuotaWindowState['config']['unit'], value:
 export function windowLabel(window: QuotaWindowState): string {
   const { id, period, scope } = window.config;
   const periodLabel = period.replace('rolling5h', '5h rolling');
-  return scope === 'workstream' ? `${id} (${periodLabel}, per workstream)` : `${id} (${periodLabel})`;
+  return scope === 'workstream'
+    ? `${id} (${periodLabel}, per workstream)`
+    : `${id} (${periodLabel})`;
 }
 
 export function accountStatusColor(
@@ -61,7 +72,9 @@ export function accountStatusColor(
   }
 }
 
-export function quotaHeadline(snapshot: QuotaSnapshot | null | undefined): string | null {
+export function quotaHeadline(
+  snapshot: QuotaSnapshot | null | undefined,
+): string | null {
   if (!snapshot) return null;
   const accounts = Object.values(snapshot.accounts);
   if (accounts.length === 0) return null;
@@ -102,7 +115,9 @@ function earliestReset(accounts: QuotaAccountState[]): string | undefined {
   return earliest !== undefined ? new Date(earliest).toISOString() : undefined;
 }
 
-export function earliestQuotaReset(snapshot: QuotaSnapshot | null | undefined): string | undefined {
+export function earliestQuotaReset(
+  snapshot: QuotaSnapshot | null | undefined,
+): string | undefined {
   if (!snapshot) return undefined;
   return earliestReset(Object.values(snapshot.accounts));
 }

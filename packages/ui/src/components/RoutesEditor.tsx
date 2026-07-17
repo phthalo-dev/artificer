@@ -64,7 +64,10 @@ function RouteCard({
   index: number;
   total: number;
   presets: ModelPresetInfo[];
-  selectData: Array<{ group: string; items: { value: string; label: string }[] }>;
+  selectData: Array<{
+    group: string;
+    items: { value: string; label: string }[];
+  }>;
   byId: Map<string, CatalogModel>;
   onChange: (next: ExecutionRouteConfig) => void;
   onMoveUp: () => void;
@@ -170,8 +173,7 @@ function RouteCard({
           ]}
           value={route.execution}
           onChange={(v) => {
-            const execution =
-              (v as ExecutionRouteConfig['execution']) ?? 'llm';
+            const execution = (v as ExecutionRouteConfig['execution']) ?? 'llm';
             onChange({
               ...route,
               execution,
@@ -264,8 +266,8 @@ function RouteCard({
         </>
       ) : (
         <Text size="sm" c="dimmed" mt="md">
-          Agent executors run work directly — model presets and tier models do not apply
-          on this route.
+          Agent executors run work directly — model presets and tier models do
+          not apply on this route.
         </Text>
       )}
 
@@ -349,7 +351,7 @@ export function RoutesEditor() {
 
   const source = data?.configured?.routes?.length
     ? data.configured
-    : data?.effective ?? null;
+    : (data?.effective ?? null);
 
   const dirty = useMemo(() => {
     if (!draft || !source) return false;
@@ -380,8 +382,8 @@ export function RoutesEditor() {
   if (!draft?.routes?.length) {
     return (
       <Text c="dimmed" size="sm">
-        No routes configured. Set <Code>QUOTA_DAILY_BUDGET_USD</Code> or add routes via{' '}
-        <Code>artificer.config.json</Code>.
+        No routes configured. Set <Code>QUOTA_DAILY_BUDGET_USD</Code> or add
+        routes via <Code>artificer.config.json</Code>.
       </Text>
     );
   }
@@ -477,7 +479,8 @@ export function RoutesEditor() {
 
       {!data.configured?.routes?.length && (
         <Text size="xs" c="dimmed">
-          Showing auto-detected defaults. Saving writes an explicit route chain to config.
+          Showing auto-detected defaults. Saving writes an explicit route chain
+          to config.
         </Text>
       )}
 

@@ -1,7 +1,9 @@
 import type { RunRecord, UsageSummary } from './api/types';
 import { costForRun } from './cost';
 
-export function summarizeByRoute(runs: RunRecord[]): Record<string, UsageSummary> {
+export function summarizeByRoute(
+  runs: RunRecord[],
+): Record<string, UsageSummary> {
   const groups: Record<string, UsageSummary> = {};
   for (const run of runs) {
     const key = run.routeProfileId ?? 'primary';
@@ -24,7 +26,8 @@ export function summarizeByRoute(runs: RunRecord[]): Record<string, UsageSummary
     groups[key] = g;
   }
   for (const key of Object.keys(groups)) {
-    groups[key].costUsd = Math.round(groups[key].costUsd * 1_000_000) / 1_000_000;
+    groups[key].costUsd =
+      Math.round(groups[key].costUsd * 1_000_000) / 1_000_000;
   }
   return groups;
 }

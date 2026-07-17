@@ -25,8 +25,7 @@ function scale(
 }
 
 function pointColor(p: BenchEfficiencyPoint): string {
-  if (p.kind === 'run')
-    return p.isCurrent ? '#2563eb' : '#6b7280';
+  if (p.kind === 'run') return p.isCurrent ? '#2563eb' : '#6b7280';
   if (p.resolved === true) return '#16a34a';
   if (p.resolved === false) return '#ef4444';
   return '#9ca3af';

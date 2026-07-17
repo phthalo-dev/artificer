@@ -24,20 +24,30 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
         setError('Invalid API key — check ARTIFICER_API_KEY on your runtime.');
       }
     } catch {
-      setError('Could not reach the server. Check your connection or VITE_RUNTIME_URL.');
+      setError(
+        'Could not reach the server. Check your connection or VITE_RUNTIME_URL.',
+      );
     } finally {
       setLoading(false);
     }
   }
 
   return (
-    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '100vh' }}>
+    <div
+      style={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'center',
+        minHeight: '100vh',
+      }}
+    >
       <Paper p="xl" style={{ width: '100%', maxWidth: 400 }}>
         <Stack gap="md">
           <Stack gap="xs">
             <Title order={3}>Connect to Artificer</Title>
             <Text size="sm" c="dimmed">
-              Enter the API key configured via <code>ARTIFICER_API_KEY</code> on your runtime instance.
+              Enter the API key configured via <code>ARTIFICER_API_KEY</code> on
+              your runtime instance.
             </Text>
           </Stack>
           <TextInput
@@ -48,7 +58,11 @@ export function LoginPage({ onSuccess }: { onSuccess: () => void }) {
             onChange={setKey}
             autoFocus
           />
-          {error && <Text size="sm" c="red">{error}</Text>}
+          {error && (
+            <Text size="sm" c="red">
+              {error}
+            </Text>
+          )}
           <Button
             variant="filled"
             onPress={submit}

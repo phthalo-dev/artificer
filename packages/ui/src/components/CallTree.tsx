@@ -36,7 +36,8 @@ function CallNode({ node, depth }: { node: RunNode; depth: number }) {
           </Group>
           <Group gap="md" wrap="nowrap">
             <Text size="xs" c="dimmed">
-              {formatTokens(self.inputTokens)}/{formatTokens(self.outputTokens)} tok
+              {formatTokens(self.inputTokens)}/{formatTokens(self.outputTokens)}{' '}
+              tok
             </Text>
             <Text size="xs" title="cost of this call only">
               self {formatCost(self.costUsd)}
@@ -46,7 +47,13 @@ function CallNode({ node, depth }: { node: RunNode; depth: number }) {
             </Text>
           </Group>
         </Group>
-        <Text size="xs" c="dimmed" lineClamp={2} mt={4} style={{ marginLeft: 22 }}>
+        <Text
+          size="xs"
+          c="dimmed"
+          lineClamp={2}
+          mt={4}
+          style={{ marginLeft: 22 }}
+        >
           {run.task}
         </Text>
         {run.error && (

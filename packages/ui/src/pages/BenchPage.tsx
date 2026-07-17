@@ -77,27 +77,34 @@ export function BenchPage() {
     return (
       <Stack gap="md">
         <Title order={3}>Benchmark</Title>
-        <Alert color="gray" title="No benchmark results yet" icon={<IconFlask size={18} />}>
+        <Alert
+          color="gray"
+          title="No benchmark results yet"
+          icon={<IconFlask size={18} />}
+        >
           Run a suite from <Code>packages/runtime</Code>:
           <Stack gap={6} mt={4}>
-            {(suites ?? [
-              {
-                id: 'mini-suite',
-                runCommand: 'pnpm bench --suite tasks/mini-suite.json',
-                evalCommand: 'pnpm bench:eval',
-                name: 'SWE-bench Lite mini',
-                kind: 'swebench' as const,
-                taskCount: 6,
-              },
-              {
-                id: 'deepswe-mini-suite',
-                runCommand: 'pnpm bench --suite tasks/deepswe-mini-suite.json',
-                evalCommand: 'pnpm bench:eval:deepswe',
-                name: 'DeepSWE mini',
-                kind: 'deepswe' as const,
-                taskCount: 6,
-              },
-            ]).map((s) => (
+            {(
+              suites ?? [
+                {
+                  id: 'mini-suite',
+                  runCommand: 'pnpm bench --suite tasks/mini-suite.json',
+                  evalCommand: 'pnpm bench:eval',
+                  name: 'SWE-bench Lite mini',
+                  kind: 'swebench' as const,
+                  taskCount: 6,
+                },
+                {
+                  id: 'deepswe-mini-suite',
+                  runCommand:
+                    'pnpm bench --suite tasks/deepswe-mini-suite.json',
+                  evalCommand: 'pnpm bench:eval:deepswe',
+                  name: 'DeepSWE mini',
+                  kind: 'deepswe' as const,
+                  taskCount: 6,
+                },
+              ]
+            ).map((s) => (
               <Text key={s.id} ff="monospace" size="sm">
                 {s.runCommand}
               </Text>
@@ -108,8 +115,15 @@ export function BenchPage() {
     );
   }
 
-  const { summary, instances, models, modelName, graded, suiteKind, suiteName } =
-    data;
+  const {
+    summary,
+    instances,
+    models,
+    modelName,
+    graded,
+    suiteKind,
+    suiteName,
+  } = data;
   const passPct =
     summary.resolveRate !== null ? Math.round(summary.resolveRate * 100) : null;
 
@@ -119,7 +133,10 @@ export function BenchPage() {
         <Group gap="sm" align="center">
           <Title order={3}>Benchmark</Title>
           {suiteKind && (
-            <Badge variant="light" color={suiteKind === 'deepswe' ? 'violet' : 'teal'}>
+            <Badge
+              variant="light"
+              color={suiteKind === 'deepswe' ? 'violet' : 'teal'}
+            >
               {suiteKind === 'deepswe' ? 'DeepSWE' : 'SWE-bench'}
             </Badge>
           )}
@@ -160,7 +177,12 @@ export function BenchPage() {
           </Text>
           <Stack gap="sm">
             {suites.map((s) => (
-              <Group key={s.id} justify="space-between" align="flex-start" wrap="wrap">
+              <Group
+                key={s.id}
+                justify="space-between"
+                align="flex-start"
+                wrap="wrap"
+              >
                 <div>
                   <Group gap="xs">
                     <Text size="sm" fw={600}>
@@ -232,10 +254,7 @@ export function BenchPage() {
       <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }}>
         <Stat label="Instances" value={String(summary.instances)} />
         <Stat label="Total cost" value={formatCost(summary.totalCostUsd)} />
-        <Stat
-          label="Avg cost"
-          value={formatCost(summary.avgCostUsd)}
-        />
+        <Stat label="Avg cost" value={formatCost(summary.avgCostUsd)} />
         <Stat
           label="Cost / solved"
           value={

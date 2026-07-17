@@ -11,11 +11,15 @@ async function setupIdentityRepo(): Promise<string | undefined> {
 
   const token = process.env.GITHUB_TOKEN ?? process.env.GH_TOKEN;
   if (!token) {
-    console.error('[artificer] GITHUB_TOKEN must be set when IDENTITY_REPO is used');
+    console.error(
+      '[artificer] GITHUB_TOKEN must be set when IDENTITY_REPO is used',
+    );
     process.exit(1);
   }
 
-  const identityDir = path.resolve(process.env.IDENTITY_DIR ?? '/data/identity');
+  const identityDir = path.resolve(
+    process.env.IDENTITY_DIR ?? '/data/identity',
+  );
 
   // Derive commit identity from the token's GitHub account
   const res = await fetch('https://api.github.com/user', {
@@ -25,14 +29,19 @@ async function setupIdentityRepo(): Promise<string | undefined> {
     console.error(`[artificer] GitHub API error fetching user: ${res.status}`);
     process.exit(1);
   }
-  const user = (await res.json()) as { name?: string; login: string; id: number };
+  const user = (await res.json()) as {
+    name?: string;
+    login: string;
+    id: number;
+  };
   const name = user.name || user.login;
   const email = `${user.id}+${user.login}@users.noreply.github.com`;
 
   await exec('git', ['config', '--global', 'user.name', name]);
   await exec('git', ['config', '--global', 'user.email', email]);
   await exec('git', [
-    'config', '--global',
+    'config',
+    '--global',
     'credential.https://github.com.helper',
     `!f() { echo username=x-access-token; echo password=${token}; }; f`,
   ]);
@@ -50,7 +59,11 @@ async function setupIdentityRepo(): Promise<string | undefined> {
     await exec('git', ['-C', identityDir, 'pull', '--rebase', 'origin']);
   } else {
     console.log(`[artificer] Cloning identity from ${identityRepo}...`);
-    await exec('git', ['clone', `https://github.com/${identityRepo}`, identityDir]);
+    await exec('git', [
+      'clone',
+      `https://github.com/${identityRepo}`,
+      identityDir,
+    ]);
   }
 
   return identityDir;
