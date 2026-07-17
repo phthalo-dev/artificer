@@ -21,9 +21,7 @@ export const pythonProvider: LanguageProvider = {
   async diagnose(ctx): Promise<Diagnostic[]> {
     const files = ctx.files.map(shellQuote).join(' ');
     if (await ctx.which('ruff')) {
-      const result = await ctx.exec(
-        `ruff check --output-format json ${files}`,
-      );
+      const result = await ctx.exec(`ruff check --output-format json ${files}`);
       return ruffJsonParser(result);
     }
     // py_compile prints "  File "<path>", line N" + a message on failure.

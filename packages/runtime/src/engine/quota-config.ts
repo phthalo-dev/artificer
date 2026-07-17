@@ -34,7 +34,10 @@ function applyEnvOverrides(
     ? Number(env.QUOTA_DAILY_BUDGET_USD)
     : undefined;
 
-  if (dailyBudget && !accounts.some((a) => a.id === 'opencode-zen' || a.id === primaryId)) {
+  if (
+    dailyBudget &&
+    !accounts.some((a) => a.id === 'opencode-zen' || a.id === primaryId)
+  ) {
     accounts.push({
       id: primaryId,
       mode: 'metered',
@@ -52,7 +55,8 @@ function applyEnvOverrides(
     });
   } else if (dailyBudget) {
     accounts = accounts.map((account) => {
-      if (account.id !== primaryId && account.id !== 'opencode-zen') return account;
+      if (account.id !== primaryId && account.id !== 'opencode-zen')
+        return account;
       const hasDaily = account.windows.some(
         (w: QuotaWindowConfig) => w.id === 'daily-budget',
       );
@@ -173,6 +177,8 @@ export function modelsFromFailoverPreset(
   return getPreset(presetId)?.tiers;
 }
 
-export function primaryAccountIdFor(runtime: Pick<RuntimeConfig, 'baseURL' | 'executor'>): string {
+export function primaryAccountIdFor(
+  runtime: Pick<RuntimeConfig, 'baseURL' | 'executor'>,
+): string {
   return primaryAccountId(runtime.baseURL, runtime.executor);
 }

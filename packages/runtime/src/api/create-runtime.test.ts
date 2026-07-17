@@ -13,7 +13,9 @@ describe('createRuntime', () => {
 
   beforeEach(() => {
     tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'artificer-runtime-'));
-    fs.mkdirSync(path.join(tmpDir, 'identity', 'memories'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'identity', 'memories'), {
+      recursive: true,
+    });
     fs.mkdirSync(path.join(tmpDir, 'exec'), { recursive: true });
   });
 

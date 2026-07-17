@@ -50,11 +50,7 @@ import {
   quotaRetryAfterMs,
 } from '../llm/errors.js';
 import { type ModelTier, type ModelTiers, pickModel } from './models.js';
-import {
-  cloneRoleTiers,
-  getPreset,
-  type ModelPreset,
-} from './presets.js';
+import { cloneRoleTiers, getPreset, type ModelPreset } from './presets.js';
 import { Scheduler } from './scheduler.js';
 import { WorkstreamMemoryService } from './workstream-memory.js';
 import { RoleRegistry } from './role-registry.js';
@@ -153,7 +149,9 @@ export class Engine implements EngineApi {
 
   async reloadSchedules(): Promise<void> {
     const manifest = scanAgentDirectory(this.config.identityDir);
-    await this.scheduleRunner?.reload(loadSchedulesFromDisk(manifest.schedules));
+    await this.scheduleRunner?.reload(
+      loadSchedulesFromDisk(manifest.schedules),
+    );
   }
 
   listSchedules(): Array<
@@ -179,8 +177,14 @@ export class Engine implements EngineApi {
     const result = validateScheduleFields({ ...input, sourcePath });
     if (!result.ok) return result;
 
-    await fs.promises.mkdir(this.identity.layout.schedulesDir, { recursive: true });
-    await fs.promises.writeFile(sourcePath, serializeSchedule(result.value), 'utf-8');
+    await fs.promises.mkdir(this.identity.layout.schedulesDir, {
+      recursive: true,
+    });
+    await fs.promises.writeFile(
+      sourcePath,
+      serializeSchedule(result.value),
+      'utf-8',
+    );
     await this.commitScheduleChange(`update schedule ${input.id}`);
     await this.reloadSchedules();
     return { ok: true };
@@ -197,12 +201,16 @@ export class Engine implements EngineApi {
       serializeSchedule({ ...schedule, enabled }),
       'utf-8',
     );
-    await this.commitScheduleChange(`set schedule ${id} ${enabled ? 'enabled' : 'disabled'}`);
+    await this.commitScheduleChange(
+      `set schedule ${id} ${enabled ? 'enabled' : 'disabled'}`,
+    );
     await this.reloadSchedules();
     return { ok: true };
   }
 
-  async deleteSchedule(id: string): Promise<{ ok: true } | { ok: false; error: string }> {
+  async deleteSchedule(
+    id: string,
+  ): Promise<{ ok: true } | { ok: false; error: string }> {
     if (!this.identity) {
       return { ok: false, error: 'identity storage is not configured' };
     }
@@ -321,8 +329,7 @@ export class Engine implements EngineApi {
     for (const run of runs) {
       if (run.status !== 'running' && run.status !== 'queued') continue;
       run.status = 'failed';
-      run.error =
-        run.error ?? 'Interrupted by a runtime restart (zombie run).';
+      run.error = run.error ?? 'Interrupted by a runtime restart (zombie run).';
       run.finishedAt = new Date().toISOString();
       await this.store.saveRun(run);
       if (run.taskId && run.workstreamId) {
@@ -393,7 +400,10 @@ export class Engine implements EngineApi {
     let task = content;
     if (recentPrior.length > 0) {
       const thread = recentPrior
-        .map((m) => `[${m.direction === 'inbound' ? 'User' : 'Agent'}]: ${m.content}`)
+        .map(
+          (m) =>
+            `[${m.direction === 'inbound' ? 'User' : 'Agent'}]: ${m.content}`,
+        )
         .join('\n\n');
       task = `[Recent conversation]\n${thread}\n\n[New message]\n${content}`;
     }
@@ -566,10 +576,9 @@ export class Engine implements EngineApi {
   }
 
   /** Update which complexity tier one or more roles use. */
-  setRoleTiers(update: Partial<Record<RoleName, ModelTier>>): Record<
-    RoleName,
-    ModelTier
-  > {
+  setRoleTiers(
+    update: Partial<Record<RoleName, ModelTier>>,
+  ): Record<RoleName, ModelTier> {
     this.config.roleTiers = { ...this.config.roleTiers, ...update };
     this.config.modelPresetId = 'custom';
     return { ...this.config.roleTiers };
@@ -606,12 +615,20 @@ export class Engine implements EngineApi {
    * when identity.autoCommit is true.
    */
   async persistConfig(): Promise<void> {
-    const configPath = path.join(this.config.identityDir, 'artificer.config.json');
+    const configPath = path.join(
+      this.config.identityDir,
+      'artificer.config.json',
+    );
 
     let existing: Record<string, unknown> = {};
     try {
-      existing = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as Record<string, unknown>;
-    } catch { /* file may not exist yet */ }
+      existing = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as Record<
+        string,
+        unknown
+      >;
+    } catch {
+      /* file may not exist yet */
+    }
 
     const presetId = this.config.modelPresetId;
     let updated: Record<string, unknown>;
@@ -620,7 +637,11 @@ export class Engine implements EngineApi {
       updated = { ...rest, preset: presetId };
     } else {
       const { preset: _p, ...rest } = existing;
-      updated = { ...rest, models: { ...this.config.models }, roleTiers: { ...this.config.roleTiers } };
+      updated = {
+        ...rest,
+        models: { ...this.config.models },
+        roleTiers: { ...this.config.roleTiers },
+      };
     }
 
     try {
@@ -635,7 +656,8 @@ export class Engine implements EngineApi {
     const dir = this.config.identityDir;
     const env = buildGitEnv(this.config.github);
     const prefix = this.config.identity.commitPrefix ?? 'config:';
-    const label = presetId !== 'custom' ? `preset to ${presetId}` : 'models (custom)';
+    const label =
+      presetId !== 'custom' ? `preset to ${presetId}` : 'models (custom)';
     const message = `${prefix} update ${label}`;
 
     try {
@@ -649,7 +671,10 @@ export class Engine implements EngineApi {
       await exec('git', ['-C', dir, 'commit', '-m', message], { env });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (!msg.includes('nothing to commit') && !msg.includes('nothing added')) {
+      if (
+        !msg.includes('nothing to commit') &&
+        !msg.includes('nothing added')
+      ) {
         console.error('[engine] git commit config failed:', err);
       }
       return;
@@ -663,7 +688,11 @@ export class Engine implements EngineApi {
       if (this.config.identity.branch) {
         pushArgs.push(this.config.identity.branch);
       } else {
-        const { stdout } = await exec('git', ['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD'], { env });
+        const { stdout } = await exec(
+          'git',
+          ['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD'],
+          { env },
+        );
         const branch = stdout.trim();
         if (branch && branch !== 'HEAD') pushArgs.push(branch);
       }
@@ -678,15 +707,29 @@ export class Engine implements EngineApi {
    * Replaces separate persistConfig + persistQuotaConfig for agent-driven updates.
    */
   async persistProviderConfig(): Promise<void> {
-    const configPath = path.join(this.config.identityDir, 'artificer.config.json');
+    const configPath = path.join(
+      this.config.identityDir,
+      'artificer.config.json',
+    );
 
     let existing: Record<string, unknown> = {};
     try {
-      existing = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as Record<string, unknown>;
-    } catch { /* file may not exist yet */ }
+      existing = JSON.parse(fs.readFileSync(configPath, 'utf-8')) as Record<
+        string,
+        unknown
+      >;
+    } catch {
+      /* file may not exist yet */
+    }
 
     const presetId = this.config.modelPresetId;
-    const { preset: _p, models: _m, roleTiers: _r, quota: _q, ...rest } = existing;
+    const {
+      preset: _p,
+      models: _m,
+      roleTiers: _r,
+      quota: _q,
+      ...rest
+    } = existing;
     let updated: Record<string, unknown> = { ...rest };
 
     if (presetId !== 'custom') {
@@ -729,7 +772,10 @@ export class Engine implements EngineApi {
       await exec('git', ['-C', dir, 'commit', '-m', message], { env });
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
-      if (!msg.includes('nothing to commit') && !msg.includes('nothing added')) {
+      if (
+        !msg.includes('nothing to commit') &&
+        !msg.includes('nothing added')
+      ) {
         console.error('[engine] git commit provider config failed:', err);
       }
       return;
@@ -743,7 +789,11 @@ export class Engine implements EngineApi {
       if (this.config.identity.branch) {
         pushArgs.push(this.config.identity.branch);
       } else {
-        const { stdout } = await exec('git', ['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD'], { env });
+        const { stdout } = await exec(
+          'git',
+          ['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD'],
+          { env },
+        );
         const branch = stdout.trim();
         if (branch && branch !== 'HEAD') pushArgs.push(branch);
       }
@@ -784,12 +834,11 @@ export class Engine implements EngineApi {
     return this.providerRouter.resolve(input) ?? undefined;
   }
 
-  private resolveModelForRoute =
-    (route?: DispatchRoute) => (modelId: string) =>
-      resolveLanguageModel(modelId, {
-        apiKey: route?.apiKey ?? this.config.apiKey,
-        baseURL: route?.baseURL ?? this.config.baseURL,
-      });
+  private resolveModelForRoute = (route?: DispatchRoute) => (modelId: string) =>
+    resolveLanguageModel(modelId, {
+      apiKey: route?.apiKey ?? this.config.apiKey,
+      baseURL: route?.baseURL ?? this.config.baseURL,
+    });
 
   emit(event: RuntimeEvent): void {
     this.events.emit('event', event);
@@ -868,7 +917,8 @@ export class Engine implements EngineApi {
 
     switch (action.kind) {
       case 'setup': {
-        const workspaceDir = this.store.layout.workstreamWorkspace(workstreamId);
+        const workspaceDir =
+          this.store.layout.workstreamWorkspace(workstreamId);
         try {
           await cloneRepoIntoWorkspace(
             workspaceDir,
@@ -930,9 +980,7 @@ export class Engine implements EngineApi {
   ): Promise<{ facts: WorkstreamFacts; workerRunsSinceReview: RunRecord[] }> {
     const workspaceDir = this.store.layout.workstreamWorkspace(ws.id);
     const repoDir = await findGitRepo(workspaceDir);
-    const patchPresent = repoDir
-      ? await hasUncommittedChanges(repoDir)
-      : false;
+    const patchPresent = repoDir ? await hasUncommittedChanges(repoDir) : false;
     const [plan, reviewsRaw, wsRuns] = await Promise.all([
       this.store.readPlan(ws.id),
       this.store.listReviews(ws.id),
@@ -968,7 +1016,8 @@ export class Engine implements EngineApi {
     // When no plan exists, every completed planner run failed to produce one.
     const plannerRunsWithoutPlan = plan
       ? 0
-      : wsRuns.filter((r) => r.role === 'planner' && r.status === 'done').length;
+      : wsRuns.filter((r) => r.role === 'planner' && r.status === 'done')
+          .length;
 
     // A PR is submitted if the submit-specific worker ran after the last
     // approval and reported done/done_with_concerns. Checking the task text
@@ -1105,10 +1154,13 @@ export class Engine implements EngineApi {
 
     if (run.role === 'reviewer' && run.status === 'done') {
       const reviews = await this.store.listReviews(run.workstreamId);
-      const latestReview = reviews.sort((a, b) => b.createdAt.localeCompare(a.createdAt))[0];
+      const latestReview = reviews.sort((a, b) =>
+        b.createdAt.localeCompare(a.createdAt),
+      )[0];
       if (latestReview) {
         const reviewWs = await this.store.getWorkstream(run.workstreamId);
-        if (reviewWs) void this.memoryService?.onReviewCompleted(reviewWs, latestReview);
+        if (reviewWs)
+          void this.memoryService?.onReviewCompleted(reviewWs, latestReview);
       }
     }
 
@@ -1178,11 +1230,7 @@ export class Engine implements EngineApi {
       ? this.quotaLedger?.getAccountConfig(accountId)
       : undefined;
     if (account?.onExhausted === 'failover' && run.workstreamId) {
-      await this.stepWorkstream(
-        run.workstreamId,
-        run.originMessageId,
-        run.id,
-      );
+      await this.stepWorkstream(run.workstreamId, run.originMessageId, run.id);
       return;
     }
 
@@ -1253,11 +1301,14 @@ export class Engine implements EngineApi {
     const ms = this.quotaLedger.nextResetMs();
     if (ms === undefined) return;
     if (this.quotaResumeTimer) clearTimeout(this.quotaResumeTimer);
-    this.quotaResumeTimer = setTimeout(() => {
-      this.quotaLedger?.tick();
-      void this.resumePausedWorkstreams();
-      this.scheduleQuotaResume();
-    }, Math.min(ms + 500, 2_147_483_647));
+    this.quotaResumeTimer = setTimeout(
+      () => {
+        this.quotaLedger?.tick();
+        void this.resumePausedWorkstreams();
+        this.scheduleQuotaResume();
+      },
+      Math.min(ms + 500, 2_147_483_647),
+    );
   }
 
   private scheduleQuotaTick(): void {
@@ -1301,7 +1352,10 @@ export class Engine implements EngineApi {
     return {
       agentName: this.config.agentName,
       busy: this.scheduler.running > 0 || this.scheduler.pending > 0,
-      queue: { pending: this.scheduler.pending, running: this.scheduler.running },
+      queue: {
+        pending: this.scheduler.pending,
+        running: this.scheduler.running,
+      },
       activeRuns: [...this.active.values()],
       workstreams: workstreams.map((ws) => ({
         id: ws.id,
@@ -1320,8 +1374,10 @@ function buildExecutor(
   if (!config || config === 'llm') return undefined;
   if (config === 'cursor-agent') return new CursorAgentExecutor();
   if (config === 'claude-code') return new ClaudeCodeExecutor();
-  if (config.type === 'cursor-agent') return new CursorAgentExecutor(config.model);
-  if (config.type === 'claude-code') return new ClaudeCodeExecutor(config.model);
+  if (config.type === 'cursor-agent')
+    return new CursorAgentExecutor(config.model);
+  if (config.type === 'claude-code')
+    return new ClaudeCodeExecutor(config.model);
   if (config.type === 'cli') return new CliExecutor(config);
   return undefined;
 }

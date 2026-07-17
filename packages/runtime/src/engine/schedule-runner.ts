@@ -31,7 +31,9 @@ export class ScheduleRunner {
   private startedAtMs: number;
   private timer: NodeJS.Timeout | undefined;
 
-  constructor(private readonly deps: ScheduleFireDeps & { pollIntervalMs?: number }) {
+  constructor(
+    private readonly deps: ScheduleFireDeps & { pollIntervalMs?: number },
+  ) {
     this.startedAtMs = deps.nowMs();
   }
 
@@ -43,7 +45,9 @@ export class ScheduleRunner {
 
   remove(id: string): Promise<void> {
     return this.enqueue(async () => {
-      this.definitions = this.definitions.filter((definition) => definition.id !== id);
+      this.definitions = this.definitions.filter(
+        (definition) => definition.id !== id,
+      );
       this.inFlight.delete(id);
       this.firing.delete(id);
 
@@ -54,11 +58,15 @@ export class ScheduleRunner {
     });
   }
 
-  list(): Array<ScheduleDefinition & { lastFiredAt: number | null; inFlight: boolean }> {
+  list(): Array<
+    ScheduleDefinition & { lastFiredAt: number | null; inFlight: boolean }
+  > {
     return this.definitions.map((definition) => ({
       ...definition,
-      lastFiredAt: this.runtimeState.schedules[definition.id]?.lastFiredAt ?? null,
-      inFlight: this.inFlight.has(definition.id) || this.firing.has(definition.id),
+      lastFiredAt:
+        this.runtimeState.schedules[definition.id]?.lastFiredAt ?? null,
+      inFlight:
+        this.inFlight.has(definition.id) || this.firing.has(definition.id),
     }));
   }
 
@@ -105,7 +113,11 @@ export class ScheduleRunner {
         const fire = await this.fire(schedule);
         this.inFlight.set(schedule.id, fire);
       } catch (error) {
-        const revertedState = this.withLastFiredAt(state, schedule.id, lastFiredAt);
+        const revertedState = this.withLastFiredAt(
+          state,
+          schedule.id,
+          lastFiredAt,
+        );
         try {
           await this.deps.writeState(revertedState);
           state = revertedState;

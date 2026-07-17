@@ -10,7 +10,7 @@ export function createArtifactTools(ctx: ToolContext): ToolDef[] {
     {
       name: 'write_plan',
       description:
-        'Save the plan for the current workstream as a markdown artifact. This is the planner\'s primary output.',
+        "Save the plan for the current workstream as a markdown artifact. This is the planner's primary output.",
       inputSchema: {
         type: 'object',
         properties: {
@@ -112,7 +112,8 @@ export function createArtifactTools(ctx: ToolContext): ToolDef[] {
           stage: {
             type: 'string',
             enum: ['plan', 'work'],
-            description: 'Whether you reviewed the plan or the implemented work.',
+            description:
+              'Whether you reviewed the plan or the implemented work.',
           },
           severity: {
             type: 'string',

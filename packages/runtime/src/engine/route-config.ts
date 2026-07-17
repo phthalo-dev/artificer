@@ -38,7 +38,8 @@ export function roleTiersForRoute(
   route: Pick<ExecutionRouteConfig, 'presetId' | 'roleTiers'>,
   fallback: Record<RoleName, ModelTier>,
 ): Record<RoleName, ModelTier> {
-  if (route.roleTiers) return { ...route.roleTiers } as Record<RoleName, ModelTier>;
+  if (route.roleTiers)
+    return { ...route.roleTiers } as Record<RoleName, ModelTier>;
   if (route.presetId && route.presetId !== 'custom') {
     const preset = getPreset(route.presetId);
     if (preset) return cloneRoleTiers(preset.roleTiers);
@@ -56,7 +57,8 @@ function failoverToRoute(
   const preset = presetId ? getPreset(presetId) : undefined;
   const models: ModelTiers = {
     low: target.llm?.models?.low ?? preset?.tiers.low ?? fallback.low,
-    medium: target.llm?.models?.medium ?? preset?.tiers.medium ?? fallback.medium,
+    medium:
+      target.llm?.models?.medium ?? preset?.tiers.medium ?? fallback.medium,
     high: target.llm?.models?.high ?? preset?.tiers.high ?? fallback.high,
   };
   return {
@@ -86,8 +88,7 @@ function primaryRouteFromRuntime(
   >,
   account?: QuotaAccountConfig,
 ): ExecutionRouteConfig {
-  const accountId =
-    account?.id ?? primaryAccountIdFor(runtime);
+  const accountId = account?.id ?? primaryAccountIdFor(runtime);
   const windows =
     account?.windows ??
     defaultWindowsForPrimary(runtime.baseURL, runtime.executor);
@@ -238,14 +239,18 @@ export function validateRoutes(routes: ExecutionRouteConfig[]): void {
       route.execution === null;
     if (usesLlm) {
       if (!route.models?.low || !route.models?.medium || !route.models?.high) {
-        throw new Error(`route "${route.id}" must define low, medium, and high models`);
+        throw new Error(
+          `route "${route.id}" must define low, medium, and high models`,
+        );
       }
       if (!route.llm?.baseURL) {
         throw new Error(`route "${route.id}" requires llm.baseURL`);
       }
     }
     if (route.windows.length === 0) {
-      throw new Error(`route "${route.id}" must define at least one quota window`);
+      throw new Error(
+        `route "${route.id}" must define at least one quota window`,
+      );
     }
   }
 }

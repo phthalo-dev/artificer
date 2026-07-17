@@ -8,7 +8,9 @@
     "dev:mock": "VITE_MOCK_API=true vite",
     "build": "tsc -b && vite build",
     "preview": "vite preview",
-    "type-check": "tsc --noEmit"
+    "type-check": "tsc --noEmit",
+    "test": "vitest run",
+    "lint": "prettier --check \"src/**/*.{ts,tsx,css}\""
   },
   "dependencies": {
     "@tabler/icons-react": "^3.24.0",

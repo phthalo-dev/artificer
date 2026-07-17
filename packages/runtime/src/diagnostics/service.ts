@@ -69,7 +69,10 @@ function matchesEditedFile(
 
 function formatBlock(source: string, diagnostics: Diagnostic[]): string {
   const lines = diagnostics.map((d) => {
-    const loc = d.line != null ? `:${d.line}${d.column != null ? `:${d.column}` : ''}` : '';
+    const loc =
+      d.line != null
+        ? `:${d.line}${d.column != null ? `:${d.column}` : ''}`
+        : '';
     const where = d.file ? `${d.file}${loc} ` : '';
     return `${where}${d.severity}: ${d.message}`;
   });

@@ -7,7 +7,9 @@ import {
   type ScheduleDefinition,
 } from './schedules.js';
 
-function everySchedule(overrides: Partial<ScheduleDefinition> = {}): ScheduleDefinition {
+function everySchedule(
+  overrides: Partial<ScheduleDefinition> = {},
+): ScheduleDefinition {
   return {
     id: 'every',
     name: 'Every schedule',

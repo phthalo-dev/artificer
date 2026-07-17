@@ -37,5 +37,8 @@ export function truncateText(
   max = MAX_TEXT,
 ): { text: string; truncated: boolean } {
   if (text.length <= max) return { text, truncated: false };
-  return { text: `${text.slice(0, max)}\n... (content truncated)`, truncated: true };
+  return {
+    text: `${text.slice(0, max)}\n... (content truncated)`,
+    truncated: true,
+  };
 }

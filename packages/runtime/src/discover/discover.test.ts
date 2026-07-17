@@ -47,7 +47,9 @@ describe('scanAgentDirectory', () => {
   });
 
   it('discovers identity/memories', () => {
-    fs.mkdirSync(path.join(tmpDir, 'identity', 'memories'), { recursive: true });
+    fs.mkdirSync(path.join(tmpDir, 'identity', 'memories'), {
+      recursive: true,
+    });
     fs.writeFileSync(
       path.join(tmpDir, 'identity', 'memories', 'pref_abc.md'),
       '---\nid: "pref_abc"\n---\n\nContent',

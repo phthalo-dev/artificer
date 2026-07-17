@@ -14,7 +14,9 @@ export function defineTool<TInput = Record<string, unknown>>(
         description: definition.description,
         inputSchema: definition.input,
         handler: (input) =>
-          Promise.resolve(definition.execute(input as TInput, ctx)).then(String),
+          Promise.resolve(definition.execute(input as TInput, ctx)).then(
+            String,
+          ),
       };
     },
   };

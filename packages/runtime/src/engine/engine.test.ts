@@ -63,7 +63,9 @@ test('resumeInterruptedWorkstreams advances the FSM instead of spawning an LLM o
 });
 
 test('Engine.listRoles includes built-ins and custom roles from registry', async () => {
-  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-engine-roles-'));
+  const dataDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'artificer-engine-roles-'),
+  );
   const config = loadConfig({
     ARTIFICER_EXEC_DIR: dataDir,
     LLM_API_KEY: 'test-key-not-used',

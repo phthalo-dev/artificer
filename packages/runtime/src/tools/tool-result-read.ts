@@ -1,6 +1,9 @@
 import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
-import { readSpilledResult, resolveSpillPath } from '../storage/tool-results.js';
+import {
+  readSpilledResult,
+  resolveSpillPath,
+} from '../storage/tool-results.js';
 
 export function createToolResultReadTools(ctx: ToolContext): ToolDef[] {
   const { engine, run } = ctx;
@@ -16,7 +19,8 @@ export function createToolResultReadTools(ctx: ToolContext): ToolDef[] {
         properties: {
           run_id: {
             type: 'string',
-            description: 'Run id that produced the spill. Defaults to the current run.',
+            description:
+              'Run id that produced the spill. Defaults to the current run.',
           },
           spill_key: {
             type: 'string',
@@ -39,9 +43,13 @@ export function createToolResultReadTools(ctx: ToolContext): ToolDef[] {
 
         const runId = input.run_id ? String(input.run_id) : run.id;
         const offset =
-          typeof input.offset === 'number' && input.offset >= 0 ? input.offset : 0;
+          typeof input.offset === 'number' && input.offset >= 0
+            ? input.offset
+            : 0;
         const limit =
-          typeof input.limit === 'number' && input.limit > 0 ? input.limit : undefined;
+          typeof input.limit === 'number' && input.limit > 0
+            ? input.limit
+            : undefined;
 
         try {
           resolveSpillPath(layout, runId, spillKey);
@@ -50,7 +58,13 @@ export function createToolResultReadTools(ctx: ToolContext): ToolDef[] {
         }
 
         try {
-          return await readSpilledResult(layout, runId, spillKey, offset, limit);
+          return await readSpilledResult(
+            layout,
+            runId,
+            spillKey,
+            offset,
+            limit,
+          );
         } catch (err) {
           const message = err instanceof Error ? err.message : String(err);
           if (message.includes('ENOENT')) {

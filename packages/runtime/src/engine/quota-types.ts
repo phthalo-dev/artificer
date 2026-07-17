@@ -13,7 +13,11 @@ export type QuotaPeriod =
 export type QuotaScope = 'global' | 'workstream';
 export type OnExhaustedPolicy = 'wait' | 'failover';
 export type QuotaAccountStatus = 'ok' | 'warning' | 'exhausted' | 'unknown';
-export type QuotaUsageSource = 'metered' | 'provider' | 'estimated' | 'inferred';
+export type QuotaUsageSource =
+  | 'metered'
+  | 'provider'
+  | 'estimated'
+  | 'inferred';
 
 export interface QuotaWindowConfig {
   id: string;

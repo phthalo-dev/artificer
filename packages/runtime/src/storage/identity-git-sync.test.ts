@@ -11,7 +11,13 @@ import type { IdentityConfig } from '../api/types.js';
 const exec = promisify(execFile);
 
 async function gitLog(dir: string): Promise<string[]> {
-  const { stdout } = await exec('git', ['-C', dir, 'log', '--oneline', '--no-decorate']);
+  const { stdout } = await exec('git', [
+    '-C',
+    dir,
+    'log',
+    '--oneline',
+    '--no-decorate',
+  ]);
   return stdout.trim().split('\n').filter(Boolean);
 }
 
@@ -59,7 +65,10 @@ describe('IdentityGitSync', () => {
     });
 
     const log = await gitLog(rootDir);
-    assert.ok(log.some((l) => l.includes(memory.id)), `expected commit for ${memory.id}`);
+    assert.ok(
+      log.some((l) => l.includes(memory.id)),
+      `expected commit for ${memory.id}`,
+    );
   });
 
   it('stages new schedule files with identity changes', async () => {
@@ -72,7 +81,12 @@ describe('IdentityGitSync', () => {
     await store.addMemory({ content: 'x', tags: [], kind: 'note' });
 
     const { stdout } = await exec('git', [
-      '-C', rootDir, 'show', '--format=', '--name-only', 'HEAD',
+      '-C',
+      rootDir,
+      'show',
+      '--format=',
+      '--name-only',
+      'HEAD',
     ]);
     assert.match(stdout, /agent\/schedules\/daily\.md/);
   });
@@ -81,17 +95,28 @@ describe('IdentityGitSync', () => {
     const store = new IdentityGitSync(rootDir, syncConfig);
     await store.init();
 
-    const memory = await store.addMemory({ content: 'x', tags: [], kind: 'note' });
+    const memory = await store.addMemory({
+      content: 'x',
+      tags: [],
+      kind: 'note',
+    });
 
     const log = await gitLog(rootDir);
     assert.ok(log.some((l) => l.includes(`memory: add ${memory.id}`)));
   });
 
   it('uses custom commitPrefix when set', async () => {
-    const store = new IdentityGitSync(rootDir, { ...syncConfig, commitPrefix: 'chore:' });
+    const store = new IdentityGitSync(rootDir, {
+      ...syncConfig,
+      commitPrefix: 'chore:',
+    });
     await store.init();
 
-    const memory = await store.addMemory({ content: 'x', tags: [], kind: 'note' });
+    const memory = await store.addMemory({
+      content: 'x',
+      tags: [],
+      kind: 'note',
+    });
 
     const log = await gitLog(rootDir);
     assert.ok(log.some((l) => l.includes(`chore: add ${memory.id}`)));
@@ -101,13 +126,20 @@ describe('IdentityGitSync', () => {
     const store = new IdentityGitSync(rootDir, syncConfig);
     await store.init();
 
-    const memory = await store.addMemory({ content: 'before', tags: [], kind: 'note' });
+    const memory = await store.addMemory({
+      content: 'before',
+      tags: [],
+      kind: 'note',
+    });
     const before = await gitLog(rootDir);
 
     await store.updateMemory(memory.id, { content: 'after' });
 
     const after = await gitLog(rootDir);
-    assert.ok(after.length > before.length, 'expected a new commit after update');
+    assert.ok(
+      after.length > before.length,
+      'expected a new commit after update',
+    );
     assert.ok(after.some((l) => l.includes(`memory: update ${memory.id}`)));
   });
 
@@ -115,7 +147,11 @@ describe('IdentityGitSync', () => {
     const store = new IdentityGitSync(rootDir, syncConfig);
     await store.init();
 
-    const memory = await store.addMemory({ content: 'to delete', tags: [], kind: 'note' });
+    const memory = await store.addMemory({
+      content: 'to delete',
+      tags: [],
+      kind: 'note',
+    });
     const before = await gitLog(rootDir);
 
     await store.deleteMemory(memory.id);
@@ -141,14 +177,20 @@ describe('IdentityGitSync', () => {
     await initBareRepo(remoteDir);
     await exec('git', ['-C', rootDir, 'remote', 'add', 'origin', remoteDir]);
 
-    const store = new IdentityGitSync(rootDir, { autoCommit: true, autoPush: true });
+    const store = new IdentityGitSync(rootDir, {
+      autoCommit: true,
+      autoPush: true,
+    });
     await store.init();
 
     await store.addMemory({ content: 'pushed', tags: [], kind: 'note' });
 
     // Verify the commit landed in the remote
     const { stdout } = await exec('git', ['-C', remoteDir, 'log', '--oneline']);
-    assert.ok(stdout.includes('memory: add'), 'expected pushed commit in remote');
+    assert.ok(
+      stdout.includes('memory: add'),
+      'expected pushed commit in remote',
+    );
 
     fs.rmSync(remoteDir, { recursive: true, force: true });
   });
@@ -159,7 +201,11 @@ describe('IdentityGitSync', () => {
 
     // Call commitAndPush indirectly by adding a memory then immediately calling
     // update with the same content — second update may produce identical file
-    const memory = await store.addMemory({ content: 'same', tags: [], kind: 'note' });
+    const memory = await store.addMemory({
+      content: 'same',
+      tags: [],
+      kind: 'note',
+    });
     await assert.doesNotReject(() =>
       store.updateMemory(memory.id, { content: 'same' }),
     );
@@ -172,7 +218,13 @@ describe('IdentityGitSync', () => {
     await exec('git', ['-C', rootDir, 'remote', 'add', 'origin', remoteDir]);
     await exec('git', ['-C', rootDir, 'push', '-u', 'origin', 'HEAD']);
     await exec('git', ['clone', remoteDir, otherDir]);
-    await exec('git', ['-C', otherDir, 'config', 'user.email', 'test@test.com']);
+    await exec('git', [
+      '-C',
+      otherDir,
+      'config',
+      'user.email',
+      'test@test.com',
+    ]);
     await exec('git', ['-C', otherDir, 'config', 'user.name', 'Test']);
 
     fs.writeFileSync(path.join(rootDir, 'shared.txt'), 'local\n');
@@ -186,7 +238,12 @@ describe('IdentityGitSync', () => {
 
     const store = new IdentityGitSync(rootDir, { autoCommit: false });
     assert.equal(await store.pullFromRemote(), 'conflict');
-    const { stdout } = await exec('git', ['-C', rootDir, 'status', '--porcelain']);
+    const { stdout } = await exec('git', [
+      '-C',
+      rootDir,
+      'status',
+      '--porcelain',
+    ]);
     assert.equal(stdout, '');
 
     fs.rmSync(remoteDir, { recursive: true, force: true });
@@ -199,7 +256,11 @@ describe('IdentityGitSync', () => {
     const store = new IdentityGitSync(nonGitDir, syncConfig);
     await store.init();
 
-    const memory = await store.addMemory({ content: 'still works', tags: [], kind: 'note' });
+    const memory = await store.addMemory({
+      content: 'still works',
+      tags: [],
+      kind: 'note',
+    });
     assert.ok(memory.id);
     assert.equal(memory.content, 'still works');
 

@@ -70,9 +70,7 @@ export function buildProviderConfigSnapshot(
 ): ProviderConfigSnapshot {
   const effective = normalizeQuotaConfig(config.quota, config);
   const configured = config.quota?.routes?.length
-    ? stripDerivedQuotaFields(
-        normalizeQuotaConfig(config.quota, config),
-      )
+    ? stripDerivedQuotaFields(normalizeQuotaConfig(config.quota, config))
     : null;
 
   return {
@@ -116,7 +114,10 @@ export function applyProviderConfigUpdate(
   let quotaDirty = false;
   const quota: QuotaConfig = config.quota?.routes?.length
     ? { ...stripDerivedQuotaFields(normalizeQuotaConfig(config.quota, config)) }
-    : { reservePercent: 10, routes: normalizeQuotaConfig(undefined, config).routes! };
+    : {
+        reservePercent: 10,
+        routes: normalizeQuotaConfig(undefined, config).routes!,
+      };
 
   if (update.reservePercent !== undefined) {
     quota.reservePercent = update.reservePercent;

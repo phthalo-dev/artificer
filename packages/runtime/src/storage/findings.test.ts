@@ -31,7 +31,9 @@ test('createFinding and listFindings round-trip per workstream', async () => {
   const findings = await store.listFindings(ws.id);
   assert.equal(findings.length, 2);
   assert.ok(
-    findings.some((f) => f.role === 'planner' && f.file === 'requests/adapters.py'),
+    findings.some(
+      (f) => f.role === 'planner' && f.file === 'requests/adapters.py',
+    ),
   );
   assert.ok(findings.every((f) => f.id && f.createdAt));
 });
@@ -46,7 +48,11 @@ test('findings are scoped to their workstream', async () => {
   const store = await freshStore();
   const a = await store.createWorkstream({ title: 'a', goal: 'g' });
   const b = await store.createWorkstream({ title: 'b', goal: 'g' });
-  await store.createFinding({ workstreamId: a.id, role: 'planner', note: 'a-note' });
+  await store.createFinding({
+    workstreamId: a.id,
+    role: 'planner',
+    note: 'a-note',
+  });
   assert.equal((await store.listFindings(a.id)).length, 1);
   assert.equal((await store.listFindings(b.id)).length, 0);
 });

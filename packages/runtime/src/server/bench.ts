@@ -11,7 +11,8 @@ import type { RunNode, UsageSummary } from '../engine/cost.js';
 /** Where the harness writes results; overridable for non-default layouts. */
 export function benchResultsDir(): string {
   return (
-    process.env.BENCH_RESULTS_DIR ?? path.resolve(process.cwd(), 'bench/results')
+    process.env.BENCH_RESULTS_DIR ??
+    path.resolve(process.cwd(), 'bench/results')
   );
 }
 
@@ -217,7 +218,10 @@ function resolvedFor(
   return null;
 }
 
-async function hasTrajectory(dir: string, instanceId: string): Promise<boolean> {
+async function hasTrajectory(
+  dir: string,
+  instanceId: string,
+): Promise<boolean> {
   try {
     await fs.access(path.join(dir, 'runs', `${instanceId}.json`));
     return true;
@@ -281,7 +285,8 @@ export async function readBenchSuites(): Promise<BenchSuiteCatalogEntry[]> {
         description: suite.description,
         taskCount: suite.instanceIds?.length ?? 0,
         runCommand: `pnpm bench --suite tasks/${file}`,
-        evalCommand: kind === 'deepswe' ? 'pnpm bench:eval:deepswe' : 'pnpm bench:eval',
+        evalCommand:
+          kind === 'deepswe' ? 'pnpm bench:eval:deepswe' : 'pnpm bench:eval',
       });
     } catch {
       // skip invalid suite files
@@ -324,7 +329,9 @@ export async function readBenchOverview(): Promise<BenchOverview | null> {
     });
   }
 
-  const graded = Boolean(evalReport?.resolved_ids || evalReport?.unresolved_ids);
+  const graded = Boolean(
+    evalReport?.resolved_ids || evalReport?.unresolved_ids,
+  );
   const resolved = graded
     ? instances.filter((i) => i.resolved === true).length
     : null;
@@ -352,7 +359,8 @@ export async function readBenchOverview(): Promise<BenchOverview | null> {
       scorePct: Math.round((h.resolveRate ?? 0) * 100),
       kind: 'run' as const,
       resolved: null,
-      isCurrent: h.modelName === config?.modelName && h.suiteName === config?.suiteName,
+      isCurrent:
+        h.modelName === config?.modelName && h.suiteName === config?.suiteName,
     }));
 
   // Ensure the active run appears even if history hasn't been written yet.

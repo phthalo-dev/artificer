@@ -21,8 +21,7 @@ const DEFAULT_UNIT_WEIGHTS: Record<string, number> = {
 };
 
 function defaultWindowState(config: QuotaWindowConfig): QuotaWindowState {
-  const source =
-    config.unit === 'requests' ? 'inferred' : ('metered' as const);
+  const source = config.unit === 'requests' ? 'inferred' : ('metered' as const);
   return {
     config: {
       ...config,
@@ -33,13 +32,16 @@ function defaultWindowState(config: QuotaWindowConfig): QuotaWindowState {
     used: 0,
     usedByWorkstream: {},
     rollingEntries: [],
-    windowStart: config.period === 'fixed' ? new Date().toISOString() : undefined,
+    windowStart:
+      config.period === 'fixed' ? new Date().toISOString() : undefined,
     source,
   };
 }
 
 function startOfUtcDay(d: Date): Date {
-  return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+  return new Date(
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()),
+  );
 }
 
 function startOfUtcWeek(d: Date): Date {
@@ -55,7 +57,10 @@ function startOfUtcMonth(d: Date): Date {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
 }
 
-function nextPeriodStart(period: QuotaWindowConfig['period'], from: Date): Date {
+function nextPeriodStart(
+  period: QuotaWindowConfig['period'],
+  from: Date,
+): Date {
   switch (period) {
     case 'daily': {
       const next = startOfUtcDay(from);
@@ -79,10 +84,7 @@ function nextPeriodStart(period: QuotaWindowConfig['period'], from: Date): Date 
   }
 }
 
-function usedForScope(
-  window: QuotaWindowState,
-  workstreamId?: string,
-): number {
+function usedForScope(window: QuotaWindowState, workstreamId?: string): number {
   if (window.config.scope === 'workstream' && workstreamId) {
     return window.usedByWorkstream[workstreamId] ?? 0;
   }
@@ -124,7 +126,11 @@ export class QuotaLedger {
     persisted?: QuotaPersistedState,
   ) {
     this.config = config;
-    this.state = persisted ?? { accounts: {}, activeRoutes: {}, pausedWorkstreams: {} };
+    this.state = persisted ?? {
+      accounts: {},
+      activeRoutes: {},
+      pausedWorkstreams: {},
+    };
     this.ensureAccounts(config.accounts ?? []);
     this.refreshAllStatuses();
   }
@@ -181,14 +187,8 @@ export class QuotaLedger {
     void this.persist();
   }
 
-  estimateNextRun(
-    tier: ModelTier,
-    role?: string,
-    accountId?: string,
-  ): number {
-    const account = accountId
-      ? this.state.accounts[accountId]
-      : undefined;
+  estimateNextRun(tier: ModelTier, role?: string, accountId?: string): number {
+    const account = accountId ? this.state.accounts[accountId] : undefined;
     if (account?.config.mode === 'opaque' && role) {
       const weights = account.config.unitWeights ?? DEFAULT_UNIT_WEIGHTS;
       return weights[role] ?? 1;
@@ -347,7 +347,9 @@ export class QuotaLedger {
         if (earliest === undefined || t < earliest) earliest = t;
       }
     }
-    return earliest !== undefined ? new Date(earliest).toISOString() : undefined;
+    return earliest !== undefined
+      ? new Date(earliest).toISOString()
+      : undefined;
   }
 
   nextResetMs(): number | undefined {
@@ -379,7 +381,12 @@ export class QuotaLedger {
             const w = this.state.accounts[config.id].windows.find(
               (x) => x.config.id === windowConfig.id,
             );
-            if (w) w.config = { ...w.config, ...windowConfig, scope: windowConfig.scope ?? w.config.scope };
+            if (w)
+              w.config = {
+                ...w.config,
+                ...windowConfig,
+                scope: windowConfig.scope ?? w.config.scope,
+              };
           }
         }
         continue;
@@ -463,7 +470,10 @@ export class QuotaLedger {
       for (const window of account.windows) {
         if (window.config.period !== 'fixed') {
           const now = new Date();
-          window.resetsAt = nextPeriodStart(window.config.period, now).toISOString();
+          window.resetsAt = nextPeriodStart(
+            window.config.period,
+            now,
+          ).toISOString();
         }
       }
     }

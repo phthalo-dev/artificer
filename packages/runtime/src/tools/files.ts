@@ -29,7 +29,10 @@ export function createFileTools(ctx: ToolContext): ToolDef[] {
       inputSchema: {
         type: 'object',
         properties: {
-          path: { type: 'string', description: 'Workspace-relative file path.' },
+          path: {
+            type: 'string',
+            description: 'Workspace-relative file path.',
+          },
           offset: {
             type: 'number',
             description: '1-based line to start at (default 1).',
@@ -74,7 +77,10 @@ export function createFileTools(ctx: ToolContext): ToolDef[] {
       inputSchema: {
         type: 'object',
         properties: {
-          path: { type: 'string', description: 'Workspace-relative file path.' },
+          path: {
+            type: 'string',
+            description: 'Workspace-relative file path.',
+          },
           content: { type: 'string', description: 'Full file contents.' },
         },
         required: ['path', 'content'],

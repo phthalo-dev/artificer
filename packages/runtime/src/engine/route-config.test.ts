@@ -12,7 +12,11 @@ import {
   syncPrimaryRouteToRuntime,
   validateRoutes,
 } from './route-config.js';
-import type { ExecutionRouteConfig, QuotaConfig, QuotaWindowConfig } from './quota-types.js';
+import type {
+  ExecutionRouteConfig,
+  QuotaConfig,
+  QuotaWindowConfig,
+} from './quota-types.js';
 
 function runtime(overrides: Partial<RuntimeConfig> = {}): RuntimeConfig {
   return {
@@ -67,7 +71,8 @@ function window(id: string, limit = 100): QuotaWindowConfig {
 }
 
 function llmRoute(
-  overrides: Partial<ExecutionRouteConfig> & Pick<ExecutionRouteConfig, 'id' | 'accountId'>,
+  overrides: Partial<ExecutionRouteConfig> &
+    Pick<ExecutionRouteConfig, 'id' | 'accountId'>,
 ): ExecutionRouteConfig {
   return {
     mode: 'metered',
@@ -241,10 +246,7 @@ test('validateRoutes rejects duplicate ids and missing llm baseURL', () => {
   );
 
   assert.throws(
-    () =>
-      validateRoutes([
-        llmRoute({ id: 'ok', accountId: 'a', windows: [] }),
-      ]),
+    () => validateRoutes([llmRoute({ id: 'ok', accountId: 'a', windows: [] })]),
     /at least one quota window/,
   );
 });

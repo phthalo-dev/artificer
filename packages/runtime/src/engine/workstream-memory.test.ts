@@ -32,7 +32,13 @@ function makeWorkerRun(overrides: Partial<RunRecord> = {}): RunRecord {
     task: 'Implement the fix',
     status: 'done',
     toolCalls: [],
-    usage: { inputTokens: 10, outputTokens: 20, cacheCreationInputTokens: 0, cacheReadInputTokens: 0, requests: 1 },
+    usage: {
+      inputTokens: 10,
+      outputTokens: 20,
+      cacheCreationInputTokens: 0,
+      cacheReadInputTokens: 0,
+      requests: 1,
+    },
     output: 'Fixed the auth middleware. Changed token validation logic.',
     workstreamId: 'ws_test01',
     createdAt: '2026-01-01T01:00:00.000Z',
@@ -105,7 +111,10 @@ describe('WorkstreamMemoryService', () => {
     const ws = makeWorkstream();
     await svc.onCreated(ws);
 
-    await svc.onPlanWritten(ws, '## Steps\n1. Trace the bug\n2. Fix it\n3. Test');
+    await svc.onPlanWritten(
+      ws,
+      '## Steps\n1. Trace the bug\n2. Fix it\n3. Test',
+    );
 
     const memories = await identity.listMemories();
     assert.equal(memories.length, 1);
@@ -139,7 +148,10 @@ describe('WorkstreamMemoryService', () => {
   });
 
   it('appends outcome section and updates summary when workstream reaches terminal state', async () => {
-    const ws = makeWorkstream({ status: 'done', summary: 'Fixed mobile login bug by patching token validation.' });
+    const ws = makeWorkstream({
+      status: 'done',
+      summary: 'Fixed mobile login bug by patching token validation.',
+    });
     await svc.onCreated(ws);
 
     await svc.onTerminal(ws);
@@ -152,7 +164,10 @@ describe('WorkstreamMemoryService', () => {
   });
 
   it('records failed terminal state in memory', async () => {
-    const ws = makeWorkstream({ status: 'failed', summary: 'Could not reproduce in staging.' });
+    const ws = makeWorkstream({
+      status: 'failed',
+      summary: 'Could not reproduce in staging.',
+    });
     await svc.onCreated(ws);
     await svc.onTerminal(ws);
 
@@ -174,7 +189,9 @@ describe('WorkstreamMemoryService', () => {
     await svc.onPlanWritten(ws, 'Plan: step 1, step 2');
     await svc.onWorkerRunFinished(ws, makeWorkerRun());
     await svc.onReviewCompleted(ws, makeReview());
-    await svc.onTerminal(makeWorkstream({ status: 'done', summary: 'All done.' }));
+    await svc.onTerminal(
+      makeWorkstream({ status: 'done', summary: 'All done.' }),
+    );
 
     const memories = await identity.listMemories();
     assert.equal(memories.length, 1);

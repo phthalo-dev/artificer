@@ -15,10 +15,14 @@ describe('verifySlackSignature', () => {
         .update(`v0:${timestamp}:${body}`)
         .digest('hex');
 
-    const result = verifySlackSignature(secret, {
-      'x-slack-request-timestamp': timestamp,
-      'x-slack-signature': sig,
-    }, body);
+    const result = verifySlackSignature(
+      secret,
+      {
+        'x-slack-request-timestamp': timestamp,
+        'x-slack-signature': sig,
+      },
+      body,
+    );
 
     assert.equal(result, true);
   });
@@ -27,10 +31,14 @@ describe('verifySlackSignature', () => {
     const timestamp = String(Math.floor(Date.now() / 1000));
     const body = '{"text":"hello"}';
 
-    const result = verifySlackSignature(secret, {
-      'x-slack-request-timestamp': timestamp,
-      'x-slack-signature': 'v0=invalid',
-    }, body);
+    const result = verifySlackSignature(
+      secret,
+      {
+        'x-slack-request-timestamp': timestamp,
+        'x-slack-signature': 'v0=invalid',
+      },
+      body,
+    );
 
     assert.equal(result, false);
   });
@@ -44,10 +52,14 @@ describe('verifySlackSignature', () => {
         .update(`v0:${staleTimestamp}:${body}`)
         .digest('hex');
 
-    const result = verifySlackSignature(secret, {
-      'x-slack-request-timestamp': staleTimestamp,
-      'x-slack-signature': sig,
-    }, body);
+    const result = verifySlackSignature(
+      secret,
+      {
+        'x-slack-request-timestamp': staleTimestamp,
+        'x-slack-signature': sig,
+      },
+      body,
+    );
 
     assert.equal(result, false);
   });

@@ -7,11 +7,7 @@ import type {
 import type { ScheduleAction, ScheduleDefinition } from './engine/schedules.js';
 import type { Store } from './storage/store.js';
 import type { IdentityStore } from './storage/identity-store.js';
-import type {
-  RunRecord,
-  ToolInvocation,
-  Workstream,
-} from './storage/types.js';
+import type { RunRecord, ToolInvocation, Workstream } from './storage/types.js';
 
 export interface SpawnCallInput {
   role: string;
@@ -71,7 +67,9 @@ export interface EngineApi {
     id: string,
     enabled: boolean,
   ): Promise<{ ok: true } | { ok: false; error: string }>;
-  deleteSchedule(id: string): Promise<{ ok: true } | { ok: false; error: string }>;
+  deleteSchedule(
+    id: string,
+  ): Promise<{ ok: true } | { ok: false; error: string }>;
 }
 
 /** Everything a tool factory needs about the call it is serving. */

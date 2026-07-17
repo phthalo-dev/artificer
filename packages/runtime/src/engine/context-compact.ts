@@ -19,7 +19,9 @@ export const MAX_DIFF_CHARS = 8_000;
 
 /** Caps a git diff to a character budget for inclusion in call context. */
 export function clipDiff(diff: string, max = MAX_DIFF_CHARS): string {
-  return diff.length <= max ? diff : `${diff.slice(0, max)}\n… (diff truncated)`;
+  return diff.length <= max
+    ? diff
+    : `${diff.slice(0, max)}\n… (diff truncated)`;
 }
 
 function formatArgs(input: unknown): string {
@@ -60,18 +62,18 @@ export function summarizeToolResult(inv: ToolInvocation): string {
   return clip(output);
 }
 
-function formatInvocation(
-  inv: ToolInvocation,
-  compactable: boolean,
-): string {
+function formatInvocation(inv: ToolInvocation, compactable: boolean): string {
   const args = formatArgs(inv.input);
   if (compactable) {
     const spillHint =
       inv.spillPath ??
-      (inv.output.includes('read_tool_result') && inv.output.includes('spill_key=')
+      (inv.output.includes('read_tool_result') &&
+      inv.output.includes('spill_key=')
         ? inv.output.match(/spill_key="([^"]+)"/)?.[1]
         : undefined);
-    const suffix = spillHint ? ` → ${spillHint}` : ` → ${summarizeToolResult(inv)}`;
+    const suffix = spillHint
+      ? ` → ${spillHint}`
+      : ` → ${summarizeToolResult(inv)}`;
     return `${inv.name}(${args}) @ ${inv.at}${suffix}`;
   }
   return `${inv.name}(${args}) @ ${inv.at} → ${clip(inv.output)}`;
@@ -81,9 +83,7 @@ function completedRuns(runs: RunRecord[], excludeRunId?: string): RunRecord[] {
   return runs
     .filter(
       (r) =>
-        r.status === 'done' &&
-        r.id !== excludeRunId &&
-        r.toolCalls.length > 0,
+        r.status === 'done' && r.id !== excludeRunId && r.toolCalls.length > 0,
     )
     .sort(
       (a, b) =>

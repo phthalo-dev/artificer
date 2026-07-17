@@ -37,7 +37,10 @@ test('record_finding stores a finding tagged with the run role and workstream', 
   const record = tools.find((t) => t.name === 'record_finding');
   assert.ok(record, 'record_finding tool is present');
 
-  const out = await record.handler({ note: 'root cause in a.py', file: 'a.py' });
+  const out = await record.handler({
+    note: 'root cause in a.py',
+    file: 'a.py',
+  });
   assert.match(out, /Recorded finding/);
 
   const findings = await store.listFindings(ws.id);

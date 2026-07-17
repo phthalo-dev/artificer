@@ -22,7 +22,9 @@ test('isInsufficientBalanceError detects APICallError 402', () => {
 
 test('isInsufficientBalanceError detects message text', () => {
   assert.equal(
-    isInsufficientBalanceError(new Error('AI_APICallError: Insufficient Balance')),
+    isInsufficientBalanceError(
+      new Error('AI_APICallError: Insufficient Balance'),
+    ),
     true,
   );
   assert.equal(
@@ -34,7 +36,10 @@ test('isInsufficientBalanceError detects message text', () => {
 });
 
 test('isInsufficientBalanceError ignores unrelated failures', () => {
-  assert.equal(isInsufficientBalanceError(new Error('rate limit exceeded')), false);
+  assert.equal(
+    isInsufficientBalanceError(new Error('rate limit exceeded')),
+    false,
+  );
   assert.equal(
     isInsufficientBalanceError(
       new APICallError({
@@ -73,10 +78,7 @@ test('isQuotaExhaustedError detects 429 but not balance errors', () => {
     ),
     true,
   );
-  assert.equal(
-    isQuotaExhaustedError(new Error('rate limit exceeded')),
-    true,
-  );
+  assert.equal(isQuotaExhaustedError(new Error('rate limit exceeded')), true);
   assert.equal(
     isQuotaExhaustedError(new Error('AI_APICallError: Insufficient Balance')),
     false,

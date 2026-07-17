@@ -37,7 +37,9 @@ export interface ScheduleFields {
 export function serializeSchedule(definition: ScheduleDefinition): string {
   const lines = [
     `name: ${definition.name}`,
-    ...(definition.everyMs === undefined ? [] : [`every: ${definition.everyMs}ms`]),
+    ...(definition.everyMs === undefined
+      ? []
+      : [`every: ${definition.everyMs}ms`]),
     ...(definition.cron === undefined ? [] : [`cron: ${definition.cron}`]),
     `timezone: ${definition.timezone}`,
     `action: ${definition.action}`,
@@ -73,7 +75,12 @@ const WEEKDAYS: Record<string, number> = {
   Sat: 6,
 };
 
-function cronFieldMatches(field: string, value: number, min: number, max: number): boolean {
+function cronFieldMatches(
+  field: string,
+  value: number,
+  min: number,
+  max: number,
+): boolean {
   if (!field) {
     return false;
   }
@@ -120,7 +127,11 @@ function cronFieldMatches(field: string, value: number, min: number, max: number
   return matches;
 }
 
-export function cronMatchesMinute(cron: string, date: Date, timeZone: string): boolean {
+export function cronMatchesMinute(
+  cron: string,
+  date: Date,
+  timeZone: string,
+): boolean {
   const fields = cron.trim().split(/\s+/);
   if (fields.length !== 5 || Number.isNaN(date.getTime())) {
     return false;
@@ -187,11 +198,17 @@ export function isScheduleDue({
     return nowMs >= dueAt;
   }
 
-  if (!schedule.cron || !cronMatchesMinute(schedule.cron, new Date(nowMs), schedule.timezone)) {
+  if (
+    !schedule.cron ||
+    !cronMatchesMinute(schedule.cron, new Date(nowMs), schedule.timezone)
+  ) {
     return false;
   }
 
-  return lastFiredAt === null || Math.floor(lastFiredAt / 60_000) !== Math.floor(nowMs / 60_000);
+  return (
+    lastFiredAt === null ||
+    Math.floor(lastFiredAt / 60_000) !== Math.floor(nowMs / 60_000)
+  );
 }
 
 export function validateScheduleFields(

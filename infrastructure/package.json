@@ -12,7 +12,9 @@
     "cdk:diff": "cdk diff --all",
     "cdk:synth": "cdk synth --all",
     "deploy:personal": "bash scripts/deploy-personal.sh",
-    "sync:runtime-env": "bash scripts/sync-runtime-env.sh"
+    "sync:runtime-env": "bash scripts/sync-runtime-env.sh",
+    "type-check": "tsc --noEmit",
+    "lint": "prettier --check \"bin/**/*.ts\" \"lib/**/*.ts\" \"lambda/**/*.ts\""
   },
   "devDependencies": {
     "@types/node": "^20.11.5",

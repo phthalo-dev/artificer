@@ -19,7 +19,8 @@ export function createMessageHistoryTools(ctx: ToolContext): ToolDef[] {
         properties: {
           search: {
             type: 'string',
-            description: 'Case-insensitive substring to search for in message content.',
+            description:
+              'Case-insensitive substring to search for in message content.',
           },
           direction: {
             type: 'string',
@@ -28,19 +29,23 @@ export function createMessageHistoryTools(ctx: ToolContext): ToolDef[] {
           },
           after: {
             type: 'string',
-            description: 'ISO 8601 timestamp — only return messages created after this time.',
+            description:
+              'ISO 8601 timestamp — only return messages created after this time.',
           },
           before: {
             type: 'string',
-            description: 'ISO 8601 timestamp — only return messages created before this time.',
+            description:
+              'ISO 8601 timestamp — only return messages created before this time.',
           },
           offset: {
             type: 'number',
-            description: 'Skip this many messages from the end of the filtered list (for paging backwards). Default 0.',
+            description:
+              'Skip this many messages from the end of the filtered list (for paging backwards). Default 0.',
           },
           limit: {
             type: 'number',
-            description: 'Max number of messages to return (default 20, max 50).',
+            description:
+              'Max number of messages to return (default 20, max 50).',
           },
         },
       },
@@ -49,12 +54,15 @@ export function createMessageHistoryTools(ctx: ToolContext): ToolDef[] {
           typeof input.limit === 'number' ? input.limit : 20,
           50,
         );
-        const offset = typeof input.offset === 'number' ? Math.max(0, input.offset) : 0;
+        const offset =
+          typeof input.offset === 'number' ? Math.max(0, input.offset) : 0;
         const direction =
           input.direction === 'inbound' || input.direction === 'outbound'
             ? input.direction
             : 'all';
-        const search = input.search ? String(input.search).toLowerCase() : undefined;
+        const search = input.search
+          ? String(input.search).toLowerCase()
+          : undefined;
         const after = input.after ? String(input.after) : undefined;
         const before = input.before ? String(input.before) : undefined;
 
@@ -70,12 +78,15 @@ export function createMessageHistoryTools(ctx: ToolContext): ToolDef[] {
           messages = messages.filter((m) => m.createdAt < before);
         }
         if (search) {
-          messages = messages.filter((m) => m.content.toLowerCase().includes(search));
+          messages = messages.filter((m) =>
+            m.content.toLowerCase().includes(search),
+          );
         }
 
         // Page from the end: drop `offset` from the tail, then take `limit`.
         const end = messages.length - offset;
-        const page = end <= 0 ? [] : messages.slice(Math.max(0, end - limit), end);
+        const page =
+          end <= 0 ? [] : messages.slice(Math.max(0, end - limit), end);
 
         if (page.length === 0) return '(no messages)';
 
@@ -157,7 +168,9 @@ export function createCommunicatorTools(ctx: ToolContext): ToolDef[] {
         let title = String(input.title);
         let goal = String(input.goal);
         let repoUrl = input.repoUrl ? String(input.repoUrl) : undefined;
-        let baseCommit = input.baseCommit ? String(input.baseCommit) : undefined;
+        let baseCommit = input.baseCommit
+          ? String(input.baseCommit)
+          : undefined;
 
         const header = parseWorkstreamHeader(`${goal}\n\n${run.task}`);
         if (header) {
@@ -184,7 +197,10 @@ export function createCommunicatorTools(ctx: ToolContext): ToolDef[] {
       inputSchema: {
         type: 'object',
         properties: {
-          workstreamId: { type: 'string', description: 'Target workstream id.' },
+          workstreamId: {
+            type: 'string',
+            description: 'Target workstream id.',
+          },
           note: { type: 'string', description: 'The note / instruction.' },
         },
         required: ['workstreamId', 'note'],
@@ -233,10 +249,7 @@ export function createCommunicatorTools(ctx: ToolContext): ToolDef[] {
       },
       handler: async (input) => {
         const material = String(input.material);
-        if (
-          isRepoTaskMessage(run.task) ||
-          looksLikeRepoSource(material)
-        ) {
+        if (isRepoTaskMessage(run.task) || looksLikeRepoSource(material)) {
           return 'Error: Use start_workstream for repo tasks; learn is for reference material only.';
         }
         const focus = input.note ? `\nFocus: ${String(input.note)}` : '';

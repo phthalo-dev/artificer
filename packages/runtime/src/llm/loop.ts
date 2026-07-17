@@ -18,7 +18,11 @@ export interface ToolResultSpillContext {
   layout: Layout;
   runId: string;
   config: ToolResultConfig;
-  onSpill?: (info: { tool: string; path: string; previewChars: number }) => void;
+  onSpill?: (info: {
+    tool: string;
+    path: string;
+    previewChars: number;
+  }) => void;
   getRunCharTotal: () => number;
   addRunChars: (n: number) => void;
 }
@@ -42,8 +46,11 @@ export interface RunToolLoopOptions {
 
 /** Cache-creation tokens live in provider metadata, not the normalized usage. */
 function cacheCreationTokens(metadata: unknown): number {
-  const anthropic = (metadata as { anthropic?: { cacheCreationInputTokens?: number } } | undefined)
-    ?.anthropic;
+  const anthropic = (
+    metadata as
+      | { anthropic?: { cacheCreationInputTokens?: number } }
+      | undefined
+  )?.anthropic;
   return anthropic?.cacheCreationInputTokens ?? 0;
 }
 
@@ -102,7 +109,9 @@ export async function runToolLoop(
             });
             output = budget.output;
             spillPath = budget.spillPath;
-            toolResultSpill.addRunChars(budget.runTotalChars - toolResultSpill.getRunCharTotal());
+            toolResultSpill.addRunChars(
+              budget.runTotalChars - toolResultSpill.getRunCharTotal(),
+            );
             if (spillPath) {
               toolResultSpill.onSpill?.({
                 tool: def.name,
@@ -168,7 +177,8 @@ export async function runToolLoop(
         accUsage.inputTokens += Math.max(0, (u.inputTokens ?? 0) - cr);
         accUsage.outputTokens += u.outputTokens ?? 0;
         accUsage.cacheReadInputTokens += cr;
-        accUsage.cacheCreationInputTokens += cacheCreationTokens(providerMetadata);
+        accUsage.cacheCreationInputTokens +=
+          cacheCreationTokens(providerMetadata);
         accUsage.requests += 1;
       },
     });
@@ -183,12 +193,17 @@ export async function runToolLoop(
 
   const usage = emptyUsage();
   const cacheRead = result.totalUsage.cachedInputTokens ?? 0;
-  usage.inputTokens = Math.max(0, (result.totalUsage.inputTokens ?? 0) - cacheRead);
+  usage.inputTokens = Math.max(
+    0,
+    (result.totalUsage.inputTokens ?? 0) - cacheRead,
+  );
   usage.outputTokens = result.totalUsage.outputTokens ?? 0;
   usage.cacheReadInputTokens = cacheRead;
   usage.requests = result.steps.length;
   for (const step of result.steps) {
-    usage.cacheCreationInputTokens += cacheCreationTokens(step.providerMetadata);
+    usage.cacheCreationInputTokens += cacheCreationTokens(
+      step.providerMetadata,
+    );
   }
 
   const truncated = result.finishReason === 'tool-calls';

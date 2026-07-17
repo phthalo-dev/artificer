@@ -44,8 +44,7 @@ export async function plannerSpawnBlocked(
   const runs = await store.listRunsForWorkstream(workstreamId);
   const activePlanner = runs.some(
     (r) =>
-      r.role === 'planner' &&
-      (r.status === 'queued' || r.status === 'running'),
+      r.role === 'planner' && (r.status === 'queued' || r.status === 'running'),
   );
   if (activePlanner) {
     return (
@@ -67,13 +66,14 @@ export async function plannerSpawnBlocked(
     );
   }
   if (latest.approved) {
-    return (
-      'The plan is already approved. Spawn worker calls to implement it, not another planner.'
-    );
+    return 'The plan is already approved. Spawn worker calls to implement it, not another planner.';
   }
 
   const lastDone = lastDoneRun(runs);
-  if (lastDone?.role === 'planner' && !hasSuccessfulTool(lastDone, 'write_plan')) {
+  if (
+    lastDone?.role === 'planner' &&
+    !hasSuccessfulTool(lastDone, 'write_plan')
+  ) {
     return (
       'The previous planner finished without calling write_plan. Re-spawn ONE planner ' +
       'instructed to revise the plan per the rejection notes and call write_plan — ' +
@@ -104,9 +104,7 @@ export async function reviewerSpawnBlocked(
       (r.status === 'queued' || r.status === 'running'),
   );
   if (activeReviewer) {
-    return (
-      'A reviewer call is already queued or running. Wait for it to finish before spawning another.'
-    );
+    return 'A reviewer call is already queued or running. Wait for it to finish before spawning another.';
   }
 
   if (stage === 'plan') {
@@ -116,7 +114,11 @@ export async function reviewerSpawnBlocked(
     }
 
     const latest = latestPlanReview(reviews);
-    if (latest && !latest.approved && !revisingPlannerAfterReview(runs, latest)) {
+    if (
+      latest &&
+      !latest.approved &&
+      !revisingPlannerAfterReview(runs, latest)
+    ) {
       return (
         'The plan review was rejected. Spawn a planner to revise the plan and call write_plan ' +
         'before spawning another plan reviewer.'

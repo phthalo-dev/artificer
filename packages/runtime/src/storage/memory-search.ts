@@ -14,8 +14,28 @@ export interface RankedEntry {
 }
 
 const STOPWORDS = new Set([
-  'the', 'a', 'an', 'of', 'to', 'and', 'or', 'in', 'on', 'for', 'is', 'it',
-  'this', 'that', 'with', 'as', 'at', 'by', 'be', 'we', 'our', 'how',
+  'the',
+  'a',
+  'an',
+  'of',
+  'to',
+  'and',
+  'or',
+  'in',
+  'on',
+  'for',
+  'is',
+  'it',
+  'this',
+  'that',
+  'with',
+  'as',
+  'at',
+  'by',
+  'be',
+  'we',
+  'our',
+  'how',
 ]);
 
 /** Lowercase, split on non-alphanumerics, drop stopwords and 1-char tokens. */

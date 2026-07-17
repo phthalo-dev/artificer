@@ -64,7 +64,9 @@ export function quotaRetryAfterMs(error: unknown): number | undefined {
   for (const text of texts) {
     const sec = text.match(/retry[- ]after[:\s]+(\d+)/i);
     if (sec) return Number(sec[1]) * 1000;
-    const resets = text.match(/resets?\s+in\s+(\d+)\s*(m|min|minutes?|h|hours?|s|sec)/i);
+    const resets = text.match(
+      /resets?\s+in\s+(\d+)\s*(m|min|minutes?|h|hours?|s|sec)/i,
+    );
     if (resets) {
       const n = Number(resets[1]);
       const unit = resets[2].toLowerCase();
@@ -88,9 +90,7 @@ export function quotaPausedUserMessage(
   const workstream = opts.workstreamTitle
     ? ` Workstream "${opts.workstreamTitle}" is paused until quota resets.`
     : '';
-  const when = opts.resumesAt
-    ? ` Resumes around ${opts.resumesAt}.`
-    : '';
+  const when = opts.resumesAt ? ` Resumes around ${opts.resumesAt}.` : '';
   return (
     `I paused work because a usage quota was reached.${when}${workstream} ` +
     `I'll resume automatically when the window opens.`

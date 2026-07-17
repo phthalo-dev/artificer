@@ -81,7 +81,11 @@ test('a CI conclusion change from the stored state sends one CI-failed message',
     notificationsSince: '2024-01-01T00:00:00.000Z',
     seenNotificationIds: [],
     prs: {
-      [OPEN_PR.url]: { checksConclusion: 'SUCCESS', reviewDecision: undefined, lastCommentId: undefined },
+      [OPEN_PR.url]: {
+        checksConclusion: 'SUCCESS',
+        reviewDecision: undefined,
+        lastCommentId: undefined,
+      },
     },
   };
 
@@ -117,7 +121,11 @@ test('a new notification sends one mention message and is recorded as seen', asy
     prs: {},
   };
 
-  const state = await runGithubWatchCycle({ runGh, state: initialState, receiveMessage });
+  const state = await runGithubWatchCycle({
+    runGh,
+    state: initialState,
+    receiveMessage,
+  });
 
   assert.equal(messages.length, 1);
   assert.match(messages[0], /\[GitHub\] You were mentioned/);

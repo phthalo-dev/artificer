@@ -232,7 +232,10 @@
         "roles": { "type": "array", "items": { "type": "string" } },
         "executor": {
           "oneOf": [
-            { "type": "string", "enum": ["llm", "cursor-agent", "claude-code"] },
+            {
+              "type": "string",
+              "enum": ["llm", "cursor-agent", "claude-code"]
+            },
             { "type": "object" }
           ]
         },

@@ -35,7 +35,15 @@ export type ExecutorConfig =
   | 'claude-code'
   | { type: 'cursor-agent'; model?: string }
   | { type: 'claude-code'; model?: string }
-  | { type: 'cli'; command: string; args: string[]; promptMode: 'stdin' | 'arg'; model?: string; timeout?: number; mcpConfigPath?: string };
+  | {
+      type: 'cli';
+      command: string;
+      args: string[];
+      promptMode: 'stdin' | 'arg';
+      model?: string;
+      timeout?: number;
+      mcpConfigPath?: string;
+    };
 
 export interface ArtificerConfig {
   name: string;
@@ -82,9 +90,14 @@ export interface ChannelOutput {
 export interface ChannelDefinition {
   name: string;
   description: string;
-  verify?: (headers: Record<string, string>, body: string) => Promise<boolean> | boolean;
+  verify?: (
+    headers: Record<string, string>,
+    body: string,
+  ) => Promise<boolean> | boolean;
   receive: (payload: Record<string, unknown>) => Promise<ChannelMessage>;
-  format: (output: ChannelOutput) => Promise<Record<string, unknown>> | Record<string, unknown>;
+  format: (
+    output: ChannelOutput,
+  ) => Promise<Record<string, unknown>> | Record<string, unknown>;
 }
 
 export interface ArtificerChannel {

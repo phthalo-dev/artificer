@@ -69,7 +69,10 @@ export class IdentityGitSync extends IdentityStore {
     return this.enqueue(() => this.doCommitAndPush(action));
   }
 
-  private async doCommitAndPush(action: string, paths?: string[]): Promise<void> {
+  private async doCommitAndPush(
+    action: string,
+    paths?: string[],
+  ): Promise<void> {
     const committed = await this.commitDirty(action, paths);
     if (!committed) return;
 
@@ -80,7 +83,11 @@ export class IdentityGitSync extends IdentityStore {
     const remote = this.syncConfig.remote ?? 'origin';
     let branch = this.syncConfig.branch;
     if (!branch) {
-      const { stdout: branchOut } = await exec('git', ['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD'], { env });
+      const { stdout: branchOut } = await exec(
+        'git',
+        ['-C', dir, 'rev-parse', '--abbrev-ref', 'HEAD'],
+        { env },
+      );
       branch = branchOut.trim();
       if (!branch || branch === 'HEAD') branch = undefined;
     }
@@ -92,7 +99,10 @@ export class IdentityGitSync extends IdentityStore {
     } catch (err) {
       const msg = err instanceof Error ? err.message : String(err);
       // Remote branch doesn't exist yet (first push) — safe to proceed
-      if (msg.includes('couldn\'t find remote ref') || msg.includes('no such ref')) {
+      if (
+        msg.includes("couldn't find remote ref") ||
+        msg.includes('no such ref')
+      ) {
         // fall through to push
       } else {
         console.error('[identity-git-sync] git pull --rebase failed:', err);
@@ -109,7 +119,10 @@ export class IdentityGitSync extends IdentityStore {
     }
   }
 
-  private async commitDirty(action: string, commitPaths?: string[]): Promise<boolean> {
+  private async commitDirty(
+    action: string,
+    commitPaths?: string[],
+  ): Promise<boolean> {
     if (!this.syncConfig.autoCommit) return false;
 
     const prefix = this.syncConfig.commitPrefix ?? 'memory:';
@@ -134,14 +147,19 @@ export class IdentityGitSync extends IdentityStore {
     } catch (err) {
       // "nothing to commit" exits with code 1 — not a real error
       const msg = err instanceof Error ? err.message : String(err);
-      if (!msg.includes('nothing to commit') && !msg.includes('nothing added')) {
+      if (
+        !msg.includes('nothing to commit') &&
+        !msg.includes('nothing added')
+      ) {
         console.error('[identity-git-sync] git commit failed:', err);
       }
       return false;
     }
   }
 
-  private async doPullFromRemote(): Promise<'updated' | 'unchanged' | 'conflict' | 'error'> {
+  private async doPullFromRemote(): Promise<
+    'updated' | 'unchanged' | 'conflict' | 'error'
+  > {
     await this.commitDirty('sync schedules');
 
     const dir = this.layout.root;
@@ -157,7 +175,8 @@ export class IdentityGitSync extends IdentityStore {
       );
       if (!branch) {
         const currentBranch = stdout.trim();
-        branch = currentBranch && currentBranch !== 'HEAD' ? currentBranch : undefined;
+        branch =
+          currentBranch && currentBranch !== 'HEAD' ? currentBranch : undefined;
       }
       const { stdout: before } = await exec(
         'git',
@@ -176,7 +195,9 @@ export class IdentityGitSync extends IdentityStore {
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (
-        /CONFLICT|could not apply|Resolve all conflicts|fix conflicts/i.test(message)
+        /CONFLICT|could not apply|Resolve all conflicts|fix conflicts/i.test(
+          message,
+        )
       ) {
         try {
           await exec('git', ['-C', dir, 'rebase', '--abort'], { env });

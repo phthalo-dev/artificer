@@ -180,7 +180,11 @@ export function nextWorkstreamAction(f: WorkstreamFacts): WorkstreamAction {
   // recent worker output: if a fix worker committed its changes (making the
   // working tree clean) we must NOT fall into this branch, because
   // workSinceLastReview > 0 means there is work pending re-review.
-  if (!f.patchPresent && f.workSinceLastReview === 0 && f.lastReviewApproved !== false) {
+  if (
+    !f.patchPresent &&
+    f.workSinceLastReview === 0 &&
+    f.lastReviewApproved !== false
+  ) {
     return {
       kind: 'dispatch',
       role: 'worker',

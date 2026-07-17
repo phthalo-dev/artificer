@@ -69,7 +69,9 @@ export function resolveSpillPath(
   const dir = path.resolve(layout.toolResultsDir(runId));
   const resolved = path.resolve(dir, normalized);
   if (resolved !== dir && !resolved.startsWith(dir + path.sep)) {
-    throw new Error(`Spill key "${spillKey}" is outside tool-results directory.`);
+    throw new Error(
+      `Spill key "${spillKey}" is outside tool-results directory.`,
+    );
   }
   return resolved;
 }
@@ -87,9 +89,7 @@ export async function readSpilledResult(
   const start = Math.max(0, offset);
   const end = limit !== undefined ? start + limit : lines.length;
   const slice = lines.slice(start, end);
-  return slice
-    .map((line, i) => `${start + i + 1}|${line}`)
-    .join('\n');
+  return slice.map((line, i) => `${start + i + 1}|${line}`).join('\n');
 }
 
 export interface ApplyResultBudgetInput {

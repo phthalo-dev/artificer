@@ -35,15 +35,28 @@ test('PLAN_TASK covers both bug-fix and new-feature/new-package cases', () => {
   // The planner timed out on P3.25 (a greenfield package) because PLAN_TASK
   // only described "find the root-cause file" — a framing that has no natural
   // stopping point when the task is to create something new.
-  assert.match(PLAN_TASK, /bug fix|existing code/i, 'should still guide bug-fix work');
-  assert.match(PLAN_TASK, /new feature|new package/i, 'should also guide new-feature/package work');
+  assert.match(
+    PLAN_TASK,
+    /bug fix|existing code/i,
+    'should still guide bug-fix work',
+  );
+  assert.match(
+    PLAN_TASK,
+    /new feature|new package/i,
+    'should also guide new-feature/package work',
+  );
 });
 
 test('review is forced after 3 worker runs without done (reduced from 5)', () => {
   // MAX_WORKER_RUNS_BEFORE_REVIEW was lowered from 5 to 3 to limit aimless
   // re-runs when workers get stuck in analysis loops without reporting done.
   const a = nextWorkstreamAction(
-    facts({ patchPresent: true, reviewCount: 0, workSinceLastReview: 3, lastWorkerDone: false }),
+    facts({
+      patchPresent: true,
+      reviewCount: 0,
+      workSinceLastReview: 3,
+      lastWorkerDone: false,
+    }),
   );
   assert.equal((a as { role: string }).role, 'reviewer');
 });
@@ -54,12 +67,19 @@ test('IMPLEMENT_TASK explicitly prohibits git remote operations and PR creation'
   // planner-generated plans that include PR creation steps cause implement
   // workers to attempt gh pr create before the branch is pushed, which fails
   // and sends the workstream into a rejected-review loop.
-  assert.match(IMPLEMENT_TASK, /do not push|do not.*pull request|no git remote/i);
+  assert.match(
+    IMPLEMENT_TASK,
+    /do not push|do not.*pull request|no git remote/i,
+  );
 });
 
 test('planner that keeps finishing without a plan falls through to a direct worker', () => {
   const a = nextWorkstreamAction(
-    facts({ planWritten: false, plannerRunsWithoutPlan: 3, patchPresent: false }),
+    facts({
+      planWritten: false,
+      plannerRunsWithoutPlan: 3,
+      patchPresent: false,
+    }),
   );
   assert.equal(a.kind, 'dispatch');
   assert.equal((a as { role: string }).role, 'worker');
@@ -89,13 +109,20 @@ test('a single failure does not block prematurely', () => {
 
 test('run cap takes precedence over everything', () => {
   const a = nextWorkstreamAction(
-    facts({ totalRuns: 40, maxRuns: 40, patchPresent: true, lastReviewApproved: true }),
+    facts({
+      totalRuns: 40,
+      maxRuns: 40,
+      patchPresent: true,
+      lastReviewApproved: true,
+    }),
   );
   assert.equal(a.kind, 'blocked');
 });
 
 test('repo task with no local clone -> setup', () => {
-  const a = nextWorkstreamAction(facts({ repoReady: false, planWritten: false }));
+  const a = nextWorkstreamAction(
+    facts({ repoReady: false, planWritten: false }),
+  );
   assert.deepEqual(a, { kind: 'setup' });
 });
 
@@ -119,14 +146,24 @@ test('plan written but no patch -> worker implements', () => {
 
 test('patch present, worker reports done -> reviewer', () => {
   const a = nextWorkstreamAction(
-    facts({ patchPresent: true, reviewCount: 0, workSinceLastReview: 1, lastWorkerDone: true }),
+    facts({
+      patchPresent: true,
+      reviewCount: 0,
+      workSinceLastReview: 1,
+      lastWorkerDone: true,
+    }),
   );
   assert.equal((a as { role: string }).role, 'reviewer');
 });
 
 test('patch present but worker still working (not done, under cap) -> keep implementing', () => {
   const a = nextWorkstreamAction(
-    facts({ patchPresent: true, reviewCount: 0, workSinceLastReview: 2, lastWorkerDone: false }),
+    facts({
+      patchPresent: true,
+      reviewCount: 0,
+      workSinceLastReview: 2,
+      lastWorkerDone: false,
+    }),
   );
   assert.equal((a as { role: string }).role, 'worker');
 });
@@ -172,7 +209,13 @@ test('worker never reports done -> review forced at the per-review cap', () => {
 
 test('patch present and approved with repo -> submit PR before done', () => {
   const a = nextWorkstreamAction(
-    facts({ patchPresent: true, reviewCount: 1, lastReviewApproved: true, hasRepoUrl: true, prSubmitted: false }),
+    facts({
+      patchPresent: true,
+      reviewCount: 1,
+      lastReviewApproved: true,
+      hasRepoUrl: true,
+      prSubmitted: false,
+    }),
   );
   assert.equal(a.kind, 'dispatch');
   assert.equal((a as { role: string }).role, 'worker');
@@ -181,14 +224,24 @@ test('patch present and approved with repo -> submit PR before done', () => {
 
 test('patch present, approved, and PR already submitted -> done', () => {
   const a = nextWorkstreamAction(
-    facts({ patchPresent: true, reviewCount: 1, lastReviewApproved: true, prSubmitted: true }),
+    facts({
+      patchPresent: true,
+      reviewCount: 1,
+      lastReviewApproved: true,
+      prSubmitted: true,
+    }),
   );
   assert.deepEqual(a, { kind: 'done' });
 });
 
 test('non-repo task approved -> done without PR step', () => {
   const a = nextWorkstreamAction(
-    facts({ patchPresent: true, reviewCount: 1, lastReviewApproved: true, hasRepoUrl: false }),
+    facts({
+      patchPresent: true,
+      reviewCount: 1,
+      lastReviewApproved: true,
+      hasRepoUrl: false,
+    }),
   );
   assert.deepEqual(a, { kind: 'done' });
 });
@@ -235,7 +288,12 @@ test('approved review + clean working tree (committed) + PR submitted -> done (n
   // becomes clean (patchPresent = false). The machine must not re-enter the
   // implement loop — it should see the approval and return done.
   const a = nextWorkstreamAction(
-    facts({ patchPresent: false, reviewCount: 1, lastReviewApproved: true, prSubmitted: true }),
+    facts({
+      patchPresent: false,
+      reviewCount: 1,
+      lastReviewApproved: true,
+      prSubmitted: true,
+    }),
   );
   assert.deepEqual(a, { kind: 'done' });
 });
@@ -244,7 +302,12 @@ test('approved review + clean working tree + PR not yet submitted -> re-dispatch
   // Commit happened but push failed; the machine should retry the submit
   // worker rather than falling into an implement loop.
   const a = nextWorkstreamAction(
-    facts({ patchPresent: false, reviewCount: 1, lastReviewApproved: true, prSubmitted: false }),
+    facts({
+      patchPresent: false,
+      reviewCount: 1,
+      lastReviewApproved: true,
+      prSubmitted: false,
+    }),
   );
   assert.equal(a.kind, 'dispatch');
   assert.equal((a as { role: string }).role, 'worker');
@@ -300,12 +363,27 @@ test('full happy path converges to done without an orchestrator', () => {
   f = facts({ patchPresent: false });
   assert.equal((nextWorkstreamAction(f) as { role: string }).role, 'worker');
 
-  f = facts({ patchPresent: true, reviewCount: 0, workSinceLastReview: 1, lastWorkerDone: true });
+  f = facts({
+    patchPresent: true,
+    reviewCount: 0,
+    workSinceLastReview: 1,
+    lastWorkerDone: true,
+  });
   assert.equal((nextWorkstreamAction(f) as { role: string }).role, 'reviewer');
 
-  f = facts({ patchPresent: true, reviewCount: 1, lastReviewApproved: true, prSubmitted: false });
+  f = facts({
+    patchPresent: true,
+    reviewCount: 1,
+    lastReviewApproved: true,
+    prSubmitted: false,
+  });
   assert.equal((nextWorkstreamAction(f) as { role: string }).role, 'worker');
 
-  f = facts({ patchPresent: true, reviewCount: 1, lastReviewApproved: true, prSubmitted: true });
+  f = facts({
+    patchPresent: true,
+    reviewCount: 1,
+    lastReviewApproved: true,
+    prSubmitted: true,
+  });
   assert.equal(nextWorkstreamAction(f).kind, 'done');
 });

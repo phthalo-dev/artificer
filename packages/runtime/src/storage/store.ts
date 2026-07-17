@@ -1,13 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { emptyGithubWatchState, type GithubWatchState } from '../engine/github-watch.js';
-import { emptyScheduleRuntimeState, type ScheduleRuntimeState } from '../engine/schedules.js';
-import { Layout } from './layout.js';
 import {
-  rankMemories,
-  type MemoryIndexEntry,
-} from './memory-search.js';
+  emptyGithubWatchState,
+  type GithubWatchState,
+} from '../engine/github-watch.js';
+import {
+  emptyScheduleRuntimeState,
+  type ScheduleRuntimeState,
+} from '../engine/schedules.js';
+import { Layout } from './layout.js';
+import { rankMemories, type MemoryIndexEntry } from './memory-search.js';
 import {
   emptyUsage,
   type Finding,
@@ -46,9 +49,7 @@ async function writeJsonAtomic(file: string, data: unknown): Promise<void> {
 
 async function writeJson(file: string, data: unknown): Promise<void> {
   const prev = writeChains.get(file) ?? Promise.resolve();
-  const next = prev
-    .catch(() => {})
-    .then(() => writeJsonAtomic(file, data));
+  const next = prev.catch(() => {}).then(() => writeJsonAtomic(file, data));
   writeChains.set(file, next);
   await next;
 }
@@ -116,9 +117,11 @@ function normalizeFinding(
   r: Record<string, unknown>,
 ): Finding {
   return {
-    id: (r.id as string | undefined) ?? String(r.note ?? r.summary ?? '').slice(0, 12),
+    id:
+      (r.id as string | undefined) ??
+      String(r.note ?? r.summary ?? '').slice(0, 12),
     workstreamId,
-    role: ((r.role ?? r.author ?? 'worker') as string) as Finding['role'],
+    role: (r.role ?? r.author ?? 'worker') as string as Finding['role'],
     file: r.file as string | undefined,
     note: (r.note ?? r.summary ?? r.content ?? '') as string,
     createdAt: (r.createdAt as string | undefined) ?? '',
@@ -167,7 +170,9 @@ export class Store {
 
   async createWorkstream(
     input: Pick<Workstream, 'title' | 'goal'> &
-      Partial<Pick<Workstream, 'repoUrl' | 'baseCommit' | 'summary' | 'status'>>,
+      Partial<
+        Pick<Workstream, 'repoUrl' | 'baseCommit' | 'summary' | 'status'>
+      >,
   ): Promise<Workstream> {
     const ts = now();
     const workstream: Workstream = {
@@ -195,7 +200,12 @@ export class Store {
     patch: Partial<
       Pick<
         Workstream,
-        'status' | 'summary' | 'title' | 'repoUrl' | 'baseCommit' | 'quotaPausedStatus'
+        | 'status'
+        | 'summary'
+        | 'title'
+        | 'repoUrl'
+        | 'baseCommit'
+        | 'quotaPausedStatus'
       >
     >,
   ): Promise<Workstream | null> {
@@ -252,10 +262,7 @@ export class Store {
       createdAt: ts,
       updatedAt: ts,
     };
-    await writeJson(
-      this.layout.taskFile(task.workstreamId, task.id),
-      task,
-    );
+    await writeJson(this.layout.taskFile(task.workstreamId, task.id), task);
     return task;
   }
 
@@ -319,10 +326,11 @@ export class Store {
   }
 
   async listFindings(workstreamId: string): Promise<Finding[]> {
-    const raw = await listJson<Record<string, unknown>>(this.layout.findingsDir(workstreamId));
+    const raw = await listJson<Record<string, unknown>>(
+      this.layout.findingsDir(workstreamId),
+    );
     return raw.map((r) => normalizeFinding(workstreamId, r));
   }
-
 
   // --- Runs (one record per LLM call) ---
 
@@ -401,7 +409,10 @@ export class Store {
       createdAt,
       updatedAt: createdAt,
     };
-    await writeJson(this.layout.memoryFile(memory.id, memory.createdAt), memory);
+    await writeJson(
+      this.layout.memoryFile(memory.id, memory.createdAt),
+      memory,
+    );
     const index = await this.readMemoryIndex();
     if (!index.some((e) => e.id === memory.id)) {
       index.push(this.toIndexEntry(memory));
@@ -507,7 +518,9 @@ export class Store {
         // Corrupt index.json — fall through and rebuild from the per-memory files.
       }
     }
-    const rebuilt = (await this.listMemories()).map((m) => this.toIndexEntry(m));
+    const rebuilt = (await this.listMemories()).map((m) =>
+      this.toIndexEntry(m),
+    );
     await writeJson(file, rebuilt);
     return rebuilt;
   }
@@ -545,7 +558,9 @@ export class Store {
   // --- GitHub watch state ---
 
   async readGithubWatchState(): Promise<GithubWatchState> {
-    const state = await readJson<GithubWatchState>(this.layout.githubWatchStateFile());
+    const state = await readJson<GithubWatchState>(
+      this.layout.githubWatchStateFile(),
+    );
     return state ?? emptyGithubWatchState();
   }
 
@@ -556,7 +571,9 @@ export class Store {
   // --- Schedule state ---
 
   async readScheduleState(): Promise<ScheduleRuntimeState> {
-    const state = await readJson<ScheduleRuntimeState>(this.layout.scheduleStateFile());
+    const state = await readJson<ScheduleRuntimeState>(
+      this.layout.scheduleStateFile(),
+    );
     return state ?? emptyScheduleRuntimeState();
   }
 

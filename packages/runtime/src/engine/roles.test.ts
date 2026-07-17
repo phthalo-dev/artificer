@@ -85,7 +85,11 @@ test('communicator can read and update provider route and quota config', () => {
 test('communicator routes [GitHub]-prefixed watcher messages to send_note or start_workstream', () => {
   const system = getRole('communicator').system('TestAgent');
 
-  assert.match(system, /\[GitHub\]/, 'expected guidance to mention [GitHub]-prefixed messages');
+  assert.match(
+    system,
+    /\[GitHub\]/,
+    'expected guidance to mention [GitHub]-prefixed messages',
+  );
   assert.match(
     system,
     /\[GitHub\][\s\S]*send_note/,

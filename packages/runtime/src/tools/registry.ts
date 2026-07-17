@@ -100,7 +100,11 @@ export function toolsForRole(
         ...shell,
         ...git,
         ...byName(artifacts, ['read_plan', 'submit_review']),
-        ...byName(orchestrator, ['get_status', 'query_memories', 'record_finding']),
+        ...byName(orchestrator, [
+          'get_status',
+          'query_memories',
+          'record_finding',
+        ]),
       ];
       break;
 
@@ -136,7 +140,9 @@ export function toolsForRole(
   }
 
   if (customRegistry) {
-    const custom = customRegistry.toolsForRole(role as RoleName).map((t) => t.toToolDef(ctx));
+    const custom = customRegistry
+      .toolsForRole(role as RoleName)
+      .map((t) => t.toToolDef(ctx));
     result.push(...custom);
   }
   return result;

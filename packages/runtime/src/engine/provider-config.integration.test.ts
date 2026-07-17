@@ -86,7 +86,9 @@ afterEach(async () => {
 test('provider config self-service: engine API, communicator tools, and persistence', async () => {
   const { engine, store, configPath } = await buildEngine(identityDir, 10);
 
-  const budgetSummary = await engine.updateProviderConfig({ dailyBudgetLimit: 25 });
+  const budgetSummary = await engine.updateProviderConfig({
+    dailyBudgetLimit: 25,
+  });
   assert.match(budgetSummary, /daily budget.*25/i);
 
   let onDisk = JSON.parse(await fs.readFile(configPath, 'utf-8')) as {
@@ -119,7 +121,9 @@ test('provider config self-service: engine API, communicator tools, and persiste
   assert.equal(before.quota.effective.routes[0]?.presetId, 'async-economy');
   assert.equal(before.quota.effective.routes[0]?.windows[0]?.limit, 25);
 
-  const presetResult = await updateConfig.handler({ applyPreset: 'go-economy' });
+  const presetResult = await updateConfig.handler({
+    applyPreset: 'go-economy',
+  });
   assert.match(presetResult, /Configuration updated.*go-economy/);
 
   onDisk = JSON.parse(await fs.readFile(configPath, 'utf-8')) as {

@@ -45,11 +45,12 @@ export function groupBy(
   for (const run of runs) {
     const key = keyOf(run);
     if (key === undefined) continue;
-    (groups[key] ??= emptySummary());
+    groups[key] ??= emptySummary();
     addRun(groups[key], run);
   }
   for (const key of Object.keys(groups)) {
-    groups[key].costUsd = Math.round(groups[key].costUsd * 1_000_000) / 1_000_000;
+    groups[key].costUsd =
+      Math.round(groups[key].costUsd * 1_000_000) / 1_000_000;
   }
   return groups;
 }

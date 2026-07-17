@@ -54,7 +54,8 @@ export function createFetchTools(_ctx: ToolContext): ToolDef[] {
           }
           const contentType = res.headers.get('content-type') ?? '';
           const raw = await res.text();
-          const isHtml = contentType.includes('html') || /<html[\s>]/i.test(raw);
+          const isHtml =
+            contentType.includes('html') || /<html[\s>]/i.test(raw);
           const title = isHtml ? extractTitle(raw) : undefined;
           const body = isHtml ? htmlToText(raw) : raw.trim();
           const { text, truncated } = truncateText(body);

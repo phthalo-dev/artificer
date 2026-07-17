@@ -12,11 +12,7 @@ import { Store } from './storage/store.js';
 
 export { loadConfig, mergeWithDefinition } from './config.js';
 export { Engine } from './engine/engine.js';
-export {
-  DEFAULT_PRESET_ID,
-  getPreset,
-  listPresets,
-} from './engine/presets.js';
+export { DEFAULT_PRESET_ID, getPreset, listPresets } from './engine/presets.js';
 export type { ModelPreset } from './engine/presets.js';
 export { Store } from './storage/store.js';
 export { createApp } from './server/app.js';
@@ -25,8 +21,16 @@ export { defineTool } from './api/define-tool.js';
 export { ToolRegistry } from './api/tool-registry.js';
 export { createRuntime } from './api/create-runtime.js';
 export type { RuntimeOptions, ArtificerRuntime } from './api/types.js';
-export { scanAgentDirectory, type AgentManifest, type ModuleRef } from './discover/discover.js';
-export { loadSkillsFromDisk, loadInstructionsFromDisk, loadChannelsFromDisk } from './discover/loader.js';
+export {
+  scanAgentDirectory,
+  type AgentManifest,
+  type ModuleRef,
+} from './discover/discover.js';
+export {
+  loadSkillsFromDisk,
+  loadInstructionsFromDisk,
+  loadChannelsFromDisk,
+} from './discover/loader.js';
 export { defineChannel } from './api/define-channel.js';
 export { defineSkill } from './api/define-skill.js';
 export type {
@@ -44,10 +48,24 @@ export type {
 } from './api/types.js';
 export type { WorkerExecutor, ExecutorResult } from './engine/executor.js';
 export { defineConnection } from './api/define-connection.js';
-export type { ConnectionDefinition, ConnectionAuth, ArtificerConnection } from './api/types.js';
-export { slackChannel, postSlackReply, updateSlackStatus } from './channels/adapters/slack.js';
-export { discordChannel, editDiscordResponse } from './channels/adapters/discord.js';
-export { verifySlackSignature, verifyDiscordSignature } from './channels/adapters/verify.js';
+export type {
+  ConnectionDefinition,
+  ConnectionAuth,
+  ArtificerConnection,
+} from './api/types.js';
+export {
+  slackChannel,
+  postSlackReply,
+  updateSlackStatus,
+} from './channels/adapters/slack.js';
+export {
+  discordChannel,
+  editDiscordResponse,
+} from './channels/adapters/discord.js';
+export {
+  verifySlackSignature,
+  verifyDiscordSignature,
+} from './channels/adapters/verify.js';
 
 export async function startRuntime(): Promise<void> {
   const config = loadConfig();
@@ -128,7 +146,10 @@ export async function startRuntime(): Promise<void> {
         )
           .catch((err) => {
             // eslint-disable-next-line no-console
-            console.error('[artificer-runtime] github watch cycle failed:', err);
+            console.error(
+              '[artificer-runtime] github watch cycle failed:',
+              err,
+            );
           })
           .finally(scheduleNextWatch);
       }, watchIntervalMs);

@@ -23,9 +23,7 @@ describe('discordChannel', () => {
       type: 2,
       data: {
         name: 'ask',
-        options: [
-          { name: 'message', type: 3, value: 'Fix the auth bug' },
-        ],
+        options: [{ name: 'message', type: 3, value: 'Fix the auth bug' }],
       },
       channel_id: '444555666',
       member: {

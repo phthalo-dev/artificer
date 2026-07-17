@@ -11,7 +11,9 @@ import {
 } from './tool-results.js';
 
 test('spill writes file and returns preview with path', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-tool-results-test-'));
+  const dir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'artificer-tool-results-test-'),
+  );
   try {
     const layout = new Layout(dir);
     const { output, spillPath } = await spillToolResult({
@@ -33,7 +35,9 @@ test('spill writes file and returns preview with path', async () => {
 });
 
 test('readSpilledResult rejects path escape', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-tool-results-test-'));
+  const dir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'artificer-tool-results-test-'),
+  );
   try {
     const layout = new Layout(dir);
     await assert.rejects(
@@ -46,7 +50,9 @@ test('readSpilledResult rejects path escape', async () => {
 });
 
 test('applyResultBudget spills when per-invocation cap exceeded', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-tool-results-test-'));
+  const dir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'artificer-tool-results-test-'),
+  );
   try {
     const layout = new Layout(dir);
     const body = 'y'.repeat(5000);
@@ -69,7 +75,9 @@ test('applyResultBudget spills when per-invocation cap exceeded', async () => {
 });
 
 test('applyResultBudget hard-truncates when per-run budget exceeded', async () => {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-tool-results-test-'));
+  const dir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'artificer-tool-results-test-'),
+  );
   try {
     const layout = new Layout(dir);
     const body = 'z'.repeat(2000);

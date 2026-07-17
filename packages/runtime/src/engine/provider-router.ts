@@ -38,11 +38,7 @@ export class ProviderRouter {
       const route = this.routes[i]!;
       if (route.roles && !route.roles.includes(role)) continue;
 
-      const estimate = this.ledger.estimateNextRun(
-        tier,
-        role,
-        route.accountId,
-      );
+      const estimate = this.ledger.estimateNextRun(tier, role, route.accountId);
       const useReserve = role === 'communicator' && i === 0;
       if (
         !this.ledger.canDispatch(

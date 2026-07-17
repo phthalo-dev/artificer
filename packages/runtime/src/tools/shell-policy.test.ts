@@ -76,7 +76,10 @@ const allowedForReviewer: [string, string][] = [
   ['git diff HEAD requests/adapters.py', 'git diff'],
   ['git show 0be38a0c:requests/adapters.py', 'git show'],
   ['python3 -m pytest -q', 'pytest'],
-  ['grep -n "def send" requests/adapters.py 2>/dev/null', 'grep with 2>/dev/null'],
+  [
+    'grep -n "def send" requests/adapters.py 2>/dev/null',
+    'grep with 2>/dev/null',
+  ],
   ['cat requests/adapters.py > /dev/null', 'redirect to /dev/null'],
   ['ls -la requests', 'ls'],
   ['git status', 'git status'],
@@ -90,7 +93,10 @@ for (const [command, label] of allowedForReviewer) {
 }
 
 test('checkReviewerWrite allows mutations for non-reviewer roles', () => {
-  assert.equal(checkReviewerWrite("sed -i 's/a/b/' f.py", 'worker').allowed, true);
+  assert.equal(
+    checkReviewerWrite("sed -i 's/a/b/' f.py", 'worker').allowed,
+    true,
+  );
   assert.equal(checkReviewerWrite('rm scratch.py', 'planner').allowed, true);
 });
 

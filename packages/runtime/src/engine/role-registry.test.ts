@@ -6,7 +6,14 @@ import type { IdentityRole } from '../discover/loader.js';
 describe('RoleRegistry', () => {
   it('contains all 6 built-in roles with no identity roles', () => {
     const registry = new RoleRegistry();
-    for (const name of ['communicator', 'orchestrator', 'planner', 'worker', 'reviewer', 'librarian']) {
+    for (const name of [
+      'communicator',
+      'orchestrator',
+      'planner',
+      'worker',
+      'reviewer',
+      'librarian',
+    ]) {
       assert.ok(registry.getRole(name), `missing built-in role: ${name}`);
     }
   });
@@ -15,7 +22,10 @@ describe('RoleRegistry', () => {
     const registry = new RoleRegistry();
     const worker = registry.getRole('worker')!;
     const prompt = worker.system('TestBot');
-    assert.ok(prompt.includes('TestBot'), 'system prompt should include agent name');
+    assert.ok(
+      prompt.includes('TestBot'),
+      'system prompt should include agent name',
+    );
   });
 
   it('identity role overrides a built-in by slug', () => {
@@ -68,7 +78,14 @@ describe('RoleRegistry', () => {
   it('listRoleNames includes all built-ins', () => {
     const registry = new RoleRegistry();
     const names = registry.listRoleNames();
-    for (const n of ['communicator', 'orchestrator', 'planner', 'worker', 'reviewer', 'librarian']) {
+    for (const n of [
+      'communicator',
+      'orchestrator',
+      'planner',
+      'worker',
+      'reviewer',
+      'librarian',
+    ]) {
       assert.ok(names.includes(n), `${n} missing from listRoleNames`);
     }
   });
