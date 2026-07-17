@@ -5,7 +5,10 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { loadConfig } from '../config.js';
 import { Engine } from '../engine/engine.js';
-import { emptyGithubWatchState, type GithubWatchState } from '../engine/github-watch.js';
+import {
+  emptyGithubWatchState,
+  type GithubWatchState,
+} from '../engine/github-watch.js';
 import { WorkstreamMemoryService } from '../engine/workstream-memory.js';
 import { Store } from '../storage/store.js';
 import { IdentityStore } from '../storage/identity-store.js';
@@ -98,7 +101,11 @@ test('GET /api/memories returns 503 when identity store is not configured', asyn
 
 test('GET /api/memories lists memories from identity store', async () => {
   const { engine, identity } = await buildAppWithIdentity();
-  await identity.addMemory({ content: 'Hello identity', tags: [], kind: 'note' });
+  await identity.addMemory({
+    content: 'Hello identity',
+    tags: [],
+    kind: 'note',
+  });
   const app = createApp(engine, { identity });
 
   const res = await app.request('/api/memories');
@@ -148,10 +155,16 @@ test('POST /api/memories returns 400 when content is missing', async () => {
 
 test('DELETE /api/memories/:id removes memory from identity store', async () => {
   const { engine, identity } = await buildAppWithIdentity();
-  const memory = await identity.addMemory({ content: 'To be deleted', tags: [], kind: 'note' });
+  const memory = await identity.addMemory({
+    content: 'To be deleted',
+    tags: [],
+    kind: 'note',
+  });
   const app = createApp(engine, { identity });
 
-  const res = await app.request(`/api/memories/${memory.id}`, { method: 'DELETE' });
+  const res = await app.request(`/api/memories/${memory.id}`, {
+    method: 'DELETE',
+  });
   assert.equal(res.status, 200);
   const body = (await res.json()) as { ok: boolean };
   assert.equal(body.ok, true);
@@ -164,7 +177,9 @@ test('DELETE /api/memories/:id returns 404 for unknown id', async () => {
   const { engine, identity } = await buildAppWithIdentity();
   const app = createApp(engine, { identity });
 
-  const res = await app.request('/api/memories/nonexistent_id', { method: 'DELETE' });
+  const res = await app.request('/api/memories/nonexistent_id', {
+    method: 'DELETE',
+  });
   assert.equal(res.status, 404);
 });
 

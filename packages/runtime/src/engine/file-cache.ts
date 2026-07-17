@@ -53,7 +53,9 @@ export class FileCache {
     lineRange?: { start: number; end: number },
   ): void {
     this.entries = this.entries.filter((e) => e.path !== filePath);
-    const snippet = content ? content.slice(0, 120).replace(/\s+/g, ' ').trim() : undefined;
+    const snippet = content
+      ? content.slice(0, 120).replace(/\s+/g, ' ').trim()
+      : undefined;
     this.entries.push({
       path: filePath,
       mtimeMs,

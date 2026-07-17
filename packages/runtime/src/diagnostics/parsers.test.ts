@@ -45,7 +45,10 @@ test('ruffJsonParser parses the JSON array form', () => {
 
 test('ruffJsonParser tolerates empty/non-JSON output', () => {
   assert.deepEqual(ruffJsonParser({ stdout: '', stderr: '', code: 0 }), []);
-  assert.deepEqual(ruffJsonParser({ stdout: 'not json', stderr: '', code: 0 }), []);
+  assert.deepEqual(
+    ruffJsonParser({ stdout: 'not json', stderr: '', code: 0 }),
+    [],
+  );
 });
 
 test('eslintJsonParser maps severity 2 to error and 1 to warning', () => {
@@ -53,8 +56,20 @@ test('eslintJsonParser maps severity 2 to error and 1 to warning', () => {
     {
       filePath: '/ws/a.ts',
       messages: [
-        { line: 1, column: 1, severity: 2, message: 'no-undef', ruleId: 'no-undef' },
-        { line: 2, column: 3, severity: 1, message: 'prefer-const', ruleId: 'prefer-const' },
+        {
+          line: 1,
+          column: 1,
+          severity: 2,
+          message: 'no-undef',
+          ruleId: 'no-undef',
+        },
+        {
+          line: 2,
+          column: 3,
+          severity: 1,
+          message: 'prefer-const',
+          ruleId: 'prefer-const',
+        },
       ],
     },
   ]);
@@ -69,7 +84,11 @@ test('makeRegexParser uses named groups', () => {
     String.raw`^(?<file>.+?):(?<line>\d+):(?<col>\d+): (?<message>.+)$`,
     'golint',
   );
-  const diags = parser({ stdout: 'main.go:10:2: undefined: foo', stderr: '', code: 1 });
+  const diags = parser({
+    stdout: 'main.go:10:2: undefined: foo',
+    stderr: '',
+    code: 1,
+  });
   assert.equal(diags.length, 1);
   assert.deepEqual(diags[0], {
     file: 'main.go',

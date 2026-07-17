@@ -63,6 +63,8 @@ test('invalid identity.pullInterval emits a warning', () => {
   }
 
   assert.deepEqual(warnings, [
-    ['[artificer] invalid identity.pullInterval "later"; periodic pulling is disabled.'],
+    [
+      '[artificer] invalid identity.pullInterval "later"; periodic pulling is disabled.',
+    ],
   ]);
 });

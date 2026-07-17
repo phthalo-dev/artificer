@@ -62,7 +62,12 @@ test('reports ruff errors for an edited python file', async () => {
     files: ['app.py'],
     ...fakeSurface({
       bins: ['ruff', 'python3'],
-      responses: [{ match: /ruff check/, result: { stdout: ruffOut, stderr: '', code: 1 } }],
+      responses: [
+        {
+          match: /ruff check/,
+          result: { stdout: ruffOut, stderr: '', code: 1 },
+        },
+      ],
     }),
   });
   assert.match(out, /Diagnostics \(python\)/);
@@ -84,7 +89,12 @@ test('filters out diagnostics for files that were not edited', async () => {
     files: ['app.py'],
     ...fakeSurface({
       bins: ['ruff'],
-      responses: [{ match: /ruff check/, result: { stdout: ruffOut, stderr: '', code: 1 } }],
+      responses: [
+        {
+          match: /ruff check/,
+          result: { stdout: ruffOut, stderr: '', code: 1 },
+        },
+      ],
     }),
   });
   assert.equal(out, '');
@@ -122,7 +132,14 @@ test('consumer declarative provider runs and is reported', async () => {
       ...fakeSurface({
         bins: ['go'],
         responses: [
-          { match: /go vet/, result: { stdout: '/ws/main.go:10:2: undefined: foo', stderr: '', code: 1 } },
+          {
+            match: /go vet/,
+            result: {
+              stdout: '/ws/main.go:10:2: undefined: foo',
+              stderr: '',
+              code: 1,
+            },
+          },
         ],
       }),
     },

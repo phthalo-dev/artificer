@@ -10,7 +10,9 @@ import { lastWorkerReport } from './worker-report.js';
  * wrote. This prevents subsequent workers from re-investigating what is already
  * done or starting over when a partial scaffold exists.
  */
-export function buildPriorWorkContext(workerRuns: RunRecord[]): string | undefined {
+export function buildPriorWorkContext(
+  workerRuns: RunRecord[],
+): string | undefined {
   if (workerRuns.length === 0) return undefined;
 
   const lines = workerRuns.map((run, i) => {

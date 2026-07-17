@@ -83,7 +83,9 @@ test('buildProviderConfigSnapshot includes routes and presets', () => {
 
 test('applyProviderConfigUpdate applies preset to models and primary route', () => {
   const cfg = runtime();
-  const changes = applyProviderConfigUpdate(cfg, { applyPreset: 'ultra-budget' });
+  const changes = applyProviderConfigUpdate(cfg, {
+    applyPreset: 'ultra-budget',
+  });
   assert.match(changes.join(' '), /ultra-budget/);
   assert.equal(cfg.modelPresetId, 'ultra-budget');
   assert.equal(cfg.models.medium, 'gpt-5.1-codex-mini');

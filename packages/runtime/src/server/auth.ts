@@ -14,7 +14,10 @@ export function bearerAuth(key: string | undefined) {
     const tokenBuf = Buffer.from(token);
     const keyBuf = Buffer.from(key);
 
-    if (tokenBuf.length !== keyBuf.length || !timingSafeEqual(tokenBuf, keyBuf)) {
+    if (
+      tokenBuf.length !== keyBuf.length ||
+      !timingSafeEqual(tokenBuf, keyBuf)
+    ) {
       return c.json({ error: 'Unauthorized' }, 401);
     }
 
@@ -30,12 +33,19 @@ export function sseAuth(key: string | undefined) {
 
     const header = c.req.header('Authorization');
     const queryKey = c.req.query('key');
-    const token = (header?.startsWith('Bearer ') ? header.slice(7) : null) ?? queryKey ?? '';
+    const token =
+      (header?.startsWith('Bearer ') ? header.slice(7) : null) ??
+      queryKey ??
+      '';
 
     const tokenBuf = Buffer.from(token);
     const keyBuf = Buffer.from(key);
 
-    if (!token || tokenBuf.length !== keyBuf.length || !timingSafeEqual(tokenBuf, keyBuf)) {
+    if (
+      !token ||
+      tokenBuf.length !== keyBuf.length ||
+      !timingSafeEqual(tokenBuf, keyBuf)
+    ) {
       return c.json({ error: 'Unauthorized' }, 401);
     }
 

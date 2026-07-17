@@ -37,10 +37,14 @@ function isGoUrl(baseURL: string): boolean {
 
 function isZenUrl(baseURL: string): boolean {
   const normalized = baseURL.replace(/\/$/, '');
-  return normalized.endsWith('/zen/v1') || normalized.includes('opencode.ai/zen/v1');
+  return (
+    normalized.endsWith('/zen/v1') || normalized.includes('opencode.ai/zen/v1')
+  );
 }
 
-export function executorAccountId(executor?: ExecutorConfig): string | undefined {
+export function executorAccountId(
+  executor?: ExecutorConfig,
+): string | undefined {
   if (!executor || executor === 'llm') return undefined;
   if (executor === 'cursor-agent') return 'cursor-agent';
   if (executor === 'claude-code') return 'claude-code';
@@ -61,7 +65,12 @@ export function primaryAccountId(
   return 'primary-llm';
 }
 
-export function primaryAccountIdFor(runtime: Pick<{ baseURL: string; executor?: ExecutorConfig }, 'baseURL' | 'executor'>): string {
+export function primaryAccountIdFor(
+  runtime: Pick<
+    { baseURL: string; executor?: ExecutorConfig },
+    'baseURL' | 'executor'
+  >,
+): string {
   return primaryAccountId(runtime.baseURL, runtime.executor);
 }
 

@@ -103,7 +103,8 @@ export const WhitespaceNormalizedReplacer: Replacer = function* (
   if (findLines.length > 1) {
     for (let i = 0; i <= lines.length - findLines.length; i++) {
       const block = lines.slice(i, i + findLines.length);
-      if (normalize(block.join('\n')) === normalizedFind) yield block.join('\n');
+      if (normalize(block.join('\n')) === normalizedFind)
+        yield block.join('\n');
     }
   }
 };
@@ -159,7 +160,8 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
 
   const sliceOf = (startLine: number, endLine: number) => {
     let startIndex = 0;
-    for (let k = 0; k < startLine; k++) startIndex += originalLines[k].length + 1;
+    for (let k = 0; k < startLine; k++)
+      startIndex += originalLines[k].length + 1;
     let endIndex = startIndex;
     for (let k = startLine; k <= endLine; k++) {
       endIndex += originalLines[k].length;
@@ -174,11 +176,7 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
     const linesToCheck = Math.min(searchBlockSize - 2, actualBlockSize - 2);
     let similarity = 0;
     if (linesToCheck > 0) {
-      for (
-        let j = 1;
-        j < searchBlockSize - 1 && j < actualBlockSize - 1;
-        j++
-      ) {
+      for (let j = 1; j < searchBlockSize - 1 && j < actualBlockSize - 1; j++) {
         const orig = originalLines[startLine + j].trim();
         const search = searchLines[j].trim();
         const maxLen = Math.max(orig.length, search.length);
@@ -203,11 +201,7 @@ export const BlockAnchorReplacer: Replacer = function* (content, find) {
     const linesToCheck = Math.min(searchBlockSize - 2, actualBlockSize - 2);
     let similarity = 0;
     if (linesToCheck > 0) {
-      for (
-        let j = 1;
-        j < searchBlockSize - 1 && j < actualBlockSize - 1;
-        j++
-      ) {
+      for (let j = 1; j < searchBlockSize - 1 && j < actualBlockSize - 1; j++) {
         const orig = originalLines[startLine + j].trim();
         const search = searchLines[j].trim();
         const maxLen = Math.max(orig.length, search.length);

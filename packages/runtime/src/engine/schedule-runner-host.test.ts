@@ -7,7 +7,9 @@ import { Store } from '../storage/store.js';
 
 describe('schedule runner host terminal checks', () => {
   it('waits for communicator runs and recognizes terminal statuses', async () => {
-    const tempDir = await mkdtemp(path.join(os.tmpdir(), 'artificer-schedules-'));
+    const tempDir = await mkdtemp(
+      path.join(os.tmpdir(), 'artificer-schedules-'),
+    );
     try {
       const store = new Store(tempDir);
       await store.init();
@@ -26,7 +28,10 @@ describe('schedule runner host terminal checks', () => {
       assert.ok(host, 'schedule runner host should be available');
 
       assert.equal(await host.communicatorRunTerminal(store, messageId), false);
-      assert.equal(await host.communicatorRunTerminal(store, 'msg_missing'), false);
+      assert.equal(
+        await host.communicatorRunTerminal(store, 'msg_missing'),
+        false,
+      );
       assert.equal(await host.workstreamTerminal(store, workstream.id), false);
 
       communicatorRun.status = 'failed';

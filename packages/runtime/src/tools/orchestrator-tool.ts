@@ -57,38 +57,36 @@ async function workstreamStatus(
   const tasks = allTasks.slice(-MAX_STATUS_TASKS);
   const reviews = allReviews.slice(-MAX_STATUS_REVIEWS);
 
-  return JSON.stringify(
-    {
-      id: ws.id,
-      title: ws.title,
-      goal: ws.goal,
-      status: ws.status,
-      summary: ws.summary,
-      repoUrl: ws.repoUrl,
-      baseCommit: ws.baseCommit,
-      localRepoReady: localRepoPath !== undefined,
-      cloneLocation: localRepoPath
-        ? path.relative(workspaceDir, localRepoPath) || '.'
-        : undefined,
-      hasPlan: plan !== null,
-      taskCount: allTasks.length,
-      omittedTasks: Math.max(0, allTasks.length - tasks.length),
-      tasks: tasks.map((t) => ({
-        id: t.id,
-        role: t.role,
-        status: t.status,
-        description: clip(t.description, MAX_RESULT_CHARS),
-        result: clip(t.result, MAX_RESULT_CHARS),
-      })),
-      reviews: reviews.map((r) => ({
-        target: r.target,
-        approved: r.approved,
-        stage: r.stage,
-        severity: r.severity,
-        notes: clip(r.notes, MAX_NOTES_CHARS),
-      })),
-    },
-  );
+  return JSON.stringify({
+    id: ws.id,
+    title: ws.title,
+    goal: ws.goal,
+    status: ws.status,
+    summary: ws.summary,
+    repoUrl: ws.repoUrl,
+    baseCommit: ws.baseCommit,
+    localRepoReady: localRepoPath !== undefined,
+    cloneLocation: localRepoPath
+      ? path.relative(workspaceDir, localRepoPath) || '.'
+      : undefined,
+    hasPlan: plan !== null,
+    taskCount: allTasks.length,
+    omittedTasks: Math.max(0, allTasks.length - tasks.length),
+    tasks: tasks.map((t) => ({
+      id: t.id,
+      role: t.role,
+      status: t.status,
+      description: clip(t.description, MAX_RESULT_CHARS),
+      result: clip(t.result, MAX_RESULT_CHARS),
+    })),
+    reviews: reviews.map((r) => ({
+      target: r.target,
+      approved: r.approved,
+      stage: r.stage,
+      severity: r.severity,
+      notes: clip(r.notes, MAX_NOTES_CHARS),
+    })),
+  });
 }
 
 /**
@@ -103,7 +101,7 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
     {
       name: 'get_status',
       description:
-        'Query the current state of the system. Without a workstreamId, returns an overview of all workstreams. With a workstreamId, returns that workstream\'s full status, tasks, reviews, and whether a plan exists.',
+        "Query the current state of the system. Without a workstreamId, returns an overview of all workstreams. With a workstreamId, returns that workstream's full status, tasks, reviews, and whether a plan exists.",
       inputSchema: {
         type: 'object',
         properties: {
@@ -155,7 +153,7 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
             type: 'string',
             enum: ['low', 'medium', 'high'],
             description:
-              'Optional model power for this task based on how hard it is. Defaults to the role\'s tier.',
+              "Optional model power for this task based on how hard it is. Defaults to the role's tier.",
           },
           workstreamId: {
             type: 'string',
@@ -183,18 +181,18 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
         }
 
         if (workstreamId && role === 'reviewer') {
-          const stage =
-            String(input.description).toLowerCase().includes('plan')
-              ? 'plan'
-              : 'work';
-          const blocked = await reviewerSpawnBlocked(store, workstreamId, stage);
+          const stage = String(input.description).toLowerCase().includes('plan')
+            ? 'plan'
+            : 'work';
+          const blocked = await reviewerSpawnBlocked(
+            store,
+            workstreamId,
+            stage,
+          );
           if (blocked) return `Error: ${blocked}`;
         }
 
-        if (
-          workstreamId &&
-          (role === 'worker' || role === 'reviewer')
-        ) {
+        if (workstreamId && (role === 'worker' || role === 'reviewer')) {
           const ws = await store.getWorkstream(workstreamId);
           if (ws?.repoUrl) {
             const workspaceDir = store.layout.workstreamWorkspace(workstreamId);
@@ -250,7 +248,8 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
           (input.workstreamId as string | undefined) ?? run.workstreamId;
         if (!workstreamId) return 'Error: no workstream to update.';
         const patch: { status?: WorkstreamStatus; summary?: string } = {};
-        if (input.status) patch.status = String(input.status) as WorkstreamStatus;
+        if (input.status)
+          patch.status = String(input.status) as WorkstreamStatus;
         if (typeof input.summary === 'string') patch.summary = input.summary;
         const updated = await store.updateWorkstream(workstreamId, patch);
         if (!updated) return `Error: workstream ${workstreamId} not found.`;
@@ -273,7 +272,8 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
           tags: {
             type: 'array',
             items: { type: 'string' },
-            description: 'Optional tag filter; only memories with these tags are considered.',
+            description:
+              'Optional tag filter; only memories with these tags are considered.',
           },
           limit: {
             type: 'number',
@@ -285,14 +285,15 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
         const tags = Array.isArray(input.tags)
           ? (input.tags as unknown[]).map(String)
           : undefined;
-        const limit =
-          typeof input.limit === 'number' ? input.limit : undefined;
+        const limit = typeof input.limit === 'number' ? input.limit : undefined;
         const query = input.query ? String(input.query) : '';
         let memories = engine.identity
           ? await engine.identity.queryMemories(query, limit)
           : await store.queryMemories(query, { tags, limit });
         if (engine.identity && tags) {
-          memories = memories.filter((m) => tags.some((t) => m.tags.includes(t)));
+          memories = memories.filter((m) =>
+            tags.some((t) => m.tags.includes(t)),
+          );
         }
         if (memories.length === 0) return '(no memories)';
         return memories
@@ -314,7 +315,10 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
         properties: {
           content: { type: 'string', description: 'The note to remember.' },
           title: { type: 'string', description: 'Short label for the memory.' },
-          summary: { type: 'string', description: 'One-line gist used for recall.' },
+          summary: {
+            type: 'string',
+            description: 'One-line gist used for recall.',
+          },
           tags: {
             type: 'array',
             items: { type: 'string' },

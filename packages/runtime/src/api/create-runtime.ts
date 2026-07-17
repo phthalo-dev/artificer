@@ -25,7 +25,11 @@ import {
   loadChannelsFromDisk,
 } from '../discover/loader.js';
 import { RoleRegistry } from '../engine/role-registry.js';
-import type { ArtificerRuntime, ArtificerSkill, RuntimeOptions } from './types.js';
+import type {
+  ArtificerRuntime,
+  ArtificerSkill,
+  RuntimeOptions,
+} from './types.js';
 
 export async function createRuntime(
   options: RuntimeOptions,
@@ -34,7 +38,8 @@ export async function createRuntime(
 
   const syntheticEnv: NodeJS.ProcessEnv = { ...process.env };
   if (options.config?.apiKey) syntheticEnv.LLM_API_KEY = options.config.apiKey;
-  if (options.config?.baseURL) syntheticEnv.LLM_BASE_URL = options.config.baseURL;
+  if (options.config?.baseURL)
+    syntheticEnv.LLM_BASE_URL = options.config.baseURL;
 
   // Load artificer.config.json early so its fields seed agentName, models, etc.
   const manifest = scanAgentDirectory(rootDir);
@@ -44,7 +49,9 @@ export async function createRuntime(
       fileDefinition = JSON.parse(
         fs.readFileSync(manifest.config.path, 'utf-8'),
       ) as import('./types.js').ArtificerConfig;
-    } catch { /* ignore — config file is optional */ }
+    } catch {
+      /* ignore — config file is optional */
+    }
   }
 
   const baseConfig = fileDefinition
@@ -52,10 +59,14 @@ export async function createRuntime(
     : loadConfig(syntheticEnv);
 
   // Resolve agentName first so the default execDir reflects any name override.
-  const agentName = options.config?.agentName ?? fileDefinition?.name ?? baseConfig.agentName;
-  const execDir = options.config?.execDir
-    ?? (syntheticEnv.ARTIFICER_EXEC_DIR ? path.resolve(syntheticEnv.ARTIFICER_EXEC_DIR) : null)
-    ?? path.join(os.homedir(), '.artificer', agentName);
+  const agentName =
+    options.config?.agentName ?? fileDefinition?.name ?? baseConfig.agentName;
+  const execDir =
+    options.config?.execDir ??
+    (syntheticEnv.ARTIFICER_EXEC_DIR
+      ? path.resolve(syntheticEnv.ARTIFICER_EXEC_DIR)
+      : null) ??
+    path.join(os.homedir(), '.artificer', agentName);
 
   const skills: ArtificerSkill[] = loadSkillsFromDisk(manifest.skills);
   const instructions = manifest.instructions
@@ -133,7 +144,9 @@ export async function createRuntime(
         console.log(`  identity  ${rootDir}`);
         console.log(`  exec      ${execDir}`);
         if (channels.length > 0) {
-          console.log(`  channels  ${channels.map((ch) => ch.name).join(', ')}`);
+          console.log(
+            `  channels  ${channels.map((ch) => ch.name).join(', ')}`,
+          );
         }
       });
     },

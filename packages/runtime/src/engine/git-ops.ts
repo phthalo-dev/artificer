@@ -43,14 +43,24 @@ export async function cloneRepoIntoWorkspace(
     timeout: 120_000,
   });
   if (baseCommit) {
-    const known = await exec('git', ['-C', repoDir, 'cat-file', '-e', `${baseCommit}^{commit}`])
+    const known = await exec('git', [
+      '-C',
+      repoDir,
+      'cat-file',
+      '-e',
+      `${baseCommit}^{commit}`,
+    ])
       .then(() => true)
       .catch(() => false);
     if (!known) {
-      await exec('git', ['-C', repoDir, 'fetch', '--depth', '1', 'origin', baseCommit], {
-        env,
-        timeout: 120_000,
-      }).catch(() => undefined);
+      await exec(
+        'git',
+        ['-C', repoDir, 'fetch', '--depth', '1', 'origin', baseCommit],
+        {
+          env,
+          timeout: 120_000,
+        },
+      ).catch(() => undefined);
     }
     await exec('git', ['-C', repoDir, 'checkout', baseCommit], {
       env,

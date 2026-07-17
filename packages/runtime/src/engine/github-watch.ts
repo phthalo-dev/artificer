@@ -75,10 +75,17 @@ function summarizeChecks(
 ): string | undefined {
   if (!rollup || rollup.length === 0) return undefined;
   const statuses = rollup.map((c) => c.conclusion ?? c.state ?? null);
-  if (statuses.some((s) => s === 'FAILURE' || s === 'ERROR' || s === 'TIMED_OUT')) {
+  if (
+    statuses.some((s) => s === 'FAILURE' || s === 'ERROR' || s === 'TIMED_OUT')
+  ) {
     return 'FAILURE';
   }
-  if (statuses.some((s) => s === null || s === 'PENDING' || s === 'IN_PROGRESS' || s === 'QUEUED')) {
+  if (
+    statuses.some(
+      (s) =>
+        s === null || s === 'PENDING' || s === 'IN_PROGRESS' || s === 'QUEUED',
+    )
+  ) {
     return 'PENDING';
   }
   return 'SUCCESS';
@@ -102,8 +109,12 @@ function prMessage(
 
 function notificationMessage(n: GithubNotification): string {
   const repo = n.repository.full_name;
-  const kind = n.subject.type === 'PullRequest' ? 'PR' : n.subject.type.toLowerCase();
-  const url = n.subject.url.replace('https://api.github.com/repos/', 'https://github.com/');
+  const kind =
+    n.subject.type === 'PullRequest' ? 'PR' : n.subject.type.toLowerCase();
+  const url = n.subject.url.replace(
+    'https://api.github.com/repos/',
+    'https://github.com/',
+  );
   return `[GitHub] You were mentioned in ${repo} ${kind} "${n.subject.title}" (reason: ${n.reason}). ${url} repoUrl: https://github.com/${repo}`;
 }
 
@@ -130,7 +141,9 @@ async function checkOwnPrs(deps: GithubWatchDeps): Promise<void> {
       );
       detail = JSON.parse(raw) as PrDetail;
     } catch (err) {
-      log?.(`github-watch: failed to inspect PR ${repo}#${pr.number}: ${(err as Error).message}`);
+      log?.(
+        `github-watch: failed to inspect PR ${repo}#${pr.number}: ${(err as Error).message}`,
+      );
       continue;
     }
 
@@ -142,14 +155,22 @@ async function checkOwnPrs(deps: GithubWatchDeps): Promise<void> {
 
     const prev = state.prs[pr.url];
     if (prev) {
-      if (checksConclusion === 'FAILURE' && prev.checksConclusion !== 'FAILURE') {
+      if (
+        checksConclusion === 'FAILURE' &&
+        prev.checksConclusion !== 'FAILURE'
+      ) {
         await receiveMessage(prMessage('ci-failed', info));
       }
-      if (reviewDecision === 'CHANGES_REQUESTED' && prev.reviewDecision !== 'CHANGES_REQUESTED') {
+      if (
+        reviewDecision === 'CHANGES_REQUESTED' &&
+        prev.reviewDecision !== 'CHANGES_REQUESTED'
+      ) {
         await receiveMessage(prMessage('changes-requested', info));
       }
       if (lastComment && lastComment.id !== prev.lastCommentId) {
-        await receiveMessage(prMessage('new-comment', info, lastComment.body?.slice(0, 200)));
+        await receiveMessage(
+          prMessage('new-comment', info, lastComment.body?.slice(0, 200)),
+        );
       }
     }
 
@@ -182,7 +203,9 @@ async function checkNotifications(deps: GithubWatchDeps): Promise<void> {
     );
     notifications = JSON.parse(raw) as GithubNotification[];
   } catch (err) {
-    log?.(`github-watch: failed to list notifications: ${(err as Error).message}`);
+    log?.(
+      `github-watch: failed to list notifications: ${(err as Error).message}`,
+    );
     return;
   }
 

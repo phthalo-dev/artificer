@@ -5,8 +5,7 @@ export interface WorkstreamHeader {
   title?: string;
 }
 
-const WORKSTREAM_HEADER_RE =
-  /^---\s*WORKSTREAM\s*---\s*\n([\s\S]*?)\n---\s*$/m;
+const WORKSTREAM_HEADER_RE = /^---\s*WORKSTREAM\s*---\s*\n([\s\S]*?)\n---\s*$/m;
 
 const HEADER_FIELD_RE = /^(repoUrl|baseCommit|title):\s*(.+)$/;
 
@@ -14,7 +13,9 @@ const HEADER_FIELD_RE = /^(repoUrl|baseCommit|title):\s*(.+)$/;
  * Extract structured workstream fields from a task message header. Returns
  * null when no header block is present.
  */
-export function parseWorkstreamHeader(content: string): WorkstreamHeader | null {
+export function parseWorkstreamHeader(
+  content: string,
+): WorkstreamHeader | null {
   const match = content.match(WORKSTREAM_HEADER_RE);
   if (!match) return null;
 

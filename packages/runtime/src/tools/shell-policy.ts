@@ -152,7 +152,10 @@ function isStashingCommand(segment: string): boolean {
  * Block stashing outright; the reviewer is already fully blocked by
  * `checkReviewerWrite`.
  */
-export function checkGitStash(command: string, role: RoleName): ShellPolicyResult {
+export function checkGitStash(
+  command: string,
+  role: RoleName,
+): ShellPolicyResult {
   if (role === 'reviewer') return { allowed: true };
   for (const segment of splitCommandSegments(command)) {
     if (isStashingCommand(segment)) {

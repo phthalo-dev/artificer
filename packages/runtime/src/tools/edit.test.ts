@@ -3,7 +3,11 @@ import { test } from 'node:test';
 import { replace } from './edit.js';
 
 test('SimpleReplacer applies an exact unique match', () => {
-  const out = replace('const a = 1;\nconst b = 2;\n', 'const b = 2;', 'const b = 3;');
+  const out = replace(
+    'const a = 1;\nconst b = 2;\n',
+    'const b = 2;',
+    'const b = 3;',
+  );
   assert.equal(out, 'const a = 1;\nconst b = 3;\n');
 });
 
@@ -39,7 +43,9 @@ test('LineTrimmedReplacer matches despite leading-whitespace drift', () => {
 });
 
 test('IndentationFlexibleReplacer matches a dedented multi-line block', () => {
-  const content = ['class A:', '    def f(self):', '        return 1', ''].join('\n');
+  const content = ['class A:', '    def f(self):', '        return 1', ''].join(
+    '\n',
+  );
   // Search block is dedented relative to the file.
   const search = ['def f(self):', '    return 1'].join('\n');
   const out = replace(content, search, 'def f(self):\n    return 2');
@@ -68,11 +74,7 @@ test('BlockAnchorReplacer matches via first/last anchors with drift in middle', 
     '  return total;',
     '}',
   ].join('\n');
-  const replacement = [
-    'function compute() {',
-    '  return 0;',
-    '}',
-  ].join('\n');
+  const replacement = ['function compute() {', '  return 0;', '}'].join('\n');
   const out = replace(content, search, replacement);
   assert.ok(out.includes('return 0;'));
   assert.ok(!out.includes('const total'));

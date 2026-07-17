@@ -19,7 +19,8 @@ export interface AgentManifest {
 
 function listByExt(dir: string, ext: string): ModuleRef[] {
   if (!fs.existsSync(dir)) return [];
-  return fs.readdirSync(dir)
+  return fs
+    .readdirSync(dir)
     .filter((f) => f.endsWith(ext) && !f.startsWith('.'))
     .map((f) => ({ name: path.basename(f, ext), path: path.join(dir, f) }));
 }

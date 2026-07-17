@@ -55,7 +55,8 @@ export function createGitTools(ctx: ToolContext): ToolDef[] {
           },
           cwd: {
             type: 'string',
-            description: 'Optional workspace-relative directory (e.g. a clone).',
+            description:
+              'Optional workspace-relative directory (e.g. a clone).',
           },
         },
         required: ['args'],
@@ -80,7 +81,8 @@ export function createGitTools(ctx: ToolContext): ToolDef[] {
           },
           cwd: {
             type: 'string',
-            description: 'Optional workspace-relative directory (e.g. a clone).',
+            description:
+              'Optional workspace-relative directory (e.g. a clone).',
           },
         },
         required: ['args'],

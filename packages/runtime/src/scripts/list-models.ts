@@ -9,7 +9,10 @@ const GROUPS: Array<{ npm: LlmSdkPackage; title: string }> = [
   { npm: '@ai-sdk/anthropic', title: 'Anthropic Messages (Claude, Qwen)' },
   { npm: '@ai-sdk/openai', title: 'OpenAI Responses (GPT)' },
   { npm: '@ai-sdk/google', title: 'Google (Gemini)' },
-  { npm: '@ai-sdk/openai-compatible', title: 'OpenAI-compatible (GLM, MiniMax, Kimi, ...)' },
+  {
+    npm: '@ai-sdk/openai-compatible',
+    title: 'OpenAI-compatible (GLM, MiniMax, Kimi, ...)',
+  },
 ];
 
 function fmtPrice(p: ModelPricing): string {
@@ -20,7 +23,9 @@ function fmtPrice(p: ModelPricing): string {
 const all = Object.values(MODEL_CATALOG);
 const idWidth = Math.max(...all.map((e) => e.id.length)) + 2;
 
-console.log('\nOpenCode Zen models (set via LLM_MODEL / LLM_MODEL_LOW / LLM_MODEL_HIGH)\n');
+console.log(
+  '\nOpenCode Zen models (set via LLM_MODEL / LLM_MODEL_LOW / LLM_MODEL_HIGH)\n',
+);
 
 for (const group of GROUPS) {
   const entries = all.filter((e) => e.npm === group.npm);

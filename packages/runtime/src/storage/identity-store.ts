@@ -18,9 +18,7 @@ function memoryToMarkdown(memory: Memory): string {
   lines.push(`id: "${memory.id}"`);
   if (memory.title) lines.push(`title: "${memory.title}"`);
   if (memory.summary) lines.push(`summary: "${memory.summary}"`);
-  lines.push(
-    `tags: [${memory.tags.map((t) => `"${t}"`).join(', ')}]`,
-  );
+  lines.push(`tags: [${memory.tags.map((t) => `"${t}"`).join(', ')}]`);
   lines.push(`kind: "${memory.kind ?? 'note'}"`);
   if (memory.source) lines.push(`source: "${memory.source}"`);
   lines.push(`createdAt: "${memory.createdAt}"`);
@@ -79,9 +77,7 @@ export class IdentityStore {
     await ensureDir(this.layout.memoriesDir);
   }
 
-  async addMemory(
-    input: Omit<Memory, 'id' | 'createdAt'>,
-  ): Promise<Memory> {
+  async addMemory(input: Omit<Memory, 'id' | 'createdAt'>): Promise<Memory> {
     const memory: Memory = {
       id: newMemoryId(input.kind ?? 'note'),
       createdAt: now(),

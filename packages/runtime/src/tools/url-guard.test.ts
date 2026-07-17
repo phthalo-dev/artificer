@@ -38,9 +38,18 @@ test('isBlockedHostname flags local suffixes', () => {
 
 test('assertPublicUrl rejects non-http(s) and local/literal-private targets', async () => {
   await assert.rejects(() => assertPublicUrl('ftp://example.com'), /http\(s\)/);
-  await assert.rejects(() => assertPublicUrl('http://localhost/x'), /internal host/);
-  await assert.rejects(() => assertPublicUrl('http://127.0.0.1/x'), /non-public/);
-  await assert.rejects(() => assertPublicUrl('http://169.254.169.254/latest/meta-data'), /non-public/);
+  await assert.rejects(
+    () => assertPublicUrl('http://localhost/x'),
+    /internal host/,
+  );
+  await assert.rejects(
+    () => assertPublicUrl('http://127.0.0.1/x'),
+    /non-public/,
+  );
+  await assert.rejects(
+    () => assertPublicUrl('http://169.254.169.254/latest/meta-data'),
+    /non-public/,
+  );
   await assert.rejects(() => assertPublicUrl('not a url'), /invalid URL/);
 });
 

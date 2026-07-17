@@ -1,6 +1,10 @@
 import os from 'node:os';
 import path from 'node:path';
-import type { ArtificerConfig, ExecutorConfig, ResolvedIdentityConfig } from './api/types.js';
+import type {
+  ArtificerConfig,
+  ExecutorConfig,
+  ResolvedIdentityConfig,
+} from './api/types.js';
 import type { DiagnosticsConfig } from './diagnostics/types.js';
 import {
   isModelTier,
@@ -108,7 +112,9 @@ function required(name: string, value: string | undefined): string {
   return value;
 }
 
-export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig {
+export function loadConfig(
+  env: NodeJS.ProcessEnv = process.env,
+): RuntimeConfig {
   const agentName = env.AGENT_NAME || 'Artificer';
   const execDir = env.ARTIFICER_EXEC_DIR
     ? path.resolve(env.ARTIFICER_EXEC_DIR)
@@ -119,16 +125,9 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
 
   // Preset provides defaults; explicit LLM_MODEL* env vars override individual tiers.
   const models: ModelTiers = {
-    low:
-      env.LLM_MODEL_LOW ||
-      env.ANTHROPIC_MODEL_LOW ||
-      preset.tiers.low,
-    medium:
-      env.LLM_MODEL || env.ANTHROPIC_MODEL || preset.tiers.medium,
-    high:
-      env.LLM_MODEL_HIGH ||
-      env.ANTHROPIC_MODEL_HIGH ||
-      preset.tiers.high,
+    low: env.LLM_MODEL_LOW || env.ANTHROPIC_MODEL_LOW || preset.tiers.low,
+    medium: env.LLM_MODEL || env.ANTHROPIC_MODEL || preset.tiers.medium,
+    high: env.LLM_MODEL_HIGH || env.ANTHROPIC_MODEL_HIGH || preset.tiers.high,
   };
 
   const roleTiers = cloneRoleTiers(preset.roleTiers);
@@ -139,11 +138,11 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
 
   const hasTierOverride = Boolean(
     env.LLM_MODEL_LOW ||
-      env.LLM_MODEL ||
-      env.LLM_MODEL_HIGH ||
-      env.ANTHROPIC_MODEL_LOW ||
-      env.ANTHROPIC_MODEL ||
-      env.ANTHROPIC_MODEL_HIGH,
+    env.LLM_MODEL ||
+    env.LLM_MODEL_HIGH ||
+    env.ANTHROPIC_MODEL_LOW ||
+    env.ANTHROPIC_MODEL ||
+    env.ANTHROPIC_MODEL_HIGH,
   );
   const hasRoleOverride = (Object.keys(roleTiers) as RoleName[]).some(
     (role) => env[`RUNTIME_TIER_${role.toUpperCase()}`],
@@ -151,8 +150,7 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
   const modelPresetId =
     hasTierOverride || hasRoleOverride ? 'custom' : preset.id;
 
-  const apiKey =
-    env.LLM_API_KEY || env.ZEN_API_KEY || env.ANTHROPIC_API_KEY;
+  const apiKey = env.LLM_API_KEY || env.ZEN_API_KEY || env.ANTHROPIC_API_KEY;
 
   const diagnostics: DiagnosticsConfig = {
     enabled: env.RUNTIME_DIAGNOSTICS !== 'false',
@@ -198,7 +196,10 @@ export function loadConfig(env: NodeJS.ProcessEnv = process.env): RuntimeConfig 
     : path.resolve(process.cwd());
 
   return {
-    apiKey: required('LLM_API_KEY (or ZEN_API_KEY / ANTHROPIC_API_KEY)', apiKey),
+    apiKey: required(
+      'LLM_API_KEY (or ZEN_API_KEY / ANTHROPIC_API_KEY)',
+      apiKey,
+    ),
     baseURL: env.LLM_BASE_URL || 'https://opencode.ai/zen/v1',
     model: models.medium,
     models,
@@ -232,12 +233,18 @@ export function parseDuration(s: string): number | undefined {
   if (!m) return undefined;
   const n = Number(m[1]);
   switch (m[2]) {
-    case 'ms': return n;
-    case 's': return n * 1000;
-    case 'm': return n * 60_000;
-    case 'h': return n * 3_600_000;
-    case 'd': return n * 86_400_000;
-    default: return undefined;
+    case 'ms':
+      return n;
+    case 's':
+      return n * 1000;
+    case 'm':
+      return n * 60_000;
+    case 'h':
+      return n * 3_600_000;
+    case 'd':
+      return n * 86_400_000;
+    default:
+      return undefined;
   }
 }
 
@@ -261,9 +268,10 @@ export function mergeWithDefinition(
   env: NodeJS.ProcessEnv = process.env,
 ): RuntimeConfig {
   // Let the config file's preset field seed MODEL_PRESET when no env override exists.
-  const effectiveEnv = definition.preset && !env.MODEL_PRESET
-    ? { ...env, MODEL_PRESET: definition.preset }
-    : env;
+  const effectiveEnv =
+    definition.preset && !env.MODEL_PRESET
+      ? { ...env, MODEL_PRESET: definition.preset }
+      : env;
   const base = loadConfig(effectiveEnv);
 
   return {
@@ -280,15 +288,16 @@ export function mergeWithDefinition(
     },
     concurrency: env.RUNTIME_CONCURRENCY
       ? Number(env.RUNTIME_CONCURRENCY)
-      : definition.concurrency ?? base.concurrency,
+      : (definition.concurrency ?? base.concurrency),
     maxIterationsPerCall: env.RUNTIME_MAX_ITERATIONS
       ? Number(env.RUNTIME_MAX_ITERATIONS)
-      : definition.maxIterationsPerCall ?? base.maxIterationsPerCall,
-    port: env.PORT ? Number(env.PORT) : definition.port ?? base.port,
+      : (definition.maxIterationsPerCall ?? base.maxIterationsPerCall),
+    port: env.PORT ? Number(env.PORT) : (definition.port ?? base.port),
     github: base.github
       ? {
           ...base.github,
-          watchIntervalMs: base.github.watchIntervalMs ??
+          watchIntervalMs:
+            base.github.watchIntervalMs ??
             (definition.github?.watchInterval
               ? parseDuration(definition.github.watchInterval)
               : undefined),

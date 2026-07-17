@@ -8,13 +8,15 @@ export function createScheduleTools(ctx: ToolContext): ToolDef[] {
   return [
     {
       name: 'list_schedules',
-      description: 'List configured schedules, including whether each is currently running and when it last fired.',
+      description:
+        'List configured schedules, including whether each is currently running and when it last fired.',
       inputSchema: { type: 'object', properties: {} },
       handler: async () => JSON.stringify(engine.listSchedules(), null, 2),
     },
     {
       name: 'upsert_schedule',
-      description: 'Create or replace a schedule. Supply exactly one of every (such as "15m") or cron (five fields).',
+      description:
+        'Create or replace a schedule. Supply exactly one of every (such as "15m") or cron (five fields).',
       inputSchema: {
         type: 'object',
         required: ['id', 'action', 'body'],
@@ -35,9 +37,11 @@ export function createScheduleTools(ctx: ToolContext): ToolDef[] {
           name: input.name === undefined ? undefined : String(input.name),
           every: input.every === undefined ? undefined : String(input.every),
           cron: input.cron === undefined ? undefined : String(input.cron),
-          timezone: input.timezone === undefined ? undefined : String(input.timezone),
+          timezone:
+            input.timezone === undefined ? undefined : String(input.timezone),
           action: input.action as 'communicator' | 'workstream',
-          enabled: input.enabled === undefined ? undefined : Boolean(input.enabled),
+          enabled:
+            input.enabled === undefined ? undefined : Boolean(input.enabled),
           body: String(input.body ?? ''),
         });
         return result.ok
@@ -47,7 +51,8 @@ export function createScheduleTools(ctx: ToolContext): ToolDef[] {
     },
     {
       name: 'set_schedule_enabled',
-      description: 'Enable or disable a schedule without changing its timing or action.',
+      description:
+        'Enable or disable a schedule without changing its timing or action.',
       inputSchema: {
         type: 'object',
         required: ['id', 'enabled'],
@@ -64,7 +69,8 @@ export function createScheduleTools(ctx: ToolContext): ToolDef[] {
     },
     {
       name: 'delete_schedule',
-      description: 'Permanently delete a schedule and its recorded last-fired state.',
+      description:
+        'Permanently delete a schedule and its recorded last-fired state.',
       inputSchema: {
         type: 'object',
         required: ['id'],

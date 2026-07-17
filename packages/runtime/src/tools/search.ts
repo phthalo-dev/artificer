@@ -14,7 +14,10 @@ export interface GrepInput {
 const RG_MISSING =
   'Error: ripgrep (rg) not found on PATH. Install ripgrep (https://github.com/BurntSushi/ripgrep#installation).';
 
-export function buildRipgrepArgs(input: GrepInput, searchPath: string): string[] {
+export function buildRipgrepArgs(
+  input: GrepInput,
+  searchPath: string,
+): string[] {
   const args = ['--no-heading', '--line-number', '--color=never'];
   if (input.case_insensitive) args.push('-i');
   if (input.glob) args.push('-g', input.glob);
@@ -22,7 +25,10 @@ export function buildRipgrepArgs(input: GrepInput, searchPath: string): string[]
   return args;
 }
 
-export function buildGlobRipgrepArgs(pattern: string, searchPath: string): string[] {
+export function buildGlobRipgrepArgs(
+  pattern: string,
+  searchPath: string,
+): string[] {
   return ['--files', '-g', pattern, searchPath];
 }
 
@@ -85,10 +91,14 @@ export function createSearchTools(
       inputSchema: {
         type: 'object',
         properties: {
-          pattern: { type: 'string', description: 'Regex or literal search pattern.' },
+          pattern: {
+            type: 'string',
+            description: 'Regex or literal search pattern.',
+          },
           path: {
             type: 'string',
-            description: 'Workspace-relative directory or file to search. Defaults to root.',
+            description:
+              'Workspace-relative directory or file to search. Defaults to root.',
           },
           glob: {
             type: 'string',
@@ -159,7 +169,8 @@ export function createSearchTools(
           },
           cwd: {
             type: 'string',
-            description: 'Workspace-relative directory to search from. Defaults to root.',
+            description:
+              'Workspace-relative directory to search from. Defaults to root.',
           },
           head_limit: {
             type: 'number',

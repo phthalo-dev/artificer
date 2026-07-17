@@ -15,10 +15,7 @@ function reportStatus(status: string): ToolInvocation {
   return toolCall('report_status', { status, summary: 'x' });
 }
 
-function workerRun(
-  at: string,
-  toolCalls: ToolInvocation[] = [],
-): RunRecord {
+function workerRun(at: string, toolCalls: ToolInvocation[] = []): RunRecord {
   return {
     id: `run_${at}`,
     role: 'worker',
@@ -108,11 +105,19 @@ test('an edit followed by no-edit runs eventually counts the trailing stuck runs
 test('a failed edit_file call does not count as an edit', () => {
   const runs = [
     workerRun('1', [
-      toolCall('edit_file', { path: 'a.py', old: 'x', new: 'y' }, { error: 'no match' }),
+      toolCall(
+        'edit_file',
+        { path: 'a.py', old: 'x', new: 'y' },
+        { error: 'no match' },
+      ),
       reportStatus('blocked'),
     ]),
     workerRun('2', [
-      toolCall('edit_file', { path: 'a.py', old: 'x', new: 'y' }, { error: 'no match' }),
+      toolCall(
+        'edit_file',
+        { path: 'a.py', old: 'x', new: 'y' },
+        { error: 'no match' },
+      ),
       reportStatus('blocked'),
     ]),
   ];

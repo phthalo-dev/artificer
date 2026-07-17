@@ -8,7 +8,11 @@ import {
   summarizeToolResult,
 } from './context-compact.js';
 import type { Store } from '../storage/store.js';
-import { emptyUsage, type RunRecord, type ToolInvocation } from '../storage/types.js';
+import {
+  emptyUsage,
+  type RunRecord,
+  type ToolInvocation,
+} from '../storage/types.js';
 
 function mockStore(runs: RunRecord[]): Pick<Store, 'listRunsForWorkstream'> {
   return {
@@ -59,7 +63,10 @@ test('summarizeToolResult: grep with no matches reports zero', () => {
 });
 
 test('summarizeToolResult: glob reports a match count', () => {
-  assert.equal(summarizeToolResult(inv('glob', 'a.ts\nb.ts\nc.ts')), '3 matches');
+  assert.equal(
+    summarizeToolResult(inv('glob', 'a.ts\nb.ts\nc.ts')),
+    '3 matches',
+  );
 });
 
 test('summarizeToolResult: fetch_url reports a character count', () => {
@@ -84,7 +91,10 @@ test('clipDiff: truncates diffs over the cap with a marker', () => {
 });
 
 test('clipDiff: respects a custom max', () => {
-  assert.equal(clipDiff('a'.repeat(20), 10), `${'a'.repeat(10)}\n… (diff truncated)`);
+  assert.equal(
+    clipDiff('a'.repeat(20), 10),
+    `${'a'.repeat(10)}\n… (diff truncated)`,
+  );
 });
 
 test('bulky grep output becomes a one-line match-count summary when microcompact enabled', async () => {
@@ -98,9 +108,10 @@ test('bulky grep output becomes a one-line match-count summary when microcompact
         {
           name: 'grep',
           input: { pattern: 'foo' },
-          output: Array.from({ length: 20 }, (_, i) => `src/file${i}.ts:1:foo`).join(
-            '\n',
-          ),
+          output: Array.from(
+            { length: 20 },
+            (_, i) => `src/file${i}.ts:1:foo`,
+          ).join('\n'),
           at: '2026-06-01T00:00:00.000Z',
         },
       ],

@@ -91,7 +91,10 @@ export const eslintJsonParser: DiagnosticParser = (result) => {
  * Build a parser from a regex with named capture groups. Recognized groups:
  * file, line, col, message. Applied to both stdout and stderr.
  */
-export function makeRegexParser(pattern: string, source: string): DiagnosticParser {
+export function makeRegexParser(
+  pattern: string,
+  source: string,
+): DiagnosticParser {
   const re = new RegExp(pattern);
   return (result) => {
     const diagnostics: Diagnostic[] = [];

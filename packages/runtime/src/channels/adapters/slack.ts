@@ -11,7 +11,8 @@ function classifyInteraction(event: Record<string, unknown>): string {
 export function slackChannel(): ArtificerChannel {
   return defineChannel({
     name: 'slack',
-    description: 'Slack workspace integration — DMs, @mentions, and channel messages',
+    description:
+      'Slack workspace integration — DMs, @mentions, and channel messages',
 
     verify: async (headers, body) => {
       const secret = process.env.SLACK_SIGNING_SECRET;

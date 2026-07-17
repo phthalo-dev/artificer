@@ -32,14 +32,18 @@ export function lastWorkerReport(run: RunRecord): WorkerReport | undefined {
     const input = call.input as Record<string, unknown> | undefined;
     const status = input?.status;
     const summary = input?.summary;
-    if (typeof status !== 'string' || !VALID_STATUSES.has(status as WorkerStatus)) {
+    if (
+      typeof status !== 'string' ||
+      !VALID_STATUSES.has(status as WorkerStatus)
+    ) {
       continue;
     }
     if (typeof summary !== 'string') continue;
     return {
       status: status as WorkerStatus,
       summary,
-      followUps: typeof input?.followUps === 'string' ? input.followUps : undefined,
+      followUps:
+        typeof input?.followUps === 'string' ? input.followUps : undefined,
     };
   }
   return undefined;

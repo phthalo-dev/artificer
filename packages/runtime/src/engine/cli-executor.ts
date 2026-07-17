@@ -3,10 +3,17 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { RunRecord } from '../storage/types.js';
-import type { ExecutorReview, ExecutorResult, WorkerExecutor } from './executor.js';
+import type {
+  ExecutorReview,
+  ExecutorResult,
+  WorkerExecutor,
+} from './executor.js';
 import type { WorkerStatus } from './worker-report.js';
 
-const MCP_SERVER = path.join(path.dirname(fileURLToPath(import.meta.url)), 'mcp-status-server.mjs');
+const MCP_SERVER = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'mcp-status-server.mjs',
+);
 const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
 
 export interface CliExecutorOptions {
@@ -26,13 +33,19 @@ export class CliExecutor implements WorkerExecutor {
     this.name = `cli:${opts.command}`;
   }
 
-  execute({ context, workspaceDir }: {
+  execute({
+    context,
+    workspaceDir,
+  }: {
     context: string;
     workspaceDir: string;
     run: RunRecord;
   }): Promise<ExecutorResult> {
     const statusFile = path.join(workspaceDir, '.artificer-status.json');
-    const mcpConfigFile = path.join(workspaceDir, this.opts.mcpConfigPath ?? '.artificer-mcp.json');
+    const mcpConfigFile = path.join(
+      workspaceDir,
+      this.opts.mcpConfigPath ?? '.artificer-mcp.json',
+    );
 
     fs.mkdirSync(path.dirname(mcpConfigFile), { recursive: true });
     fs.writeFileSync(
@@ -88,14 +101,18 @@ export class CliExecutor implements WorkerExecutor {
         let review: ExecutorReview | undefined;
         try {
           if (fs.existsSync(statusFile)) {
-            const raw = JSON.parse(fs.readFileSync(statusFile, 'utf-8')) as Record<string, unknown>;
+            const raw = JSON.parse(
+              fs.readFileSync(statusFile, 'utf-8'),
+            ) as Record<string, unknown>;
             if (raw.tool === 'submit_review') {
               review = {
                 target: String(raw.target ?? 'work'),
                 notes: String(raw.notes ?? ''),
                 approved: Boolean(raw.approved),
                 stage: (raw.stage as 'plan' | 'work' | undefined) ?? 'work',
-                severity: raw.severity as ExecutorReview['severity'] | undefined,
+                severity: raw.severity as
+                  | ExecutorReview['severity']
+                  | undefined,
               };
             } else {
               workerStatus = raw.status as WorkerStatus | undefined;
@@ -103,11 +120,17 @@ export class CliExecutor implements WorkerExecutor {
               workerFollowUps = raw.followUps as string | undefined;
             }
           }
-        } catch { /* ignore malformed status file */ }
+        } catch {
+          /* ignore malformed status file */
+        }
 
         if (code !== 0) {
           const errText = Buffer.concat(stderr).toString('utf-8').trim();
-          reject(new Error(`${this.opts.command} exited with code ${code}: ${errText || text}`));
+          reject(
+            new Error(
+              `${this.opts.command} exited with code ${code}: ${errText || text}`,
+            ),
+          );
         } else {
           resolve({
             text: text || '(no output)',
@@ -135,7 +158,12 @@ export class CliExecutor implements WorkerExecutor {
  */
 export function resolveArgs(
   template: string[],
-  values: { workspaceDir: string; mcpConfig: string; model?: string; prompt?: string },
+  values: {
+    workspaceDir: string;
+    mcpConfig: string;
+    model?: string;
+    prompt?: string;
+  },
 ): string[] {
   const lookup: Record<string, string | undefined> = {
     workspaceDir: values.workspaceDir,
@@ -157,7 +185,9 @@ export function resolveArgs(
       }
       result.push(value);
     } else {
-      result.push(arg.replace(/\{(\w+)\}/g, (_, key: string) => lookup[key] ?? ''));
+      result.push(
+        arg.replace(/\{(\w+)\}/g, (_, key: string) => lookup[key] ?? ''),
+      );
     }
   }
   return result;

@@ -11,7 +11,7 @@ export function createProviderConfigTools(ctx: ToolContext): ToolDef[] {
     {
       name: 'get_provider_config',
       description:
-        'Read the agent\'s current provider configuration: model preset, tier models, ordered execution routes (LLM/agent + quotas), and live quota usage. Call this before changing routes or budgets.',
+        "Read the agent's current provider configuration: model preset, tier models, ordered execution routes (LLM/agent + quotas), and live quota usage. Call this before changing routes or budgets.",
       inputSchema: {
         type: 'object',
         properties: {},

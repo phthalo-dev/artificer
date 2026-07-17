@@ -55,7 +55,12 @@ function isBlockedV6(ip: string): boolean {
   const a = ip.toLowerCase();
   if (a === '::1' || a === '::') return true;
   // link-local fe80::/10 and unique-local fc00::/7
-  if (a.startsWith('fe8') || a.startsWith('fe9') || a.startsWith('fea') || a.startsWith('feb')) {
+  if (
+    a.startsWith('fe8') ||
+    a.startsWith('fe9') ||
+    a.startsWith('fea') ||
+    a.startsWith('feb')
+  ) {
     return true;
   }
   if (a.startsWith('fc') || a.startsWith('fd')) return true;
@@ -85,9 +90,7 @@ export function isBlockedHostname(hostname: string): boolean {
   const h = hostname.toLowerCase().replace(/\.$/, '');
   if (h === 'localhost') return true;
   return (
-    h.endsWith('.localhost') ||
-    h.endsWith('.local') ||
-    h.endsWith('.internal')
+    h.endsWith('.localhost') || h.endsWith('.local') || h.endsWith('.internal')
   );
 }
 

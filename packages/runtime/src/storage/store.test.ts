@@ -3,7 +3,10 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import { emptyGithubWatchState, type GithubWatchState } from '../engine/github-watch.js';
+import {
+  emptyGithubWatchState,
+  type GithubWatchState,
+} from '../engine/github-watch.js';
 import { Store } from './store.js';
 import type { RunRecord } from './types.js';
 

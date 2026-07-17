@@ -59,9 +59,15 @@ export async function runShellCommand(opts: {
     const partial = [e.stdout, e.stderr].filter(Boolean).join('\n').trim();
     if (e.killed || e.signal === 'SIGKILL') {
       const marker = `Command timed out after ${timeoutMs}ms and was killed.`;
-      return { output: partial ? `${marker}\n${partial}` : marker, timedOut: true };
+      return {
+        output: partial ? `${marker}\n${partial}` : marker,
+        timedOut: true,
+      };
     }
-    const detail = [e.stdout, e.stderr, e.message].filter(Boolean).join('\n').trim();
+    const detail = [e.stdout, e.stderr, e.message]
+      .filter(Boolean)
+      .join('\n')
+      .trim();
     return { output: `Command failed:\n${detail}`, timedOut: false };
   }
 }
@@ -96,7 +102,10 @@ export function createShellTool(ctx: ToolContext): ToolDef[] {
         if (!cloneCheck.allowed) {
           return `Error: ${cloneCheck.reason}`;
         }
-        const writeCheck = checkReviewerWrite(command, ctx.run.role as RoleName);
+        const writeCheck = checkReviewerWrite(
+          command,
+          ctx.run.role as RoleName,
+        );
         if (!writeCheck.allowed) {
           return `Error: ${writeCheck.reason}`;
         }

@@ -3,10 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
-import {
-  plannerSpawnBlocked,
-  reviewerSpawnBlocked,
-} from './spawn-guards.js';
+import { plannerSpawnBlocked, reviewerSpawnBlocked } from './spawn-guards.js';
 import { Store } from '../storage/store.js';
 import type { RunRecord } from '../storage/types.js';
 
@@ -124,7 +121,12 @@ test('plannerSpawnBlocked requires reviewer after revised plan', async () => {
   const revised: RunRecord = {
     ...plannerRun(ws.id, 'done', '3'),
     toolCalls: [
-      { name: 'write_plan', input: {}, output: 'ok', at: '2026-01-01T00:00:00.000Z' },
+      {
+        name: 'write_plan',
+        input: {},
+        output: 'ok',
+        at: '2026-01-01T00:00:00.000Z',
+      },
     ],
   };
   await store.saveRun(revised);

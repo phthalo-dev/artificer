@@ -92,7 +92,9 @@ test('workerRunDone is true for done and done_with_concerns reports', () => {
   assert.equal(
     workerRunDone(
       workerRun({
-        toolCalls: [toolCall('report_status', { status: 'done', summary: 'x' })],
+        toolCalls: [
+          toolCall('report_status', { status: 'done', summary: 'x' }),
+        ],
       }),
     ),
     true,
@@ -136,7 +138,10 @@ test('workerRunDone is false for blocked and needs_context reports', () => {
 });
 
 test('workerRunDone falls back to a line-anchored DONE in the run output', () => {
-  assert.equal(workerRunDone(workerRun({ output: 'DONE\nAll tests pass.' })), true);
+  assert.equal(
+    workerRunDone(workerRun({ output: 'DONE\nAll tests pass.' })),
+    true,
+  );
   assert.equal(
     workerRunDone(workerRun({ output: 'DONE_WITH_CONCERNS\nSee notes.' })),
     true,
@@ -145,14 +150,18 @@ test('workerRunDone falls back to a line-anchored DONE in the run output', () =>
 
 test('workerRunDone does not false-positive on "NOT DONE" in the output', () => {
   assert.equal(
-    workerRunDone(workerRun({ output: 'NOT DONE — still need to fix the test.' })),
+    workerRunDone(
+      workerRun({ output: 'NOT DONE — still need to fix the test.' }),
+    ),
     false,
   );
 });
 
 test('workerRunDone is false when the run made no report and has no status line', () => {
   assert.equal(
-    workerRunDone(workerRun({ output: 'I made some changes but ran out of time.' })),
+    workerRunDone(
+      workerRun({ output: 'I made some changes but ran out of time.' }),
+    ),
     false,
   );
 });
@@ -176,7 +185,10 @@ test('workerRunSummary formats the status and summary, with follow-ups when pres
 test('workerRunSummary omits the follow-ups line when absent', () => {
   const run = workerRun({
     toolCalls: [
-      toolCall('report_status', { status: 'done', summary: 'Implemented the fix.' }),
+      toolCall('report_status', {
+        status: 'done',
+        summary: 'Implemented the fix.',
+      }),
     ],
   });
   assert.equal(workerRunSummary(run), '[DONE] Implemented the fix.');

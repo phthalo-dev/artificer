@@ -34,7 +34,11 @@ If MCP tools are unavailable, output one of the following on its own line at the
 - BLOCKED — you are genuinely stuck and cannot proceed`;
 
 /** Roles that implement against the repo and benefit from working-set context. */
-const WORK_ROLES = new Set<RunRecord['role']>(['planner', 'worker', 'reviewer']);
+const WORK_ROLES = new Set<RunRecord['role']>([
+  'planner',
+  'worker',
+  'reviewer',
+]);
 
 function clip(text: string, max: number): string {
   return text.length <= max ? text : `${text.slice(0, max)}… (truncated)`;
@@ -61,7 +65,8 @@ async function changedFilesSummary(
     ];
     if (includeDiff) {
       const diff = await uncommittedDiff(repo);
-      if (diff) sections.push(`Current diff (git diff HEAD):\n${clipDiff(diff)}`);
+      if (diff)
+        sections.push(`Current diff (git diff HEAD):\n${clipDiff(diff)}`);
     }
     return sections.join('\n\n');
   } catch {
@@ -256,7 +261,11 @@ export async function executeCall(
 
     if (deps.executor && WORK_ROLES.has(effectiveBaseRole)) {
       const execContext = userMessage + EXECUTOR_STATUS_INSTRUCTION;
-      const execResult = await deps.executor.execute({ context: execContext, workspaceDir, run });
+      const execResult = await deps.executor.execute({
+        context: execContext,
+        workspaceDir,
+        run,
+      });
       resultText = execResult.text;
       resultUsage = {
         ...emptyUsage(),
@@ -272,7 +281,9 @@ export async function executeCall(
           input: {
             status: execResult.workerStatus,
             summary: execResult.workerSummary ?? '',
-            ...(execResult.workerFollowUps ? { followUps: execResult.workerFollowUps } : {}),
+            ...(execResult.workerFollowUps
+              ? { followUps: execResult.workerFollowUps }
+              : {}),
           },
           output: 'Status recorded via MCP.',
           at: new Date().toISOString(),

@@ -11,7 +11,10 @@ describe('defineSkill', () => {
     });
 
     assert.equal(skill.name, 'code-review');
-    assert.equal(skill.description, 'Code review checklist for the payments team');
+    assert.equal(
+      skill.description,
+      'Code review checklist for the payments team',
+    );
     assert.ok(skill.content.includes('PCI compliance'));
   });
 });

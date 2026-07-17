@@ -193,7 +193,8 @@ export interface AppDeps {
 export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
   const app = new Hono();
   app.use('*', cors());
-  const runGithubWatchOnce = deps.runGithubWatchOnce ?? defaultRunGithubWatchOnce;
+  const runGithubWatchOnce =
+    deps.runGithubWatchOnce ?? defaultRunGithubWatchOnce;
 
   // --- Live event stream (at root level, not under /api) ---
 
@@ -222,7 +223,9 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
   const api = new Hono();
   api.use('*', bearerAuth(engine.config.apiAuthKey));
 
-  api.get('/health', (c) => c.json({ ok: true, agent: engine.config.agentName }));
+  api.get('/health', (c) =>
+    c.json({ ok: true, agent: engine.config.agentName }),
+  );
 
   api.get('/config/models', (c) => {
     const catalog = Object.values(MODEL_CATALOG).map((entry) => ({
@@ -369,8 +372,9 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     if (!parsed.success) {
       return c.json({ error: parsed.error.flatten() }, 400);
     }
-    const { workstream, messageId } =
-      await engine.createDirectWorkstream(parsed.data);
+    const { workstream, messageId } = await engine.createDirectWorkstream(
+      parsed.data,
+    );
     return c.json({ workstreamId: workstream.id, messageId }, 202);
   });
 
@@ -431,7 +435,8 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
   });
 
   api.get('/memories', async (c) => {
-    if (!deps.identity) return c.json({ error: 'identity store not configured' }, 503);
+    if (!deps.identity)
+      return c.json({ error: 'identity store not configured' }, 503);
     const q = c.req.query('q')?.trim();
     if (q) {
       const memories = await deps.identity.queryMemories(q, 20);
@@ -443,7 +448,8 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
   });
 
   api.post('/memories', async (c) => {
-    if (!deps.identity) return c.json({ error: 'identity store not configured' }, 503);
+    if (!deps.identity)
+      return c.json({ error: 'identity store not configured' }, 503);
     const body = await c.req.json().catch(() => ({}));
     const parsed = createMemorySchema.safeParse(body);
     if (!parsed.success) return c.json({ error: parsed.error.flatten() }, 400);
@@ -459,7 +465,8 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
   });
 
   api.delete('/memories/:id', async (c) => {
-    if (!deps.identity) return c.json({ error: 'identity store not configured' }, 503);
+    if (!deps.identity)
+      return c.json({ error: 'identity store not configured' }, 503);
     const id = c.req.param('id');
     const deleted = await deps.identity.deleteMemory(id);
     if (!deleted) return c.json({ error: 'not found' }, 404);
@@ -546,7 +553,10 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
 
   api.post('/github/watch', async (c) => {
     if (!engine.config.github) {
-      return c.json({ error: 'GitHub is not configured (set GITHUB_TOKEN)' }, 400);
+      return c.json(
+        { error: 'GitHub is not configured (set GITHUB_TOKEN)' },
+        400,
+      );
     }
     const state = await runGithubWatchOnce(engine, (msg) =>
       // eslint-disable-next-line no-console

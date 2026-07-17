@@ -3,18 +3,28 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { RunRecord } from '../storage/types.js';
-import type { ExecutorReview, ExecutorResult, WorkerExecutor } from './executor.js';
+import type {
+  ExecutorReview,
+  ExecutorResult,
+  WorkerExecutor,
+} from './executor.js';
 import type { WorkerStatus } from './worker-report.js';
 
 const TIMEOUT_MS = 10 * 60 * 1000;
-const MCP_SERVER = path.join(path.dirname(fileURLToPath(import.meta.url)), 'mcp-status-server.mjs');
+const MCP_SERVER = path.join(
+  path.dirname(fileURLToPath(import.meta.url)),
+  'mcp-status-server.mjs',
+);
 
 export class ClaudeCodeExecutor implements WorkerExecutor {
   readonly name = 'claude-code';
 
   constructor(private readonly model?: string) {}
 
-  execute({ context, workspaceDir }: {
+  execute({
+    context,
+    workspaceDir,
+  }: {
     context: string;
     workspaceDir: string;
     run: RunRecord;
@@ -40,7 +50,8 @@ export class ClaudeCodeExecutor implements WorkerExecutor {
       const args = [
         '--print',
         '--dangerously-skip-permissions',
-        '--mcp-config', mcpConfigFile,
+        '--mcp-config',
+        mcpConfigFile,
       ];
       if (this.model) args.push('--model', this.model);
 
@@ -72,14 +83,18 @@ export class ClaudeCodeExecutor implements WorkerExecutor {
         let review: ExecutorReview | undefined;
         try {
           if (fs.existsSync(statusFile)) {
-            const raw = JSON.parse(fs.readFileSync(statusFile, 'utf-8')) as Record<string, unknown>;
+            const raw = JSON.parse(
+              fs.readFileSync(statusFile, 'utf-8'),
+            ) as Record<string, unknown>;
             if (raw.tool === 'submit_review') {
               review = {
                 target: String(raw.target ?? 'work'),
                 notes: String(raw.notes ?? ''),
                 approved: Boolean(raw.approved),
                 stage: (raw.stage as 'plan' | 'work' | undefined) ?? 'work',
-                severity: raw.severity as ExecutorReview['severity'] | undefined,
+                severity: raw.severity as
+                  | ExecutorReview['severity']
+                  | undefined,
               };
             } else {
               workerStatus = raw.status as WorkerStatus | undefined;
@@ -87,11 +102,17 @@ export class ClaudeCodeExecutor implements WorkerExecutor {
               workerFollowUps = raw.followUps as string | undefined;
             }
           }
-        } catch { /* ignore malformed status file */ }
+        } catch {
+          /* ignore malformed status file */
+        }
 
         if (code !== 0) {
           const errText = Buffer.concat(stderr).toString('utf-8').trim();
-          reject(new Error(`claude code agent exited with code ${code}: ${errText || text}`));
+          reject(
+            new Error(
+              `claude code agent exited with code ${code}: ${errText || text}`,
+            ),
+          );
         } else {
           resolve({
             text: text || '(no output)',

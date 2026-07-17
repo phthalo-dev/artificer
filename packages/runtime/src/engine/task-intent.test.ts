@@ -35,16 +35,10 @@ test('isRepoTaskMessage detects bench-style tasks', () => {
 });
 
 test('looksLikeRepoSource matches repo URLs not docs', () => {
-  assert.equal(
-    looksLikeRepoSource('https://github.com/org/repo.git'),
-    true,
-  );
+  assert.equal(looksLikeRepoSource('https://github.com/org/repo.git'), true);
   assert.equal(
     looksLikeRepoSource('https://github.com/org/repo/tree/main/docs'),
     true,
   );
-  assert.equal(
-    looksLikeRepoSource('https://docs.example.com/guide'),
-    false,
-  );
+  assert.equal(looksLikeRepoSource('https://docs.example.com/guide'), false);
 });

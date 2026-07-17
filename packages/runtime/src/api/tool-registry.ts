@@ -2,7 +2,12 @@ import type { RoleName } from '../storage/types.js';
 import type { ArtificerTool } from './types.js';
 
 const ALL_ROLES: RoleName[] = [
-  'communicator', 'orchestrator', 'planner', 'reviewer', 'worker', 'librarian',
+  'communicator',
+  'orchestrator',
+  'planner',
+  'reviewer',
+  'worker',
+  'librarian',
 ];
 
 export class ToolRegistry {

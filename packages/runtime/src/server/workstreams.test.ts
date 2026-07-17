@@ -36,7 +36,10 @@ test('POST /workstreams with autostart=false creates a held workstream and no ru
     }),
   });
   assert.equal(res.status, 202);
-  const body = (await res.json()) as { workstreamId: string; messageId: string };
+  const body = (await res.json()) as {
+    workstreamId: string;
+    messageId: string;
+  };
   assert.ok(body.workstreamId, 'returns a workstreamId');
   assert.ok(body.messageId, 'returns a messageId for cost attribution');
 

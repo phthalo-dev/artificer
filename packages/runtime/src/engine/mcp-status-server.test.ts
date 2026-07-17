@@ -19,7 +19,10 @@ interface McpResponse {
 }
 
 /** Spawn the server and drive it with a sequence of JSON-RPC messages. */
-function driveServer(statusFile: string, messages: object[]): Promise<McpResponse[]> {
+function driveServer(
+  statusFile: string,
+  messages: object[],
+): Promise<McpResponse[]> {
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, [SERVER_PATH, statusFile], {
       stdio: ['pipe', 'pipe', 'pipe'],
@@ -36,7 +39,9 @@ function driveServer(statusFile: string, messages: object[]): Promise<McpRespons
         if (!line.trim()) continue;
         try {
           responses.push(JSON.parse(line) as McpResponse);
-        } catch { /* ignore non-JSON */ }
+        } catch {
+          /* ignore non-JSON */
+        }
       }
     });
 
@@ -54,7 +59,10 @@ function driveServer(statusFile: string, messages: object[]): Promise<McpRespons
 
     child.on('close', () => resolve(responses));
 
-    setTimeout(() => { child.kill(); reject(new Error('server timed out')); }, 5000);
+    setTimeout(() => {
+      child.kill();
+      reject(new Error('server timed out'));
+    }, 5000);
   });
 }
 
@@ -66,7 +74,12 @@ test('initialize returns protocol version and tool capability', async () => {
   const statusFile = tmpStatusFile();
   try {
     const responses = await driveServer(statusFile, [
-      { jsonrpc: '2.0', id: 1, method: 'initialize', params: { protocolVersion: '2024-11-05', capabilities: {} } },
+      {
+        jsonrpc: '2.0',
+        id: 1,
+        method: 'initialize',
+        params: { protocolVersion: '2024-11-05', capabilities: {} },
+      },
     ]);
     assert.equal(responses.length, 1);
     const result = responses[0].result as Record<string, unknown>;
@@ -103,17 +116,28 @@ test('tools/call report_status writes status file and returns success', async ()
         jsonrpc: '2.0',
         id: 2,
         method: 'tools/call',
-        params: { name: 'report_status', arguments: { status: 'done', summary: 'All tests pass.' } },
+        params: {
+          name: 'report_status',
+          arguments: { status: 'done', summary: 'All tests pass.' },
+        },
       },
     ]);
     const callResponse = responses.find((r) => r.id === 2);
     assert.ok(callResponse, 'missing tools/call response');
-    assert.ok(!callResponse.error, `unexpected error: ${callResponse.error?.message}`);
-    const result = callResponse.result as { content: Array<{ type: string; text: string }> };
+    assert.ok(
+      !callResponse.error,
+      `unexpected error: ${callResponse.error?.message}`,
+    );
+    const result = callResponse.result as {
+      content: Array<{ type: string; text: string }>;
+    };
     assert.equal(result.content[0].type, 'text');
 
     assert.ok(fs.existsSync(statusFile), 'status file not written');
-    const written = JSON.parse(fs.readFileSync(statusFile, 'utf-8')) as Record<string, unknown>;
+    const written = JSON.parse(fs.readFileSync(statusFile, 'utf-8')) as Record<
+      string,
+      unknown
+    >;
     assert.equal(written.status, 'done');
     assert.equal(written.summary, 'All tests pass.');
   } finally {
@@ -132,11 +156,18 @@ test('tools/call report_status persists followUps field', async () => {
         method: 'tools/call',
         params: {
           name: 'report_status',
-          arguments: { status: 'done_with_concerns', summary: 'Done.', followUps: 'Add tests.' },
+          arguments: {
+            status: 'done_with_concerns',
+            summary: 'Done.',
+            followUps: 'Add tests.',
+          },
         },
       },
     ]);
-    const written = JSON.parse(fs.readFileSync(statusFile, 'utf-8')) as Record<string, unknown>;
+    const written = JSON.parse(fs.readFileSync(statusFile, 'utf-8')) as Record<
+      string,
+      unknown
+    >;
     assert.equal(written.status, 'done_with_concerns');
     assert.equal(written.followUps, 'Add tests.');
   } finally {
@@ -149,7 +180,12 @@ test('tools/call unknown tool returns error', async () => {
   try {
     const responses = await driveServer(statusFile, [
       { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} },
-      { jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'nonexistent', arguments: {} } },
+      {
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: { name: 'nonexistent', arguments: {} },
+      },
     ]);
     const callResponse = responses.find((r) => r.id === 2);
     assert.ok(callResponse?.error, 'expected error for unknown tool');
@@ -184,7 +220,10 @@ test('notifications/initialized produces no response', async () => {
     ]);
     // Should only see responses for id 1 and id 2, not for the notification
     const ids = responses.map((r) => r.id);
-    assert.ok(!ids.includes(undefined as unknown as number), 'notification should not produce a response id');
+    assert.ok(
+      !ids.includes(undefined as unknown as number),
+      'notification should not produce a response id',
+    );
     assert.ok(ids.includes(1));
     assert.ok(ids.includes(2));
   } finally {
@@ -221,15 +260,27 @@ test('tools/call submit_review writes review to status file', async () => {
         method: 'tools/call',
         params: {
           name: 'submit_review',
-          arguments: { target: 'work', notes: 'LGTM.', approved: true, stage: 'work', severity: 'none' },
+          arguments: {
+            target: 'work',
+            notes: 'LGTM.',
+            approved: true,
+            stage: 'work',
+            severity: 'none',
+          },
         },
       },
     ]);
     const callResponse = responses.find((r) => r.id === 2);
-    assert.ok(!callResponse?.error, `unexpected error: ${callResponse?.error?.message}`);
+    assert.ok(
+      !callResponse?.error,
+      `unexpected error: ${callResponse?.error?.message}`,
+    );
 
     assert.ok(fs.existsSync(statusFile));
-    const written = JSON.parse(fs.readFileSync(statusFile, 'utf-8')) as Record<string, unknown>;
+    const written = JSON.parse(fs.readFileSync(statusFile, 'utf-8')) as Record<
+      string,
+      unknown
+    >;
     assert.equal(written.tool, 'submit_review');
     assert.equal(written.approved, true);
     assert.equal(written.stage, 'work');
@@ -245,11 +296,19 @@ test('submit_review and report_status write tool discriminator', async () => {
     await driveServer(statusFile, [
       { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} },
       {
-        jsonrpc: '2.0', id: 2, method: 'tools/call',
-        params: { name: 'report_status', arguments: { status: 'done', summary: 'Done.' } },
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: {
+          name: 'report_status',
+          arguments: { status: 'done', summary: 'Done.' },
+        },
       },
     ]);
-    const status = JSON.parse(fs.readFileSync(statusFile, 'utf-8')) as Record<string, unknown>;
+    const status = JSON.parse(fs.readFileSync(statusFile, 'utf-8')) as Record<
+      string,
+      unknown
+    >;
     assert.equal(status.tool, 'report_status');
     assert.equal(status.status, 'done');
   } finally {
@@ -261,7 +320,10 @@ test('exits with error when no status file arg provided', async () => {
   const exitCode = await new Promise<number>((resolve) => {
     const child = spawn(process.execPath, [SERVER_PATH], { stdio: 'ignore' });
     child.on('close', (code) => resolve(code ?? 1));
-    setTimeout(() => { child.kill(); resolve(1); }, 3000);
+    setTimeout(() => {
+      child.kill();
+      resolve(1);
+    }, 3000);
   });
   assert.equal(exitCode, 1);
 });

@@ -52,6 +52,7 @@
     "bench:deepswe:go-quality": "tsx bench/src/main.ts --suite tasks/deepswe-mini-suite.json --preset go-quality",
     "bench:deepswe:typescript:go-economy": "tsx bench/src/main.ts --suite tasks/deepswe-typescript-mini.json --preset go-economy",
     "bench:deepswe:typescript:go-quality": "tsx bench/src/main.ts --suite tasks/deepswe-typescript-mini.json --preset go-quality",
+    "lint": "prettier --check \"src/**/*.{ts,json}\" \"artificer.config.schema.json\"",
     "type-check": "tsc --noEmit",
     "test": "node --import tsx --test \"src/**/*.test.ts\"",
     "clean": "rm -rf dist ui-dist",

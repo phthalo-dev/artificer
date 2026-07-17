@@ -4,7 +4,9 @@ import { buildPriorWorkContext } from './prior-work-context.js';
 import type { RunRecord } from '../storage/types.js';
 import { emptyUsage } from '../storage/types.js';
 
-function makeRun(toolCalls: Array<{ name: string; input: unknown; error?: string }>): RunRecord {
+function makeRun(
+  toolCalls: Array<{ name: string; input: unknown; error?: string }>,
+): RunRecord {
   return {
     id: 'run_test',
     role: 'worker',
@@ -29,7 +31,13 @@ test('returns undefined when there are no prior worker runs', () => {
 
 test('includes report_status summary when worker called report_status', () => {
   const run = makeRun([
-    { name: 'report_status', input: { status: 'done_with_concerns', summary: 'Created src/index.ts and jsx-runtime.ts' } },
+    {
+      name: 'report_status',
+      input: {
+        status: 'done_with_concerns',
+        summary: 'Created src/index.ts and jsx-runtime.ts',
+      },
+    },
   ]);
   const ctx = buildPriorWorkContext([run]);
   assert.ok(ctx, 'should return a context string');
@@ -51,12 +59,19 @@ test('lists written files when no report_status was called (budget exhaustion)',
 test('failed write_file calls are excluded from the file list', () => {
   const run = makeRun([
     { name: 'write_file', input: { path: 'packages/react/src/index.ts' } },
-    { name: 'write_file', input: { path: 'packages/react/src/broken.ts' }, error: 'permission denied' },
+    {
+      name: 'write_file',
+      input: { path: 'packages/react/src/broken.ts' },
+      error: 'permission denied',
+    },
   ]);
   const ctx = buildPriorWorkContext([run]);
   assert.ok(ctx);
   assert.match(ctx, /packages\/react\/src\/index\.ts/);
-  assert.ok(!ctx.includes('broken.ts'), 'failed writes should not appear in the list');
+  assert.ok(
+    !ctx.includes('broken.ts'),
+    'failed writes should not appear in the list',
+  );
 });
 
 test('notes no changes when run made no writes and no report_status', () => {
@@ -70,17 +85,26 @@ test('notes no changes when run made no writes and no report_status', () => {
 });
 
 test('includes a continue-from-here instruction', () => {
-  const run = makeRun([
-    { name: 'write_file', input: { path: 'src/foo.ts' } },
-  ]);
+  const run = makeRun([{ name: 'write_file', input: { path: 'src/foo.ts' } }]);
   const ctx = buildPriorWorkContext([run]);
   assert.ok(ctx);
   assert.match(ctx, /continue from here/i);
 });
 
 test('numbers multiple prior runs in order', () => {
-  const run1 = { ...makeRun([{ name: 'write_file', input: { path: 'a.ts' } }]), id: 'run_1' };
-  const run2 = { ...makeRun([{ name: 'report_status', input: { status: 'done', summary: 'finished b.ts' } }]), id: 'run_2' };
+  const run1 = {
+    ...makeRun([{ name: 'write_file', input: { path: 'a.ts' } }]),
+    id: 'run_1',
+  };
+  const run2 = {
+    ...makeRun([
+      {
+        name: 'report_status',
+        input: { status: 'done', summary: 'finished b.ts' },
+      },
+    ]),
+    id: 'run_2',
+  };
   const ctx = buildPriorWorkContext([run1, run2]);
   assert.ok(ctx);
   assert.match(ctx, /Run 1/i);

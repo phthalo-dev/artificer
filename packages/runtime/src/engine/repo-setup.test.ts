@@ -81,7 +81,10 @@ test('planner without write_plan is unproductive when repo exists', async () => 
 
   const workspaceDir = store.layout.workstreamWorkspace(ws.id);
   await fs.mkdir(path.join(workspaceDir, 'repo', '.git'), { recursive: true });
-  await fs.writeFile(path.join(workspaceDir, 'repo', '.git', 'HEAD'), 'ref: refs/heads/main\n');
+  await fs.writeFile(
+    path.join(workspaceDir, 'repo', '.git', 'HEAD'),
+    'ref: refs/heads/main\n',
+  );
 
   const unproductive = await plannerUnproductiveWithoutPlan(
     plannerRun(ws.id),
