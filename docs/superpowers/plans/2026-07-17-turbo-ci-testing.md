@@ -6,7 +6,7 @@
 
 **Architecture:** Each package exposes Turbo tasks (`lint`, `type-check`, `test`, `build`). Root `pnpm ci` runs `turbo run lint type-check test build`. GitHub Actions runs that packages job in parallel with a no-push Docker build of the repo-root Dockerfile. Prettier is the lint check; Vitest covers UI; CLI/runtime keep `node:test`.
 
-**Tech Stack:** Turbo 1.x (`pipeline` key), pnpm 8.15.1, Node 21 in CI, Prettier (root), Vitest + Vite 6 for UI, `node:test` + tsx for CLI/runtime, `docker/build-push-action` (build only).
+**Tech Stack:** Turbo 1.x (`pipeline` key), pnpm 8.15.1, Node 22 in CI, Prettier (root), Vitest + Vite 6 for UI, `node:test` + tsx for CLI/runtime, `docker/build-push-action` (build only).
 
 ## Global Constraints
 
@@ -481,14 +481,14 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v4
         with:
-          node-version: 21
+          node-version: 22
           cache: pnpm
 
       - name: Install dependencies
         run: pnpm install --frozen-lockfile
 
       - name: CI
-        run: pnpm ci
+        run: pnpm run ci
 
   docker:
     name: Build production image
@@ -524,13 +524,13 @@ to:
 
 ```yaml
       - name: Verify packages
-        run: pnpm ci
+        run: pnpm run ci
 ```
 
 - [ ] **Step 3: Local verification**
 
 ```bash
-pnpm ci
+pnpm run ci
 ```
 
 Expected: Turbo runs lint → type-check → test → build across packages that define each task; exit 0.
