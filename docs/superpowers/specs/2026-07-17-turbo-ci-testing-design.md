@@ -95,9 +95,9 @@ No new tests required; existing suite remains the main coverage under `turbo run
 ### Job `packages`
 
 1. Checkout
-2. pnpm 8.15.1 + Node 21 (match package `engines`)
+2. pnpm 8.15.1 + Node 22 (match package `engines`)
 3. `pnpm install --frozen-lockfile`
-4. `pnpm ci` → `turbo run lint type-check test build`
+4. `pnpm run ci` → `turbo run lint type-check test build`
 
 pnpm store cache via `actions/setup-node` as today. Turbo remote cache is optional later; not required this pass.
 
@@ -119,7 +119,7 @@ Do not use `packages/runtime/Dockerfile` (dev-oriented). Production image is the
 ## Success Criteria
 
 - A PR that breaks CLI `init` scaffolding, UI cost/format helpers, Prettier formatting, TypeScript in any package, or the root Dockerfile fails CI
-- `pnpm ci` locally matches what GitHub runs for the packages job
+- `pnpm run ci` locally matches what GitHub runs for the packages job
 - CI remains understandable: Turbo owns package tasks; Docker is a separate smoke
 
 ## Implementation Notes
