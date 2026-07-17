@@ -62,6 +62,21 @@ describe('IdentityGitSync', () => {
     assert.ok(log.some((l) => l.includes(memory.id)), `expected commit for ${memory.id}`);
   });
 
+  it('stages new schedule files with identity changes', async () => {
+    const store = new IdentityGitSync(rootDir, syncConfig);
+    await store.init();
+    const scheduleDir = path.join(rootDir, 'agent', 'schedules');
+    fs.mkdirSync(scheduleDir, { recursive: true });
+    fs.writeFileSync(path.join(scheduleDir, 'daily.md'), '# Daily');
+
+    await store.addMemory({ content: 'x', tags: [], kind: 'note' });
+
+    const { stdout } = await exec('git', [
+      '-C', rootDir, 'show', '--format=', '--name-only', 'HEAD',
+    ]);
+    assert.match(stdout, /agent\/schedules\/daily\.md/);
+  });
+
   it('commit message uses "memory: add {id}" format', async () => {
     const store = new IdentityGitSync(rootDir, syncConfig);
     await store.init();
@@ -148,6 +163,34 @@ describe('IdentityGitSync', () => {
     await assert.doesNotReject(() =>
       store.updateMemory(memory.id, { content: 'same' }),
     );
+  });
+
+  it('aborts the rebase and reports conflict when pull conflicts', async () => {
+    const remoteDir = tmpDir();
+    const otherDir = tmpDir();
+    await initBareRepo(remoteDir);
+    await exec('git', ['-C', rootDir, 'remote', 'add', 'origin', remoteDir]);
+    await exec('git', ['-C', rootDir, 'push', '-u', 'origin', 'HEAD']);
+    await exec('git', ['clone', remoteDir, otherDir]);
+    await exec('git', ['-C', otherDir, 'config', 'user.email', 'test@test.com']);
+    await exec('git', ['-C', otherDir, 'config', 'user.name', 'Test']);
+
+    fs.writeFileSync(path.join(rootDir, 'shared.txt'), 'local\n');
+    await exec('git', ['-C', rootDir, 'add', 'shared.txt']);
+    await exec('git', ['-C', rootDir, 'commit', '-m', 'local change']);
+
+    fs.writeFileSync(path.join(otherDir, 'shared.txt'), 'remote\n');
+    await exec('git', ['-C', otherDir, 'add', 'shared.txt']);
+    await exec('git', ['-C', otherDir, 'commit', '-m', 'remote change']);
+    await exec('git', ['-C', otherDir, 'push']);
+
+    const store = new IdentityGitSync(rootDir, { autoCommit: false });
+    assert.equal(await store.pullFromRemote(), 'conflict');
+    const { stdout } = await exec('git', ['-C', rootDir, 'status', '--porcelain']);
+    assert.equal(stdout, '');
+
+    fs.rmSync(remoteDir, { recursive: true, force: true });
+    fs.rmSync(otherDir, { recursive: true, force: true });
   });
 
   it('still returns the memory even if git commit fails', async () => {

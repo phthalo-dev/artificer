@@ -2,7 +2,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { serve } from '@hono/node-server';
-import { loadConfig, mergeWithDefinition, type RuntimeConfig } from '../config.js';
+import {
+  loadConfig,
+  mergeWithDefinition,
+  resolveIdentityConfig,
+  type RuntimeConfig,
+} from '../config.js';
 import { Engine } from '../engine/engine.js';
 import { createApp } from '../server/app.js';
 import { Store } from '../storage/store.js';
@@ -10,6 +15,8 @@ import { IdentityStore } from '../storage/identity-store.js';
 import { IdentityGitSync } from '../storage/identity-git-sync.js';
 import { ToolRegistry } from './tool-registry.js';
 import { WorkstreamMemoryService } from '../engine/workstream-memory.js';
+import { createScheduleRunnerForEngine } from '../engine/schedule-runner-host.js';
+import { runIdentityPullCycle } from '../engine/identity-pull.js';
 import { scanAgentDirectory } from '../discover/discover.js';
 import {
   loadSkillsFromDisk,
@@ -57,18 +64,24 @@ export async function createRuntime(
   const identityRoles = loadRolesFromDisk(manifest.roles);
   const registry = new RoleRegistry(identityRoles);
 
+  const hasIdentityOverride = Boolean(
+    options.config && Object.hasOwn(options.config, 'identity'),
+  );
   const config: RuntimeConfig = {
     ...baseConfig,
     ...options.config,
     agentName,
     execDir,
     identityDir: rootDir,
+    identity: hasIdentityOverride
+      ? resolveIdentityConfig(options.config?.identity)
+      : baseConfig.identity,
     globalInstructions: instructions?.content ?? undefined,
   } as RuntimeConfig;
 
   const store = new Store(execDir);
   await store.init();
-  const identity = config.identity?.autoCommit
+  const identity = config.identity
     ? new IdentityGitSync(rootDir, config.identity, config.github)
     : new IdentityStore(rootDir);
   await identity.init();
@@ -79,6 +92,7 @@ export async function createRuntime(
 
   const memoryService = new WorkstreamMemoryService(identity, store);
   const engine = new Engine(config, store, memoryService, registry, identity);
+  const scheduleRunner = createScheduleRunnerForEngine(engine);
   const app = createApp(engine, { identity, channels });
 
   return {
@@ -91,6 +105,25 @@ export async function createRuntime(
     instructions: instructions?.content ?? null,
     async start(port?: number) {
       const p = port ?? config.port;
+      scheduleRunner.start();
+      const pullIntervalMs = config.identity?.pullIntervalMs;
+      if (pullIntervalMs && identity instanceof IdentityGitSync) {
+        const scheduleNextPull = () => {
+          setTimeout(() => {
+            runIdentityPullCycle({
+              identity,
+              reloadSchedules: () => engine.reloadSchedules(),
+              log: (message) =>
+                console.log(`[artificer] [identity-pull] ${message}`),
+            })
+              .catch((err) => {
+                console.error('[artificer] identity pull failed:', err);
+              })
+              .finally(scheduleNextPull);
+          }, pullIntervalMs);
+        };
+        scheduleNextPull();
+      }
       serve({ fetch: app.fetch, port: p }, (info) => {
         const base = `http://localhost:${info.port}`;
         console.log(`[artificer] ${config.agentName} ready\n`);
