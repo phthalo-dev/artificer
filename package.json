@@ -18,7 +18,7 @@
     "version-packages": "changeset version",
     "publish-packages": "pnpm --filter @artificer-ai/runtime build && pnpm --filter @artificer-ai/runtime build:ui && pnpm --filter @artificer-ai/cli build && changeset publish",
     "ci": "turbo run lint type-check test build",
-    "ci:packages": "pnpm ci",
+    "ci:packages": "pnpm run ci",
     "release": "node scripts/publish.mjs"
   },
   "devDependencies": {
