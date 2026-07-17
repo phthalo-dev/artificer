@@ -88,8 +88,6 @@ async function workstreamStatus(
         notes: clip(r.notes, MAX_NOTES_CHARS),
       })),
     },
-    null,
-    2,
   );
 }
 
@@ -133,8 +131,6 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
             status: ws.status,
             summary: ws.summary,
           })),
-          null,
-          2,
         );
       },
     },
