@@ -387,8 +387,7 @@ export function init(name: string, targetDir?: string): void {
   const dir = targetDir ?? path.resolve(process.cwd(), name);
 
   if (fs.existsSync(dir) && fs.readdirSync(dir).length > 0) {
-    console.error(`Directory ${dir} already exists and is not empty.`);
-    process.exit(1);
+    throw new Error(`Directory ${dir} already exists and is not empty.`);
   }
 
   fs.mkdirSync(path.join(dir, 'agent', 'tools'), { recursive: true });

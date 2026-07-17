@@ -5,7 +5,12 @@ const [, , command, ...args] = process.argv;
 switch (command) {
   case 'init': {
     const { init } = await import('./commands/init.js');
-    init(args[0] ?? 'my-agent');
+    try {
+      init(args[0] ?? 'my-agent');
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : err);
+      process.exit(1);
+    }
     break;
   }
   case 'dev': {
