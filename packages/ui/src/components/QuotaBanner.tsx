@@ -43,7 +43,13 @@ export function QuotaAlert() {
   return (
     <Alert
       color={exhausted ? 'orange' : failover ? 'blue' : 'orange'}
-      title={exhausted ? 'Usage quota reached' : failover ? 'Provider failover' : 'Quota warning'}
+      title={
+        exhausted
+          ? 'Usage quota reached'
+          : failover
+            ? 'Provider failover'
+            : 'Quota warning'
+      }
     >
       <Group gap="xs">{headline}</Group>
     </Alert>

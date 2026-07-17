@@ -437,5 +437,7 @@ export function init(name: string, targetDir?: string): void {
   console.log('  npm install');
   console.log('  artificer dev');
   console.log('');
-  console.log('To deploy to Fly.io, see https://github.com/artificer-ai/artificer/blob/main/docs/deploy-fly.md');
+  console.log(
+    'To deploy to Fly.io, see https://github.com/artificer-ai/artificer/blob/main/docs/deploy-fly.md',
+  );
 }

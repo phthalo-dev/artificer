@@ -10,10 +10,12 @@ export interface BreakdownTableProps {
   renderKey?: (key: string) => { label: string; to?: string };
 }
 
-export function BreakdownTable({ label, data, renderKey }: BreakdownTableProps) {
-  const rows = Object.entries(data).sort(
-    (a, b) => b[1].costUsd - a[1].costUsd,
-  );
+export function BreakdownTable({
+  label,
+  data,
+  renderKey,
+}: BreakdownTableProps) {
+  const rows = Object.entries(data).sort((a, b) => b[1].costUsd - a[1].costUsd);
   if (rows.length === 0) {
     return (
       <Text c="dimmed" size="sm">

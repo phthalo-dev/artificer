@@ -1,4 +1,11 @@
-import type { Memory, Message, ModelConfig, QuotaConfig, Workstream, WorkstreamDetail } from '../api/types';
+import type {
+  Memory,
+  Message,
+  ModelConfig,
+  QuotaConfig,
+  Workstream,
+  WorkstreamDetail,
+} from '../api/types';
 import {
   buildUsageOverview,
   mockBenchOverview,
@@ -20,7 +27,9 @@ function clone<T>(value: T): T {
 export class MockStore {
   messages: Message[] = clone(mockMessages);
   workstreams: Workstream[] = clone(mockWorkstreams);
-  workstreamDetails: Record<string, WorkstreamDetail> = clone(mockWorkstreamDetails);
+  workstreamDetails: Record<string, WorkstreamDetail> = clone(
+    mockWorkstreamDetails,
+  );
   memories: Memory[] = clone(mockMemories);
   modelConfig: ModelConfig = clone(mockModelConfig);
   quotaConfig: QuotaConfig = clone(mockQuotaConfig);
@@ -38,13 +47,15 @@ export class MockStore {
           startedAt: new Date().toISOString(),
         },
       ],
-      workstreams: this.workstreams.map(({ id, title, status, summary, updatedAt }) => ({
-        id,
-        title,
-        status,
-        summary,
-        updatedAt,
-      })),
+      workstreams: this.workstreams.map(
+        ({ id, title, status, summary, updatedAt }) => ({
+          id,
+          title,
+          status,
+          summary,
+          updatedAt,
+        }),
+      ),
     };
   }
 
@@ -101,7 +112,8 @@ export class MockStore {
     const detail = message.workstreamId
       ? this.workstreamDetails[message.workstreamId]
       : undefined;
-    const runs = detail?.runs.filter((r) => r.originMessageId === messageId) ?? [];
+    const runs =
+      detail?.runs.filter((r) => r.originMessageId === messageId) ?? [];
     const tree = detail?.tree ?? [];
     return {
       message,
@@ -200,7 +212,9 @@ export class MockStore {
 
   getBenchRun(instanceId: string) {
     if (instanceId === mockBenchRunDetail.instanceId) return mockBenchRunDetail;
-    const row = mockBenchOverview.instances.find((i) => i.instanceId === instanceId);
+    const row = mockBenchOverview.instances.find(
+      (i) => i.instanceId === instanceId,
+    );
     if (!row) return null;
     return {
       ...mockBenchRunDetail,

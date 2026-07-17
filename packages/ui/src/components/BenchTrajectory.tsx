@@ -83,10 +83,7 @@ function ToolCall({ call, index }: { call: ToolInvocation; index: number }) {
   const hint = toolHint(call.input);
   return (
     <Box>
-      <UnstyledButton
-        onPress={() => setOpen((o) => !o)}
-        className={fullWidth}
-      >
+      <UnstyledButton onPress={() => setOpen((o) => !o)} className={fullWidth}>
         <Group gap={6} wrap="nowrap" align="center">
           {open ? (
             <IconChevronDown size={13} />

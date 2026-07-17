@@ -44,7 +44,9 @@ function TabsRoot({
 type TabsListProps = { children: ReactNode; className?: string };
 function TabsList({ children, className }: TabsListProps) {
   return (
-    <AriaTabList className={cx(tabsCls.list, className)}>{children}</AriaTabList>
+    <AriaTabList className={cx(tabsCls.list, className)}>
+      {children}
+    </AriaTabList>
   );
 }
 
@@ -57,7 +59,10 @@ function TabsTab({ value, children, className }: TabsTabProps) {
   );
 }
 
-type TabsPanelProps = HTMLAttributes<HTMLDivElement> & { value: string; pt?: string };
+type TabsPanelProps = HTMLAttributes<HTMLDivElement> & {
+  value: string;
+  pt?: string;
+};
 function TabsPanelComp({
   value,
   pt,

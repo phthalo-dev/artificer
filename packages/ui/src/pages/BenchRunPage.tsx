@@ -75,7 +75,12 @@ function PatchView({ patch }: { patch: string }) {
     <Paper p="sm" style={{ overflowX: 'auto' }}>
       <Box
         component="pre"
-        style={{ margin: 0, fontSize: 12, fontFamily: 'monospace', lineHeight: 1.5 }}
+        style={{
+          margin: 0,
+          fontSize: 12,
+          fontFamily: 'monospace',
+          lineHeight: 1.5,
+        }}
       >
         {lines.map((line, i) => {
           let color: string | undefined;
@@ -83,8 +88,7 @@ function PatchView({ patch }: { patch: string }) {
             color = '#15803d';
           else if (line.startsWith('-') && !line.startsWith('---'))
             color = '#b91c1c';
-          else if (line.startsWith('@@'))
-            color = '#2563eb';
+          else if (line.startsWith('@@')) color = '#2563eb';
           else if (
             line.startsWith('diff ') ||
             line.startsWith('index ') ||
@@ -152,11 +156,11 @@ export function BenchRunPage() {
       <Paper p="lg">
         <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: 7 }}>
           <Metric label="Steps" value={steps !== null ? String(steps) : '—'} />
+          <Metric label="Calls" value={usage ? String(usage.runs) : '—'} />
           <Metric
-            label="Calls"
-            value={usage ? String(usage.runs) : '—'}
+            label="Cost"
+            value={usage ? formatCost(usage.costUsd) : '—'}
           />
-          <Metric label="Cost" value={usage ? formatCost(usage.costUsd) : '—'} />
           <Metric
             label="Input tok"
             value={usage ? usage.inputTokens.toLocaleString() : '—'}
@@ -197,7 +201,10 @@ export function BenchRunPage() {
                 </Text>
               )}
             </Group>
-            <ViewRawLink data={data} filename={`bench-${data.instanceId}.json`} />
+            <ViewRawLink
+              data={data}
+              filename={`bench-${data.instanceId}.json`}
+            />
           </Group>
           {data.trajectory ? (
             <BenchTrajectory tree={data.trajectory} />

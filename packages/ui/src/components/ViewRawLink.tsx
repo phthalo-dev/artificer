@@ -2,7 +2,13 @@ import { Anchor, anchorIcon } from '../ds';
 import { IconExternalLink } from '@tabler/icons-react';
 import { useEffect, useMemo } from 'react';
 
-export function ViewRawLink({ data, filename }: { data: unknown; filename: string }) {
+export function ViewRawLink({
+  data,
+  filename,
+}: {
+  data: unknown;
+  filename: string;
+}) {
   const href = useMemo(() => {
     const blob = new Blob([JSON.stringify(data, null, 2)], {
       type: 'application/json',

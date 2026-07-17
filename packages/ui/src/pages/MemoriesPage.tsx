@@ -20,7 +20,12 @@ import {
 import { useDebouncedValue, useDisclosure } from '../ds/hooks';
 import { IconPlus, IconSearch, IconTrash } from '@tabler/icons-react';
 import { useState } from 'react';
-import { useMemories, useCreateMemory, useDeleteMemory, type CreateMemoryInput } from '../api/hooks';
+import {
+  useMemories,
+  useCreateMemory,
+  useDeleteMemory,
+  type CreateMemoryInput,
+} from '../api/hooks';
 import type { Memory } from '../api/types';
 import { MarkdownContent } from '../components/MarkdownContent';
 import { formatTime, relativeTime } from '../format';
@@ -227,7 +232,14 @@ function AddMemoryModal({
     tags: string;
     kind: string;
     source: string;
-  }>({ content: '', title: '', summary: '', tags: '', kind: 'note', source: '' });
+  }>({
+    content: '',
+    title: '',
+    summary: '',
+    tags: '',
+    kind: 'note',
+    source: '',
+  });
 
   const set = (field: keyof typeof form) => (value: string) =>
     setForm((f) => ({ ...f, [field]: value }));
@@ -237,17 +249,34 @@ function AddMemoryModal({
       content: form.content,
       title: form.title || undefined,
       summary: form.summary || undefined,
-      tags: form.tags ? form.tags.split(',').map((t) => t.trim()).filter(Boolean) : [],
+      tags: form.tags
+        ? form.tags
+            .split(',')
+            .map((t) => t.trim())
+            .filter(Boolean)
+        : [],
       kind: (form.kind as CreateMemoryInput['kind']) || 'note',
       source: form.source || undefined,
     };
     await createMemory.mutateAsync(input);
-    setForm({ content: '', title: '', summary: '', tags: '', kind: 'note', source: '' });
+    setForm({
+      content: '',
+      title: '',
+      summary: '',
+      tags: '',
+      kind: 'note',
+      source: '',
+    });
     onClose();
   };
 
   return (
-    <Modal opened={opened} onClose={onClose} title={<Text fw={600}>Add Memory</Text>} size="lg">
+    <Modal
+      opened={opened}
+      onClose={onClose}
+      title={<Text fw={600}>Add Memory</Text>}
+      size="lg"
+    >
       <Stack gap="sm">
         <TextInput
           label="Title"
@@ -256,7 +285,9 @@ function AddMemoryModal({
           onChange={set('title')}
         />
         <Stack gap={4}>
-          <Text size="sm" fw={600}>Content <Text c="dimmed">(required)</Text></Text>
+          <Text size="sm" fw={600}>
+            Content <Text c="dimmed">(required)</Text>
+          </Text>
           <Textarea
             placeholder="The memory content…"
             autosize
@@ -315,7 +346,8 @@ export function MemoriesPage() {
   const [debounced] = useDebouncedValue(query, 300);
   const { data, isLoading } = useMemories(debounced.trim() || undefined);
   const [selected, setSelected] = useState<Memory | null>(null);
-  const [detailOpened, { open: openDetail, close: closeDetail }] = useDisclosure(false);
+  const [detailOpened, { open: openDetail, close: closeDetail }] =
+    useDisclosure(false);
   const [addOpened, { open: openAdd, close: closeAdd }] = useDisclosure(false);
   const deleteMemory = useDeleteMemory();
 

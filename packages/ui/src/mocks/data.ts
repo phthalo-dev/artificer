@@ -50,7 +50,8 @@ function tokenUsage(
 }
 
 function usage(
-  partial: Partial<UsageSummary> & Pick<UsageSummary, 'inputTokens' | 'outputTokens'>,
+  partial: Partial<UsageSummary> &
+    Pick<UsageSummary, 'inputTokens' | 'outputTokens'>,
 ): UsageSummary {
   return {
     cacheCreationInputTokens: 0,
@@ -117,7 +118,8 @@ const wsAuthRuns: RunRecord[] = [
     parentRunId: 'run-orch-1',
     model: 'claude-sonnet-4-20250514',
     status: 'done',
-    output: 'Plan: migrate sessions to JWT, add refresh rotation, update middleware.',
+    output:
+      'Plan: migrate sessions to JWT, add refresh rotation, update middleware.',
     createdAt: T1,
     startedAt: T1,
     finishedAt: T2,
@@ -129,7 +131,11 @@ const wsAuthRuns: RunRecord[] = [
         at: T1,
       },
     ],
-    usage: tokenUsage({ inputTokens: 8200, outputTokens: 2100, costUsd: 0.056 }),
+    usage: tokenUsage({
+      inputTokens: 8200,
+      outputTokens: 2100,
+      costUsd: 0.056,
+    }),
   }),
   run({
     id: 'run-worker-1',
@@ -156,7 +162,11 @@ const wsAuthRuns: RunRecord[] = [
         at: T3,
       },
     ],
-    usage: tokenUsage({ inputTokens: 18400, outputTokens: 4200, costUsd: 0.112 }),
+    usage: tokenUsage({
+      inputTokens: 18400,
+      outputTokens: 4200,
+      costUsd: 0.112,
+    }),
   }),
   run({
     id: 'run-review-1',
@@ -200,7 +210,8 @@ function buildTree(runs: RunRecord[]): RunNode[] {
         inputTokens: cumulative.inputTokens + childCum.inputTokens,
         outputTokens: cumulative.outputTokens + childCum.outputTokens,
         cacheCreationInputTokens:
-          cumulative.cacheCreationInputTokens + childCum.cacheCreationInputTokens,
+          cumulative.cacheCreationInputTokens +
+          childCum.cacheCreationInputTokens,
         cacheReadInputTokens:
           cumulative.cacheReadInputTokens + childCum.cacheReadInputTokens,
         requests: cumulative.requests + childCum.requests,
@@ -230,7 +241,13 @@ function summarizeRuns(runs: RunRecord[]): UsageSummary {
         costUsd: acc.costUsd + u.costUsd,
       };
     },
-    usage({ inputTokens: 0, outputTokens: 0, costUsd: 0, runs: 0, requests: 0 }),
+    usage({
+      inputTokens: 0,
+      outputTokens: 0,
+      costUsd: 0,
+      runs: 0,
+      requests: 0,
+    }),
   );
 }
 
@@ -240,7 +257,13 @@ function byRole(runs: RunRecord[]): Record<string, UsageSummary> {
     const u = runUsageSummary(r);
     const prev =
       out[r.role] ??
-      usage({ inputTokens: 0, outputTokens: 0, costUsd: 0, runs: 0, requests: 0 });
+      usage({
+        inputTokens: 0,
+        outputTokens: 0,
+        costUsd: 0,
+        runs: 0,
+        requests: 0,
+      });
     out[r.role] = {
       inputTokens: prev.inputTokens + u.inputTokens,
       outputTokens: prev.outputTokens + u.outputTokens,
@@ -262,7 +285,13 @@ function byTask(runs: RunRecord[]): Record<string, UsageSummary> {
     const u = runUsageSummary(r);
     const prev =
       out[r.taskId] ??
-      usage({ inputTokens: 0, outputTokens: 0, costUsd: 0, runs: 0, requests: 0 });
+      usage({
+        inputTokens: 0,
+        outputTokens: 0,
+        costUsd: 0,
+        runs: 0,
+        requests: 0,
+      });
     out[r.taskId] = {
       inputTokens: prev.inputTokens + u.inputTokens,
       outputTokens: prev.outputTokens + u.outputTokens,
@@ -328,14 +357,16 @@ export const mockMessages: Message[] = [
   {
     id: MOCK_MESSAGE_IDS.refactor,
     direction: 'inbound',
-    content: 'Please refactor auth to use JWT sessions with refresh token rotation.',
+    content:
+      'Please refactor auth to use JWT sessions with refresh token rotation.',
     createdAt: T0,
     workstreamId: MOCK_WORKSTREAM_IDS.active,
   },
   {
     id: MOCK_MESSAGE_IDS.docs,
     direction: 'inbound',
-    content: 'Clean up the README and API docs — lots of stale webhook references.',
+    content:
+      'Clean up the README and API docs — lots of stale webhook references.',
     createdAt: '2026-06-25T14:00:00.000Z',
     workstreamId: MOCK_WORKSTREAM_IDS.done,
   },
@@ -436,12 +467,30 @@ export const mockWorkstreamDetails: Record<string, WorkstreamDetail> = {
     runs: [],
     tree: [],
     usage: {
-      total: usage({ inputTokens: 4200, outputTokens: 1800, costUsd: 0.024, runs: 2, requests: 2 }),
+      total: usage({
+        inputTokens: 4200,
+        outputTokens: 1800,
+        costUsd: 0.024,
+        runs: 2,
+        requests: 2,
+      }),
       byRole: {
-        worker: usage({ inputTokens: 4200, outputTokens: 1800, costUsd: 0.024, runs: 2, requests: 2 }),
+        worker: usage({
+          inputTokens: 4200,
+          outputTokens: 1800,
+          costUsd: 0.024,
+          runs: 2,
+          requests: 2,
+        }),
       },
       byTask: {
-        'task-docs-1': usage({ inputTokens: 4200, outputTokens: 1800, costUsd: 0.024, runs: 2, requests: 2 }),
+        'task-docs-1': usage({
+          inputTokens: 4200,
+          outputTokens: 1800,
+          costUsd: 0.024,
+          runs: 2,
+          requests: 2,
+        }),
       },
     },
   },
@@ -453,7 +502,13 @@ export const mockWorkstreamDetails: Record<string, WorkstreamDetail> = {
     runs: [],
     tree: [],
     usage: {
-      total: usage({ inputTokens: 0, outputTokens: 0, costUsd: 0, runs: 0, requests: 0 }),
+      total: usage({
+        inputTokens: 0,
+        outputTokens: 0,
+        costUsd: 0,
+        runs: 0,
+        requests: 0,
+      }),
       byRole: {},
       byTask: {},
     },
@@ -464,7 +519,8 @@ export const mockMemories: Memory[] = [
   {
     id: 'mem-1',
     title: 'Code style',
-    content: 'Prefer tabs over spaces in TypeScript files. Max line length 100.',
+    content:
+      'Prefer tabs over spaces in TypeScript files. Max line length 100.',
     summary: 'Indentation and formatting preferences',
     tags: ['style', 'typescript'],
     kind: 'preference',
@@ -489,7 +545,8 @@ export const mockMemories: Memory[] = [
   },
   {
     id: 'mem-3',
-    content: 'The team uses pnpm workspaces; never run npm install at repo root.',
+    content:
+      'The team uses pnpm workspaces; never run npm install at repo root.',
     tags: ['tooling'],
     kind: 'note',
     source: 'onboarding',
@@ -554,17 +611,32 @@ export const mockModelConfig: ModelConfig = {
     {
       id: 'claude-haiku-4-20250514',
       provider: 'Anthropic',
-      pricing: { inputPerMTok: 0.8, outputPerMTok: 4, cacheWritePerMTok: 1, cacheReadPerMTok: 0.08 },
+      pricing: {
+        inputPerMTok: 0.8,
+        outputPerMTok: 4,
+        cacheWritePerMTok: 1,
+        cacheReadPerMTok: 0.08,
+      },
     },
     {
       id: 'claude-sonnet-4-20250514',
       provider: 'Anthropic',
-      pricing: { inputPerMTok: 3, outputPerMTok: 15, cacheWritePerMTok: 3.75, cacheReadPerMTok: 0.3 },
+      pricing: {
+        inputPerMTok: 3,
+        outputPerMTok: 15,
+        cacheWritePerMTok: 3.75,
+        cacheReadPerMTok: 0.3,
+      },
     },
     {
       id: 'claude-opus-4-20250514',
       provider: 'Anthropic',
-      pricing: { inputPerMTok: 15, outputPerMTok: 75, cacheWritePerMTok: 18.75, cacheReadPerMTok: 1.5 },
+      pricing: {
+        inputPerMTok: 15,
+        outputPerMTok: 75,
+        cacheWritePerMTok: 18.75,
+        cacheReadPerMTok: 1.5,
+      },
     },
   ],
 };
@@ -587,7 +659,11 @@ export const mockBenchOverview: BenchOverview = {
   generatedAt: T4,
   graded: true,
   modelName: 'claude-sonnet-4-20250514',
-  models: { low: 'claude-haiku-4-20250514', medium: 'claude-sonnet-4-20250514', high: 'claude-opus-4-20250514' },
+  models: {
+    low: 'claude-haiku-4-20250514',
+    medium: 'claude-sonnet-4-20250514',
+    high: 'claude-opus-4-20250514',
+  },
   suiteKind: 'swebench',
   suiteName: 'SWE-bench Lite',
   suiteDescription: '300 curated instances',
@@ -644,13 +720,49 @@ export const mockBenchOverview: BenchOverview = {
     },
   ],
   instanceEfficiency: [
-    { id: MOCK_BENCH_INSTANCE, label: MOCK_BENCH_INSTANCE, costUsd: 0.18, scorePct: 100, kind: 'instance', resolved: true },
-    { id: 'requests__requests-5678', label: 'requests__requests-5678', costUsd: 0.11, scorePct: 100, kind: 'instance', resolved: true },
-    { id: 'flask__flask-9012', label: 'flask__flask-9012', costUsd: 0.13, scorePct: 0, kind: 'instance', resolved: false },
+    {
+      id: MOCK_BENCH_INSTANCE,
+      label: MOCK_BENCH_INSTANCE,
+      costUsd: 0.18,
+      scorePct: 100,
+      kind: 'instance',
+      resolved: true,
+    },
+    {
+      id: 'requests__requests-5678',
+      label: 'requests__requests-5678',
+      costUsd: 0.11,
+      scorePct: 100,
+      kind: 'instance',
+      resolved: true,
+    },
+    {
+      id: 'flask__flask-9012',
+      label: 'flask__flask-9012',
+      costUsd: 0.13,
+      scorePct: 0,
+      kind: 'instance',
+      resolved: false,
+    },
   ],
   runEfficiency: [
-    { id: 'run-plan-1', label: 'planner', costUsd: 0.056, scorePct: 40, kind: 'run', resolved: true },
-    { id: 'run-worker-1', label: 'worker', costUsd: 0.112, scorePct: 60, kind: 'run', resolved: null, isCurrent: true },
+    {
+      id: 'run-plan-1',
+      label: 'planner',
+      costUsd: 0.056,
+      scorePct: 40,
+      kind: 'run',
+      resolved: true,
+    },
+    {
+      id: 'run-worker-1',
+      label: 'worker',
+      costUsd: 0.112,
+      scorePct: 60,
+      kind: 'run',
+      resolved: null,
+      isCurrent: true,
+    },
   ],
 };
 
@@ -725,10 +837,17 @@ export function buildUsageOverview(
       .map((m) => ({
         messageId: m.id,
         createdAt: m.createdAt,
-        content: m.content.length > 140 ? `${m.content.slice(0, 140)}…` : m.content,
+        content:
+          m.content.length > 140 ? `${m.content.slice(0, 140)}…` : m.content,
         usage:
           workstreamDetails[m.workstreamId ?? '']?.usage.total ??
-          usage({ inputTokens: 0, outputTokens: 0, costUsd: 0, runs: 0, requests: 0 }),
+          usage({
+            inputTokens: 0,
+            outputTokens: 0,
+            costUsd: 0,
+            runs: 0,
+            requests: 0,
+          }),
       })),
     byRoute,
     quota: mockQuotaSnapshot,
@@ -839,7 +958,9 @@ export const mockQuotaConfig: QuotaConfig = {
       llm: { baseURL: 'https://opencode.ai/zen/go/v1' },
       presetId: 'go-economy',
       models: { low: 'kimi-k2.5', medium: 'kimi-k2.6', high: 'kimi-k2.6' },
-      windows: mockQuotaSnapshot.accounts['opencode-go']!.windows.map((w) => w.config),
+      windows: mockQuotaSnapshot.accounts['opencode-go']!.windows.map(
+        (w) => w.config,
+      ),
     },
     {
       id: 'zen-failover',
@@ -849,7 +970,9 @@ export const mockQuotaConfig: QuotaConfig = {
       llm: { baseURL: 'https://opencode.ai/zen/v1' },
       presetId: 'zen-balanced',
       models: { low: 'glm-4.7-flash', medium: 'glm-4.7', high: 'glm-4.7' },
-      windows: mockQuotaSnapshot.accounts['opencode-zen']!.windows.map((w) => w.config),
+      windows: mockQuotaSnapshot.accounts['opencode-zen']!.windows.map(
+        (w) => w.config,
+      ),
     },
   ],
 };

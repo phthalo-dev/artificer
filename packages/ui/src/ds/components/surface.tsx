@@ -101,7 +101,10 @@ export function Alert({
     <div className={cx(alertCls({ color: c }), className)} {...props}>
       {(title || icon) && (
         <div
-          className={cx(alertHeader, children ? alertHeaderWithBody : undefined)}
+          className={cx(
+            alertHeader,
+            children ? alertHeaderWithBody : undefined,
+          )}
         >
           {icon}
           {title}

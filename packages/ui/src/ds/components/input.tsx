@@ -41,9 +41,7 @@ export function TextInput({
     <AriaTextField onChange={onChange} className={fieldRoot}>
       {label && <Label className={fieldLabel}>{label}</Label>}
       <div className={fieldWrapper}>
-        {leftSection && (
-          <span className={fieldLeftSection}>{leftSection}</span>
-        )}
+        {leftSection && <span className={fieldLeftSection}>{leftSection}</span>}
         <AriaInput
           className={cx(
             inputBase,

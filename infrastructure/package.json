@@ -14,7 +14,7 @@
     "deploy:personal": "bash scripts/deploy-personal.sh",
     "sync:runtime-env": "bash scripts/sync-runtime-env.sh",
     "type-check": "tsc --noEmit",
-    "lint": "prettier --check \"bin/**/*.ts\" \"lib/**/*.ts\" \"lambda/**/*.ts\""
+    "lint": "prettier --check \"bin/**/*.ts\" \"lib/**/*.ts\""
   },
   "devDependencies": {
     "@types/node": "^20.11.5",

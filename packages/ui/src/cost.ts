@@ -14,15 +14,30 @@ interface ModelPricing {
 const TIERS: Array<{ match: RegExp; pricing: ModelPricing }> = [
   {
     match: /opus/i,
-    pricing: { inputPerMTok: 15, outputPerMTok: 75, cacheWritePerMTok: 18.75, cacheReadPerMTok: 1.5 },
+    pricing: {
+      inputPerMTok: 15,
+      outputPerMTok: 75,
+      cacheWritePerMTok: 18.75,
+      cacheReadPerMTok: 1.5,
+    },
   },
   {
     match: /haiku/i,
-    pricing: { inputPerMTok: 0.8, outputPerMTok: 4, cacheWritePerMTok: 1, cacheReadPerMTok: 0.08 },
+    pricing: {
+      inputPerMTok: 0.8,
+      outputPerMTok: 4,
+      cacheWritePerMTok: 1,
+      cacheReadPerMTok: 0.08,
+    },
   },
   {
     match: /sonnet/i,
-    pricing: { inputPerMTok: 3, outputPerMTok: 15, cacheWritePerMTok: 3.75, cacheReadPerMTok: 0.3 },
+    pricing: {
+      inputPerMTok: 3,
+      outputPerMTok: 15,
+      cacheWritePerMTok: 3.75,
+      cacheReadPerMTok: 0.3,
+    },
   },
 ];
 
@@ -34,7 +49,10 @@ function pricingFor(model: string | undefined): ModelPricing {
   return FALLBACK;
 }
 
-export function costForUsage(model: string | undefined, usage: TokenUsage): number {
+export function costForUsage(
+  model: string | undefined,
+  usage: TokenUsage,
+): number {
   const p = pricingFor(model);
   const cost =
     (usage.inputTokens / 1_000_000) * p.inputPerMTok +

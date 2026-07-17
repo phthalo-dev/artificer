@@ -1,8 +1,4 @@
-import {
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
 import { api, baseOrigin, sendWork } from './client';
 import { getApiKey } from './auth';
@@ -133,10 +129,10 @@ export function useUpdateRoleTiers() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (roleTiers: Partial<Record<RoleName, ModelTier>>) =>
-      api.put<{ roleTiers: Record<RoleName, ModelTier>; activePresetId: string }>(
-        '/config/role-tiers',
-        roleTiers,
-      ),
+      api.put<{
+        roleTiers: Record<RoleName, ModelTier>;
+        activePresetId: string;
+      }>('/config/role-tiers', roleTiers),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['model-config'] });
     },
@@ -146,7 +142,8 @@ export function useUpdateRoleTiers() {
 export function useCancelWorkstream(id: string | undefined) {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => api.post<{ ok: boolean }>(`/workstreams/${id}/cancel`, {}),
+    mutationFn: () =>
+      api.post<{ ok: boolean }>(`/workstreams/${id}/cancel`, {}),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['workstream', id] });
       qc.invalidateQueries({ queryKey: ['workstreams'] });
@@ -166,7 +163,8 @@ export function useBenchRuns() {
 export function useBenchSuites() {
   return useQuery({
     queryKey: ['bench-suites'],
-    queryFn: () => api.get<{ suites: BenchSuiteCatalogEntry[] }>('/bench/suites'),
+    queryFn: () =>
+      api.get<{ suites: BenchSuiteCatalogEntry[] }>('/bench/suites'),
     select: (d) => d.suites,
     staleTime: 60_000,
   });
@@ -213,10 +211,9 @@ export function useUpdateQuotaConfig() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (config: QuotaConfig) =>
-      api.put<QuotaConfigResponse & { quota: import('./types').QuotaSnapshot | null }>(
-        '/config/quota',
-        config,
-      ),
+      api.put<
+        QuotaConfigResponse & { quota: import('./types').QuotaSnapshot | null }
+      >('/config/quota', config),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['quota-config'] });
       qc.invalidateQueries({ queryKey: ['model-config'] });
@@ -291,7 +288,9 @@ export function useSSEEvents(): ActivityEntry[] {
   useEffect(() => {
     const key = getApiKey();
     const eventsBase = `${baseOrigin.replace(/\/$/, '')}/events`;
-    const url = key ? `${eventsBase}?key=${encodeURIComponent(key)}` : eventsBase;
+    const url = key
+      ? `${eventsBase}?key=${encodeURIComponent(key)}`
+      : eventsBase;
     let es: EventSource;
     let reconnectTimer: ReturnType<typeof setTimeout> | undefined;
     let closed = false;
@@ -307,7 +306,9 @@ export function useSSEEvents(): ActivityEntry[] {
             if (!entry) return;
             setEntries((prev) => {
               const next = [...prev, entry];
-              return next.length > MAX_ENTRIES ? next.slice(-MAX_ENTRIES) : next;
+              return next.length > MAX_ENTRIES
+                ? next.slice(-MAX_ENTRIES)
+                : next;
             });
             if (kind === 'quota') {
               qc.invalidateQueries({ queryKey: ['usage'] });

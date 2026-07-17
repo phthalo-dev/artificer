@@ -112,8 +112,9 @@ export function WorkstreamDetailPage() {
           {ws.quotaPausedStatus && (
             <>
               {' '}
-              Will return to <strong>{ws.quotaPausedStatus.replace(/_/g, ' ')}</strong>{' '}
-              when quota clears.
+              Will return to{' '}
+              <strong>{ws.quotaPausedStatus.replace(/_/g, ' ')}</strong> when
+              quota clears.
             </>
           )}
         </Alert>

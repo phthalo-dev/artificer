@@ -1,8 +1,10 @@
 import { tokens } from '../styles';
 
 export const font = tokens.create('font', {
-  familySans: 'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
-  familyMono: '"Fira Code", "Cascadia Code", Consolas, "Courier New", monospace',
+  familySans:
+    'system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif',
+  familyMono:
+    '"Fira Code", "Cascadia Code", Consolas, "Courier New", monospace',
   sizeXs: '11px',
   sizeSm: '13px',
   sizeMd: '14px',
