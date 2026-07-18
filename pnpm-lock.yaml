@@ -92,6 +92,9 @@ importers:
       dotenv:
         specifier: ^16.4.5
         version: 16.6.1
+      fuse.js:
+        specifier: ^7.5.0
+        version: 7.5.0
       hono:
         specifier: ^4.6.14
         version: 4.12.23
@@ -3628,6 +3631,11 @@ packages:
     requiresBuild: true
     dev: true
     optional: true
+
+  /fuse.js@7.5.0:
+    resolution: {integrity: sha512-sQtrEfA+ez/3G0cCZecF70oqpCRttCexYUG4mUrtWL49ULUzUyxokt5kyqwtKzj1270RaKih+hcP3qLcumccow==}
+    engines: {node: '>=10'}
+    dev: false
 
   /gensync@1.0.0-beta.2:
     resolution: {integrity: sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==}

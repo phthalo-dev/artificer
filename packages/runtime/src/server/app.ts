@@ -439,7 +439,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
       return c.json({ error: 'identity store not configured' }, 503);
     const q = c.req.query('q')?.trim();
     if (q) {
-      const memories = await deps.identity.queryMemories(q, 20);
+      const memories = await deps.identity.queryMemories(q, { limit: 20 });
       return c.json({ memories });
     }
     const memories = await deps.identity.listMemories();
