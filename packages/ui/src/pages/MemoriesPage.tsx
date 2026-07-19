@@ -179,6 +179,36 @@ function MemoryDetail({
             <Text size="xs">{memory.kind}</Text>
           </Group>
         )}
+        {memory.related && memory.related.length > 0 && (
+          <Group gap="xs" align="flex-start">
+            <Text size="xs" c="dimmed" w={70}>
+              Related
+            </Text>
+            <Stack gap={2}>
+              {memory.related.map((r) => (
+                <Text key={`${r.id}:${r.type}`} size="xs">
+                  {r.type} → <Code>{r.id}</Code>
+                </Text>
+              ))}
+            </Stack>
+          </Group>
+        )}
+        {memory.sourceHash && (
+          <Group gap="xs">
+            <Text size="xs" c="dimmed" w={70}>
+              Hash
+            </Text>
+            <Code>{memory.sourceHash.slice(0, 16)}…</Code>
+          </Group>
+        )}
+        {memory.sourceCommit && (
+          <Group gap="xs">
+            <Text size="xs" c="dimmed" w={70}>
+              Commit
+            </Text>
+            <Code>{memory.sourceCommit.slice(0, 12)}</Code>
+          </Group>
+        )}
         <Group gap="xs">
           <Text size="xs" c="dimmed" w={70}>
             Created

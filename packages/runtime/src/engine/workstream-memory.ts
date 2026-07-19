@@ -214,8 +214,10 @@ export class WorkstreamMemoryService {
 
   /**
    * Fire-and-forget librarian distill after a terminal workstream update.
-   * Skips when the goal+summary+status hash matches the last distill, or when
-   * the status is not a finished terminal (blocked is a pause, not a finish).
+   * Skip when the sidecar distill hash matches the current goal+summary+status
+   * hash (already distilled this snapshot). Chronicle `sourceHash` is provenance
+   * of the chronicle body (set in onTerminal) and must not gate first distill —
+   * otherwise a terminal that just wrote sourceHash would never spawn a librarian.
    */
   async requestDistill(
     ws: Workstream,

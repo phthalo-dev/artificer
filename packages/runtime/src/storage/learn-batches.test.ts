@@ -4,6 +4,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { afterEach, beforeEach, describe, it } from 'node:test';
 import {
+  ageOutLearnBatches,
   learnBatchDir,
   mergeLearnBatches,
   trashLearnBatches,
@@ -67,5 +68,27 @@ describe('learn-batches', () => {
     assert.ok(fs.existsSync(dir));
     await trashLearnBatches(execRoot, 'run_2');
     assert.equal(fs.existsSync(dir), false);
+  });
+
+  it('ages out abandoned learn-* directories older than maxAge', async () => {
+    await writeLearnBatch(execRoot, 'old', 1, [
+      { content: 'stale', kind: 'note' },
+    ]);
+    await writeLearnBatch(execRoot, 'fresh', 1, [
+      { content: 'keep', kind: 'note' },
+    ]);
+    const oldDir = learnBatchDir(execRoot, 'old');
+    const freshDir = learnBatchDir(execRoot, 'fresh');
+    const oldMtime = Date.now() - 48 * 60 * 60 * 1000;
+    fs.utimesSync(oldDir, oldMtime / 1000, oldMtime / 1000);
+
+    const removed = await ageOutLearnBatches(
+      execRoot,
+      24 * 60 * 60 * 1000,
+      Date.now(),
+    );
+    assert.equal(removed, 1);
+    assert.equal(fs.existsSync(oldDir), false);
+    assert.ok(fs.existsSync(freshDir));
   });
 });

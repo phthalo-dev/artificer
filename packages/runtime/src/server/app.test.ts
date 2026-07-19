@@ -115,6 +115,41 @@ test('GET /api/memories lists memories from identity store', async () => {
   assert.equal(body.memories[0].content, 'Hello identity');
 });
 
+test('GET /api/memories?q= returns packed related neighbors', async () => {
+  const { engine, identity } = await buildAppWithIdentity();
+  const doc = await identity.addMemory({
+    content: 'Chronicle about payments TDD.',
+    title: 'Payments chronicle',
+    summary: 'Payments TDD chronicle',
+    tags: ['payments'],
+    kind: 'document',
+  });
+  const claim = await identity.addMemory({
+    content: 'Write failing tests first.',
+    title: 'TDD claim',
+    summary: 'TDD first',
+    tags: ['payments'],
+    kind: 'claim',
+    related: [{ id: doc.id, type: 'builds_on' }],
+  });
+  const app = createApp(engine, { identity });
+
+  const res = await app.request(
+    `/api/memories?q=${encodeURIComponent('Payments chronicle')}&limit=1`,
+  );
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as {
+    memories: Memory[];
+    related: Array<{ to: string; type: string; content?: string }>;
+    charBudget: { used: number; limit: number };
+  };
+  assert.equal(body.memories.length, 1);
+  assert.equal(body.memories[0]?.id, doc.id);
+  assert.ok(body.related.some((r) => r.to === claim.id));
+  assert.ok(body.related.some((r) => r.content?.includes('failing tests')));
+  assert.ok(body.charBudget.limit > 0);
+});
+
 test('POST /api/memories creates a memory in identity store', async () => {
   const { engine, identity } = await buildAppWithIdentity();
   const app = createApp(engine, { identity });
