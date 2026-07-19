@@ -165,6 +165,8 @@ describe('WorkstreamMemoryService', () => {
     assert.ok(memories[0].content.includes('done'));
     assert.ok(memories[0].content.includes('Fixed mobile login bug'));
     assert.ok(memories[0].summary?.includes('Fixed mobile login bug'));
+    assert.ok(memories[0].sourceHash);
+    assert.equal(memories[0].sourceHash?.length, 64);
   });
 
   it('records failed terminal state in memory', async () => {

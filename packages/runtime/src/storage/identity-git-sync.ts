@@ -20,7 +20,7 @@ export class IdentityGitSync extends IdentityStore {
     syncConfig: IdentityConfig,
     github?: GitHubConfig,
   ) {
-    super(rootDir);
+    super(rootDir, { embeddings: syncConfig.embeddings });
     this.syncConfig = syncConfig;
     this.github = github;
   }
@@ -35,7 +35,19 @@ export class IdentityGitSync extends IdentityStore {
 
   override async updateMemory(
     id: string,
-    patch: Partial<Pick<Memory, 'content' | 'title' | 'summary' | 'tags'>>,
+    patch: Partial<
+      Pick<
+        Memory,
+        | 'content'
+        | 'title'
+        | 'summary'
+        | 'tags'
+        | 'related'
+        | 'kind'
+        | 'sourceHash'
+        | 'sourceCommit'
+      >
+    >,
   ): Promise<Memory | null> {
     const memory = await super.updateMemory(id, patch);
     if (memory) await this.commitAndPush(`update ${memory.id}`);
