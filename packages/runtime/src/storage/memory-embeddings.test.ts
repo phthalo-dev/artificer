@@ -4,6 +4,7 @@ import {
   cosineSimilarity,
   localEmbed,
   rankMemoriesHybrid,
+  resolveEmbedFn,
 } from './memory-embeddings.js';
 import type { MemoryIndexEntry } from './memory-search.js';
 import { rankMemories } from './memory-search.js';
@@ -68,4 +69,24 @@ test('rankMemoriesHybrid fuses semantic signal when vectors present', () => {
     localEmbed('authentication jwt'),
   );
   assert.equal(ranked[0]?.entry.id, 'near');
+});
+
+test('resolveEmbedFn returns null when disabled; openai when enabled', async () => {
+  assert.equal(resolveEmbedFn({ enabled: false }), null);
+  assert.equal(resolveEmbedFn({ enabled: true, provider: 'none' }), null);
+  const local = resolveEmbedFn({ enabled: true, provider: 'local' });
+  assert.ok(local);
+  const vec = await local!('hello');
+  assert.equal(vec.length, 64);
+
+  const openai = resolveEmbedFn({ enabled: true, provider: 'openai' });
+  assert.ok(openai);
+  // Without keys, openai embed throws rather than silently using local.
+  const prevOpen = process.env.OPENAI_API_KEY;
+  const prevLlm = process.env.LLM_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  delete process.env.LLM_API_KEY;
+  await assert.rejects(() => openai!('hello'), /OPENAI_API_KEY|LLM_API_KEY/);
+  if (prevOpen !== undefined) process.env.OPENAI_API_KEY = prevOpen;
+  if (prevLlm !== undefined) process.env.LLM_API_KEY = prevLlm;
 });

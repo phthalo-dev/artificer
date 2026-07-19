@@ -465,14 +465,27 @@ export class Store {
     const ranked = rankMemories(query, entries).slice(0, limit);
     const out: Memory[] = [];
     let used = 0;
-    for (const r of ranked) {
+    for (let i = 0; i < ranked.length; i++) {
       const m = await readJson<Memory>(
-        this.layout.memoryFile(r.entry.id, r.entry.createdAt),
+        this.layout.memoryFile(ranked[i].entry.id, ranked[i].entry.createdAt),
       );
       if (!m) continue;
+      const remaining = charBudget - used;
+      if (i === 0) {
+        if (m.content.length > remaining) {
+          m.content =
+            remaining > 0
+              ? `${m.content.slice(0, remaining)}… (truncated)`
+              : '… (truncated)';
+        }
+        out.push(m);
+        used += m.content.length;
+        continue;
+      }
+      if (used >= charBudget) break;
+      if (m.content.length > remaining) break;
       out.push(m);
       used += m.content.length;
-      if (used >= charBudget) break;
     }
     return out;
   }
@@ -498,8 +511,11 @@ export class Store {
       id: m.id,
       title: m.title,
       summary: m.summary,
+      excerpt: m.content.slice(0, 200),
       tags: m.tags,
       source: m.source,
+      kind: m.kind,
+      related: m.related,
       createdAt: m.createdAt,
     };
   }

@@ -377,10 +377,13 @@ describe('IdentityStore', () => {
       packed.related.some((r) => r.to === claim.id && r.type === 'builds_on'),
       `expected claim in related, got ${JSON.stringify(packed.related)}`,
     );
+    const relatedClaim = packed.related.find((r) => r.to === claim.id);
+    assert.ok(relatedClaim?.content?.includes('Write failing tests first'));
     const formatted = store.formatPackedQuery(packed);
     assert.match(formatted, /## Matched/);
     assert.match(formatted, /## Related/);
     assert.match(formatted, /builds_on/);
+    assert.match(formatted, /Write failing tests first/);
     assert.match(formatted, /Char budget:/);
   });
 

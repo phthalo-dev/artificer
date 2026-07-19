@@ -1,6 +1,8 @@
 import { createHash } from 'node:crypto';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { createOpenAI } from '@ai-sdk/openai';
+import { embed } from 'ai';
 import type { MemoryIndexEntry, RankedEntry } from './memory-search.js';
 import { rankMemories } from './memory-search.js';
 
@@ -11,6 +13,11 @@ export interface EmbeddingsConfig {
   provider?: EmbeddingProviderName;
   model?: string;
 }
+
+/** Injected embedder (tests / custom providers). */
+export type EmbedFn = (text: string) => Promise<number[]>;
+
+const DEFAULT_OPENAI_EMBED_MODEL = 'text-embedding-3-small';
 
 /** Deterministic local bag-of-tokens embedding (no external provider). */
 export function localEmbed(text: string, dims = 64): number[] {
@@ -29,6 +36,23 @@ export function localEmbed(text: string, dims = 64): number[] {
   return vec.map((v) => v / norm);
 }
 
+/** Call OpenAI embeddings via the AI SDK. Requires OPENAI_API_KEY or LLM_API_KEY. */
+export async function openaiEmbed(
+  text: string,
+  model = DEFAULT_OPENAI_EMBED_MODEL,
+): Promise<number[]> {
+  const apiKey = process.env.OPENAI_API_KEY || process.env.LLM_API_KEY;
+  if (!apiKey) {
+    throw new Error('openai embeddings require OPENAI_API_KEY or LLM_API_KEY');
+  }
+  const openai = createOpenAI({ apiKey });
+  const { embedding } = await embed({
+    model: openai.embedding(model),
+    value: text,
+  });
+  return embedding;
+}
+
 export function cosineSimilarity(a: number[], b: number[]): number {
   const n = Math.min(a.length, b.length);
   let dot = 0;
@@ -44,7 +68,7 @@ export function cosineSimilarity(a: number[], b: number[]): number {
 }
 
 /**
- * Reciprocal rank fusion of lexical ranks and embedding cosine ranks.
+ * Reciprocal rank fusion of word-based ranks and embedding cosine ranks.
  * Callers of pure `rankMemories` stay unchanged.
  */
 export function rankMemoriesHybrid(
@@ -58,7 +82,7 @@ export function rankMemoriesHybrid(
 
   const withVectors = entries.filter((e) => vectors[e.id]?.length);
   if (withVectors.length < Math.max(1, Math.floor(entries.length * 0.25))) {
-    // Not enough coverage — stay lexical-only.
+    // Not enough coverage — stay word-matching only.
     return lexical;
   }
 
@@ -93,17 +117,39 @@ export function rankMemoriesHybrid(
   );
 }
 
+export function memoryTextForEmbed(parts: {
+  title?: string;
+  summary?: string;
+  tags: string[];
+  excerpt?: string;
+}): string {
+  return [parts.title, parts.summary, parts.tags.join(' '), parts.excerpt]
+    .filter(Boolean)
+    .join(' ');
+}
+
+/** @deprecated Prefer memoryTextForEmbed + resolveEmbedFn */
 export function embedTextForMemory(parts: {
   title?: string;
   summary?: string;
   tags: string[];
   excerpt?: string;
 }): number[] {
-  return localEmbed(
-    [parts.title, parts.summary, parts.tags.join(' '), parts.excerpt]
-      .filter(Boolean)
-      .join(' '),
-  );
+  return localEmbed(memoryTextForEmbed(parts));
+}
+
+export function resolveEmbedFn(
+  config: EmbeddingsConfig,
+  override?: EmbedFn,
+): EmbedFn | null {
+  if (override) return override;
+  if (config.enabled !== true || config.provider === 'none') return null;
+  if (config.provider === 'openai') {
+    const model = config.model ?? DEFAULT_OPENAI_EMBED_MODEL;
+    return (text) => openaiEmbed(text, model);
+  }
+  // local (default when enabled without openai)
+  return async (text) => localEmbed(text);
 }
 
 export class MemoryEmbeddingsStore {

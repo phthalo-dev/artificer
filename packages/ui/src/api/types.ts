@@ -37,6 +37,8 @@ export interface Memory {
   source?: string;
   kind?: MemoryKind;
   related?: MemoryRelation[];
+  sourceHash?: string;
+  sourceCommit?: string;
   updatedAt?: string;
 }
 

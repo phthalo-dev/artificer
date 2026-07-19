@@ -254,6 +254,45 @@ describe('WorkstreamMemoryService', () => {
     assert.equal(spawns.length, 1);
   });
 
+  it('after distill instructions, a claim linked to the chronicle is recallable', async () => {
+    const ws = makeWorkstream({
+      status: 'done',
+      summary: 'Fixed mobile login.',
+    });
+    await svc.onCreated(ws);
+    await svc.onTerminal(ws);
+
+    let chronicleId = '';
+    await svc.requestDistill(ws, async (input) => {
+      const m = input.description.match(/Chronicle memory id:\s*(\S+)/);
+      chronicleId = m?.[1] ?? '';
+      return { runId: 'run_distill_claim' };
+    });
+    assert.ok(chronicleId);
+
+    // Simulate librarian following distill instructions (add_memory claim).
+    const claim = await identity.addMemory({
+      content: 'Mobile login required CSRF token on POST /auth/login.',
+      title: 'CSRF on login',
+      summary: 'Login fix hinged on CSRF token.',
+      tags: ['auth', 'claim'],
+      kind: 'claim',
+      related: [{ id: chronicleId, type: 'builds_on' }],
+      source: `workstream:${ws.id}`,
+    });
+
+    const packed = await identity.queryMemoriesPacked('CSRF login', {
+      limit: 5,
+    });
+    assert.ok(packed.matched.some((m) => m.id === claim.id));
+    const fromClaim = await identity.getMemory(claim.id);
+    assert.ok(
+      fromClaim?.related?.some(
+        (r) => r.id === chronicleId && r.type === 'builds_on',
+      ),
+    );
+  });
+
   it('does not distill blocked workstreams', async () => {
     const ws = makeWorkstream({ status: 'blocked', summary: 'waiting' });
     await svc.onCreated(ws);
