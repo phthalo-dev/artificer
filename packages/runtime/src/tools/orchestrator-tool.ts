@@ -7,7 +7,7 @@ import {
   plannerSpawnBlocked,
   reviewerSpawnBlocked,
 } from '../engine/spawn-guards.js';
-import type { WorkstreamStatus } from '../storage/types.js';
+import type { MemoryEdgeType, WorkstreamStatus } from '../storage/types.js';
 import { isModelTier } from '../engine/models.js';
 
 const WORKSTREAM_STATUSES: WorkstreamStatus[] = [
@@ -287,9 +287,15 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
           : undefined;
         const limit = typeof input.limit === 'number' ? input.limit : undefined;
         const query = input.query ? String(input.query) : '';
-        const memories = engine.identity
-          ? await engine.identity.queryMemories(query, { tags, limit })
-          : await store.queryMemories(query, { tags, limit });
+        if (engine.identity) {
+          const packed = await engine.identity.queryMemoriesPacked(query, {
+            tags,
+            limit,
+          });
+          if (packed.matched.length === 0) return '(no memories)';
+          return engine.identity.formatPackedQuery(packed);
+        }
+        const memories = await store.queryMemories(query, { tags, limit });
         if (memories.length === 0) return '(no memories)';
         return memories
           .map((m) => {
@@ -304,7 +310,7 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
     {
       name: 'add_memory',
       description:
-        'Save a durable note to long-term memory (a decision, a fact, a preference, something learned). Give it a title, tags, and a source when you can.',
+        'Save a durable note to long-term memory (a decision, a fact, a preference, a claim, an entity). Give it a title, tags, source, and optional related links when you can.',
       inputSchema: {
         type: 'object',
         properties: {
@@ -325,8 +331,32 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
           },
           kind: {
             type: 'string',
-            enum: ['note', 'document', 'preference'],
-            description: 'Optional kind of memory.',
+            enum: ['note', 'document', 'preference', 'claim', 'entity'],
+            description:
+              'Optional kind: note, document, preference, claim (distilled assertion), or entity (named person/tool/repo).',
+          },
+          related: {
+            type: 'array',
+            description:
+              'Optional typed links to existing memories (id + type).',
+            items: {
+              type: 'object',
+              properties: {
+                id: { type: 'string', description: 'Target memory id.' },
+                type: {
+                  type: 'string',
+                  enum: [
+                    'related',
+                    'builds_on',
+                    'contradicts',
+                    'cites',
+                    'categorized_under',
+                  ],
+                  description: 'Edge type (default related).',
+                },
+              },
+              required: ['id'],
+            },
           },
         },
         required: ['content'],
@@ -338,9 +368,31 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
         const kind =
           input.kind === 'document' ||
           input.kind === 'note' ||
-          input.kind === 'preference'
+          input.kind === 'preference' ||
+          input.kind === 'claim' ||
+          input.kind === 'entity'
             ? input.kind
             : undefined;
+        const related = Array.isArray(input.related)
+          ? (input.related as unknown[])
+              .map((item) => {
+                if (!item || typeof item !== 'object') return null;
+                const obj = item as { id?: unknown; type?: unknown };
+                if (typeof obj.id !== 'string' || !obj.id) return null;
+                const type =
+                  obj.type === 'builds_on' ||
+                  obj.type === 'contradicts' ||
+                  obj.type === 'cites' ||
+                  obj.type === 'categorized_under' ||
+                  obj.type === 'related'
+                    ? obj.type
+                    : ('related' as const);
+                return { id: obj.id, type };
+              })
+              .filter(
+                (r): r is { id: string; type: MemoryEdgeType } => r !== null,
+              )
+          : undefined;
         const memStore = engine.identity ?? store;
         const memory = await memStore.addMemory({
           content: String(input.content),
@@ -349,6 +401,7 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
           summary: input.summary ? String(input.summary) : undefined,
           source: input.source ? String(input.source) : undefined,
           kind,
+          related,
         });
         return `Saved to memory (${memory.id}).`;
       },

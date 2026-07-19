@@ -8,12 +8,13 @@ Memories are markdown files the agent writes to `identity/memories/` as it works
 my-agent/
 └── identity/
     ├── index.json              ← keyword index (rebuilt automatically)
+    ├── graph.json              ← related-edge mirror (rebuilt on write)
     └── memories/
         ├── team-context.md     ← seeded manually
         └── deployment-notes.md ← written by the agent
 ```
 
-Memories are plain markdown files with a YAML front matter block containing the memory's id, title, summary, tags, kind, source, and timestamps. The agent rebuilds `identity/index.json` every time a memory is written, updated, or deleted. That index is used on both write and query (and self-heals if it goes missing or drifts from the files on disk).
+Memories are plain markdown files with a YAML front matter block containing the memory's id, title, summary, tags, kind, source, optional related links, and timestamps. The agent rebuilds `identity/index.json` and `identity/graph.json` every time a memory is written, updated, or deleted. That index is used on both write and query (and self-heals if it goes missing or drifts from the files on disk). Dangling related edges (targets deleted) are dropped at query time and garbage-collected from the index/graph on the next rebuild.
 
 ## Signpost (passive hint)
 
@@ -21,7 +22,7 @@ Each role call gets a short **signpost** in context — a count of memories and 
 
 ## How the agent writes memories
 
-The agent writes memories using the built-in `add_memory` tool. It is available to the `worker`, `planner`, `communicator`, and `librarian` roles. The agent decides what is worth remembering — recurring context, decisions made, preferences learned — and calls `add_memory` with a content body, optional title, tags, and kind (`note`, `document`, or `preference`).
+The agent writes memories using the built-in `add_memory` tool. It is available to the `worker`, `planner`, `communicator`, and `librarian` roles. The agent decides what is worth remembering — recurring context, decisions made, preferences learned — and calls `add_memory` with a content body, optional title, tags, kind (`note`, `document`, `preference`, `claim`, or `entity`), and optional `related` links to other memories.
 
 Each memory is stored as a file under `identity/memories/` with a generated id like `note_a1b2c3d4.md`. The file is written immediately and the index is rebuilt in place.
 
@@ -56,10 +57,23 @@ When a role calls `query_memories`, the runtime searches the identity index (whe
 4. Adds a tag-token boost (+3 per query token that appears in the memory's tags), so tag hits outrank title-only spam.
 5. Multi-token queries are OR'd (any token can match). Threshold ~0.4; near-miss / partial titles still rank.
 6. Returns the top matches within a character budget (default **4000**). The #1 hit is always included and truncated if it alone exceeds the budget.
+7. Expands **1-hop related** neighbors (forward and reverse edges) into a Related section, preferring `claim` / `preference` neighbors over long `document`s, still within the remaining char budget.
 
 An empty query (or a query made entirely of stopwords) returns candidates in recency order (still subject to tag filter, limit, and char budget).
 
 Results are capped at the requested limit (default 5 when called by the agent tool; the store API defaults to 10).
+
+### Kinds and related links
+
+| Kind | Purpose |
+|------|---------|
+| `note` | Atomic fact from conversation |
+| `document` | Distilled source / workstream chronicle |
+| `preference` | Standing instruction |
+| `claim` | Distilled assertion / decision |
+| `entity` | Named person/tool/repo/org |
+
+Optional frontmatter `related` links memories with typed edges (`related`, `builds_on`, `contradicts`, `cites`, `categorized_under`). Unknown target ids are dropped on write with a warning.
 
 ## Seeding initial memories
 
