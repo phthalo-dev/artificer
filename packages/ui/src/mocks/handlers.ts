@@ -169,7 +169,7 @@ export function handleMockRequest(req: MockRequest): MockResponse {
       summary?: string;
       tags?: string[];
       source?: string;
-      kind?: 'note' | 'document' | 'preference';
+      kind?: 'note' | 'document' | 'preference' | 'claim' | 'entity';
     };
     if (!input.content?.trim()) {
       return { status: 400, body: { error: 'content is required' } };

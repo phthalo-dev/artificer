@@ -314,6 +314,8 @@ function AddMemoryModal({
             { value: 'note', label: 'Note' },
             { value: 'document', label: 'Document' },
             { value: 'preference', label: 'Preference' },
+            { value: 'claim', label: 'Claim' },
+            { value: 'entity', label: 'Entity' },
           ]}
           value={form.kind}
           onChange={(v) => set('kind')(v ?? 'note')}

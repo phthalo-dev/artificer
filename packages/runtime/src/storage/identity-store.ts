@@ -3,7 +3,33 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { IdentityLayout } from './identity-layout.js';
 import { rankMemories, type MemoryIndexEntry } from './memory-search.js';
-import type { Memory } from './types.js';
+import type {
+  Memory,
+  MemoryEdgeType,
+  MemoryKind,
+  MemoryRelation,
+} from './types.js';
+import { MEMORY_EDGE_TYPES, MEMORY_KINDS } from './types.js';
+
+/** Cap on 1-hop neighbors relative to the matched limit. */
+export const RELATED_NEIGHBOR_CAP_FACTOR = 2;
+
+export interface MemoryGraph {
+  version: '1';
+  edges: Array<{ from: string; to: string; type: MemoryEdgeType }>;
+}
+
+export interface PackedMemoryQuery {
+  matched: Memory[];
+  related: Array<{
+    from: string;
+    to: string;
+    type: MemoryEdgeType;
+    summary?: string;
+    kind?: MemoryKind;
+  }>;
+  charBudget: { used: number; limit: number };
+}
 
 function now(): string {
   return new Date().toISOString();
@@ -11,6 +37,27 @@ function now(): string {
 
 function newMemoryId(kind: string): string {
   return `${kind}_${randomUUID().slice(0, 8)}`;
+}
+
+function normalizeEdgeType(raw: string | undefined): MemoryEdgeType {
+  if (raw && (MEMORY_EDGE_TYPES as readonly string[]).includes(raw)) {
+    return raw as MemoryEdgeType;
+  }
+  return 'related';
+}
+
+function normalizeRelated(
+  related: MemoryRelation[] | undefined,
+): MemoryRelation[] | undefined {
+  if (!related?.length) return undefined;
+  const out: MemoryRelation[] = [];
+  const seen = new Set<string>();
+  for (const r of related) {
+    if (!r?.id || seen.has(r.id)) continue;
+    seen.add(r.id);
+    out.push({ id: r.id, type: normalizeEdgeType(r.type) });
+  }
+  return out.length ? out : undefined;
 }
 
 function memoryToMarkdown(memory: Memory): string {
@@ -21,10 +68,58 @@ function memoryToMarkdown(memory: Memory): string {
   lines.push(`tags: [${memory.tags.map((t) => `"${t}"`).join(', ')}]`);
   lines.push(`kind: "${memory.kind ?? 'note'}"`);
   if (memory.source) lines.push(`source: "${memory.source}"`);
+  if (memory.related?.length) {
+    lines.push('related:');
+    for (const r of memory.related) {
+      lines.push(`  - id: "${r.id}"`);
+      lines.push(`    type: "${r.type}"`);
+    }
+  }
   lines.push(`createdAt: "${memory.createdAt}"`);
   if (memory.updatedAt) lines.push(`updatedAt: "${memory.updatedAt}"`);
 
   return `---\n${lines.join('\n')}\n---\n\n${memory.content}\n`;
+}
+
+function parseRelated(fmBlock: string): MemoryRelation[] | undefined {
+  // JSON array form: related: [{"id":"...","type":"..."}] or ["id1","id2"]
+  const jsonLine = fmBlock.match(/^related:\s*(\[[\s\S]*?\])\s*$/m);
+  if (jsonLine) {
+    try {
+      const parsed = JSON.parse(jsonLine[1]) as unknown;
+      if (!Array.isArray(parsed)) return undefined;
+      const out: MemoryRelation[] = [];
+      for (const item of parsed) {
+        if (typeof item === 'string') {
+          out.push({ id: item, type: 'related' });
+        } else if (item && typeof item === 'object' && 'id' in item) {
+          const obj = item as { id: string; type?: string };
+          out.push({ id: String(obj.id), type: normalizeEdgeType(obj.type) });
+        }
+      }
+      return normalizeRelated(out);
+    } catch {
+      // fall through to block form
+    }
+  }
+
+  const block = fmBlock.match(/^related:\n((?:[ \t]+.+\n?)*)/m);
+  if (!block) return undefined;
+  const out: MemoryRelation[] = [];
+  const chunks = block[1].split(/^[ \t]*-\s*/m).filter((c) => c.trim());
+  for (const chunk of chunks) {
+    const idMatch =
+      chunk.match(/id:\s*"([^"]+)"/) ??
+      chunk.match(/^"([^"]+)"/) ??
+      chunk.match(/^([a-zA-Z0-9_-]+)\s*$/m);
+    if (!idMatch) continue;
+    const typeMatch = chunk.match(/type:\s*"([^"]+)"/);
+    out.push({
+      id: idMatch[1],
+      type: normalizeEdgeType(typeMatch?.[1]),
+    });
+  }
+  return normalizeRelated(out);
 }
 
 function markdownToMemory(filePath: string, raw: string): Memory | null {
@@ -48,6 +143,11 @@ function markdownToMemory(filePath: string, raw: string): Memory | null {
   };
 
   const id = get('id') ?? path.basename(filePath, '.md');
+  const kindRaw = get('kind');
+  const kind =
+    kindRaw && (MEMORY_KINDS as readonly string[]).includes(kindRaw)
+      ? (kindRaw as MemoryKind)
+      : 'note';
 
   return {
     id,
@@ -55,8 +155,9 @@ function markdownToMemory(filePath: string, raw: string): Memory | null {
     title: get('title'),
     summary: get('summary'),
     tags: getTags(),
-    kind: (get('kind') as Memory['kind']) ?? 'note',
+    kind,
     source: get('source'),
+    related: parseRelated(fmBlock),
     createdAt: get('createdAt') ?? now(),
     updatedAt: get('updatedAt'),
   };
@@ -66,7 +167,19 @@ async function ensureDir(dir: string): Promise<void> {
   await fs.mkdir(dir, { recursive: true });
 }
 
-function toIndexEntry(m: Memory): MemoryIndexEntry {
+function sanitizeRelated(
+  related: MemoryRelation[] | undefined,
+  knownIds: Set<string>,
+): MemoryRelation[] | undefined {
+  if (!related?.length) return undefined;
+  const kept = related.filter((r) => knownIds.has(r.id));
+  return kept.length ? kept : undefined;
+}
+
+function toIndexEntry(m: Memory, knownIds?: Set<string>): MemoryIndexEntry {
+  const related = knownIds
+    ? sanitizeRelated(m.related, knownIds)
+    : normalizeRelated(m.related);
   return {
     id: m.id,
     title: m.title,
@@ -75,8 +188,43 @@ function toIndexEntry(m: Memory): MemoryIndexEntry {
     tags: m.tags,
     source: m.source,
     kind: m.kind,
+    related,
     createdAt: m.createdAt,
   };
+}
+
+function neighborPriority(kind: string | undefined): number {
+  if (kind === 'claim' || kind === 'preference') return 0;
+  if (kind === 'entity' || kind === 'note') return 1;
+  return 2; // document / unknown last
+}
+
+function formatPackedQuery(result: PackedMemoryQuery): string {
+  const matchedLines = result.matched.map((m) => {
+    const head = m.title ?? m.content.slice(0, 60);
+    const tagStr = m.tags.length ? ` [${m.tags.join(', ')}]` : '';
+    const meta = [m.kind, m.source].filter(Boolean).join(', ');
+    const metaStr = meta ? ` (${meta})` : '';
+    return `- ${head}${tagStr}${metaStr}\n  ${m.content}`;
+  });
+
+  const relatedLines = result.related.map((e) => {
+    const summary = e.summary ? `: ${e.summary}` : '';
+    return `- ${e.from} --[${e.type}]--> ${e.to}${summary}`;
+  });
+
+  const sections = [
+    '## Matched',
+    matchedLines.length ? matchedLines.join('\n\n') : '(none)',
+  ];
+  if (relatedLines.length) {
+    sections.push('## Related', relatedLines.join('\n'));
+  }
+  sections.push(
+    '## Notes',
+    `- Char budget: ${result.charBudget.used}/${result.charBudget.limit}`,
+  );
+  return sections.join('\n\n');
 }
 
 export class IdentityStore {
@@ -91,10 +239,12 @@ export class IdentityStore {
   }
 
   async addMemory(input: Omit<Memory, 'id' | 'createdAt'>): Promise<Memory> {
+    const related = await this.validateRelated(input.related);
     const memory: Memory = {
       id: newMemoryId(input.kind ?? 'note'),
       createdAt: now(),
       ...input,
+      related,
     };
 
     await fs.writeFile(
@@ -142,9 +292,23 @@ export class IdentityStore {
     query: string,
     opts: { tags?: string[]; limit?: number; charBudget?: number } = {},
   ): Promise<Memory[]> {
+    const packed = await this.queryMemoriesPacked(query, opts);
+    return packed.matched;
+  }
+
+  /**
+   * Rank + load matches, then 1-hop expand related neighbors into remaining
+   * char budget (preferring claim/preference over long documents).
+   */
+  async queryMemoriesPacked(
+    query: string,
+    opts: { tags?: string[]; limit?: number; charBudget?: number } = {},
+  ): Promise<PackedMemoryQuery> {
     const limit = Math.max(1, Math.min(opts.limit ?? 10, 50));
     const charBudget = opts.charBudget ?? 4000;
-    let entries = await this.readReconciledIndex();
+    const fullIndex = await this.readReconciledIndex();
+    const knownIds = new Set(fullIndex.map((e) => e.id));
+    let entries = fullIndex;
     if (opts.tags && opts.tags.length > 0) {
       const want = new Set(opts.tags.map((t) => t.toLowerCase()));
       entries = entries.filter((e) =>
@@ -152,33 +316,124 @@ export class IdentityStore {
       );
     }
     const ranked = rankMemories(query, entries).slice(0, limit);
-    const out: Memory[] = [];
+    const matched: Memory[] = [];
     let used = 0;
     for (let i = 0; i < ranked.length; i++) {
       const m = await this.getMemory(ranked[i].entry.id);
       if (!m) continue;
+      m.related = sanitizeRelated(m.related, knownIds);
       const remaining = charBudget - used;
       if (i === 0) {
-        // Always include the top hit; truncate body if it alone exceeds budget.
         if (m.content.length > remaining) {
           m.content =
             remaining > 0
               ? `${m.content.slice(0, remaining)}… (truncated)`
               : '… (truncated)';
         }
-        out.push(m);
+        matched.push(m);
         used += m.content.length;
         continue;
       }
       if (used >= charBudget) break;
-      if (m.content.length > remaining) {
-        // Skip later hits that would blow the budget rather than truncating them.
-        break;
-      }
-      out.push(m);
+      if (m.content.length > remaining) break;
+      matched.push(m);
       used += m.content.length;
     }
-    return out;
+
+    const indexById = new Map(fullIndex.map((e) => [e.id, e]));
+    const matchedIds = new Set(matched.map((m) => m.id));
+    const neighborCap = limit * RELATED_NEIGHBOR_CAP_FACTOR;
+
+    type NeighborCand = {
+      from: string;
+      to: string;
+      type: MemoryEdgeType;
+      kind?: MemoryKind | string;
+      summary?: string;
+    };
+    const candidates: NeighborCand[] = [];
+    const seenEdge = new Set<string>();
+
+    const addCand = (c: NeighborCand) => {
+      if (matchedIds.has(c.to)) return;
+      if (!indexById.has(c.to)) return;
+      const key = `${c.from}->${c.to}:${c.type}`;
+      if (seenEdge.has(key)) return;
+      seenEdge.add(key);
+      candidates.push(c);
+    };
+
+    // Forward edges from matched memories.
+    for (const m of matched) {
+      for (const r of m.related ?? []) {
+        const target = indexById.get(r.id);
+        addCand({
+          from: m.id,
+          to: r.id,
+          type: r.type,
+          kind: target?.kind,
+          summary: target?.summary ?? target?.title,
+        });
+      }
+    }
+    // Reverse edges: other memories that point at a match.
+    for (const e of fullIndex) {
+      if (matchedIds.has(e.id)) continue;
+      for (const r of e.related ?? []) {
+        if (!matchedIds.has(r.id)) continue;
+        addCand({
+          from: r.id,
+          to: e.id,
+          type: r.type,
+          kind: e.kind,
+          summary: e.summary ?? e.title,
+        });
+      }
+    }
+
+    const allNeighbors = candidates
+      .sort(
+        (a, b) =>
+          neighborPriority(a.kind) - neighborPriority(b.kind) ||
+          a.to.localeCompare(b.to),
+      )
+      .slice(0, neighborCap);
+
+    const relatedOut: PackedMemoryQuery['related'] = [];
+    for (const n of allNeighbors) {
+      if (used >= charBudget) break;
+      const body = await this.getMemory(n.to);
+      if (!body) continue;
+      // Prefer packing claim/preference neighbors; long documents only take a summary line.
+      if (
+        (body.kind === 'claim' || body.kind === 'preference') &&
+        body.content.length + used <= charBudget
+      ) {
+        used += body.content.length;
+      } else if (used + 80 > charBudget) {
+        break;
+      } else {
+        used += 80;
+      }
+      relatedOut.push({
+        from: n.from,
+        to: n.to,
+        type: n.type,
+        summary: n.summary ?? body.summary ?? body.title,
+        kind: body.kind,
+      });
+    }
+
+    return {
+      matched,
+      related: relatedOut,
+      charBudget: { used, limit: charBudget },
+    };
+  }
+
+  /** Format a packed query for the query_memories tool response. */
+  formatPackedQuery(result: PackedMemoryQuery): string {
+    return formatPackedQuery(result);
   }
 
   /** Compact "you know things" hint for context (count + top tags); no content. */
@@ -199,13 +454,23 @@ export class IdentityStore {
 
   async updateMemory(
     id: string,
-    patch: Partial<Pick<Memory, 'content' | 'title' | 'summary' | 'tags'>>,
+    patch: Partial<
+      Pick<
+        Memory,
+        'content' | 'title' | 'summary' | 'tags' | 'related' | 'kind'
+      >
+    >,
   ): Promise<Memory | null> {
     const existing = await this.getMemory(id);
     if (!existing) return null;
+    const related =
+      patch.related !== undefined
+        ? await this.validateRelated(patch.related)
+        : existing.related;
     const updated: Memory = {
       ...existing,
       ...patch,
+      related,
       updatedAt: now(),
     };
     await fs.writeFile(
@@ -227,13 +492,46 @@ export class IdentityStore {
     }
   }
 
+  private async validateRelated(
+    related: MemoryRelation[] | undefined,
+  ): Promise<MemoryRelation[] | undefined> {
+    const normalized = normalizeRelated(related);
+    if (!normalized?.length) return undefined;
+    const kept: MemoryRelation[] = [];
+    for (const r of normalized) {
+      const target = await this.getMemory(r.id);
+      if (!target) {
+        console.warn(
+          `[identity-store] dropping related edge to missing memory ${r.id}`,
+        );
+        continue;
+      }
+      kept.push(r);
+    }
+    return kept.length ? kept : undefined;
+  }
+
   private async rebuildIndex(): Promise<void> {
     const all = await this.listMemories();
-    const index = all.map((m) => toIndexEntry(m));
+    const knownIds = new Set(all.map((m) => m.id));
+    const index = all.map((m) => toIndexEntry(m, knownIds));
     await ensureDir(path.dirname(this.layout.memoryIndexFile));
     await fs.writeFile(
       this.layout.memoryIndexFile,
       JSON.stringify(index, null, 2),
+      'utf-8',
+    );
+
+    const edges: MemoryGraph['edges'] = [];
+    for (const e of index) {
+      for (const r of e.related ?? []) {
+        edges.push({ from: e.id, to: r.id, type: r.type });
+      }
+    }
+    const graph: MemoryGraph = { version: '1', edges };
+    await fs.writeFile(
+      this.layout.memoryGraphFile,
+      JSON.stringify(graph, null, 2),
       'utf-8',
     );
   }
@@ -253,14 +551,10 @@ export class IdentityStore {
         // Corrupt index.json — fall through and rebuild.
       }
     }
-    const rebuilt = (await this.listMemories()).map((m) => toIndexEntry(m));
-    await ensureDir(path.dirname(this.layout.memoryIndexFile));
-    await fs.writeFile(
-      this.layout.memoryIndexFile,
-      JSON.stringify(rebuilt, null, 2),
-      'utf-8',
-    );
-    return rebuilt;
+    await this.rebuildIndex();
+    return JSON.parse(
+      await fs.readFile(this.layout.memoryIndexFile, 'utf-8'),
+    ) as MemoryIndexEntry[];
   }
 
   private async countMemoryFiles(): Promise<number> {
@@ -283,13 +577,9 @@ export class IdentityStore {
     const uniqueIds = new Set(index.map((e) => e.id));
     const drift = index.length !== fileCount || uniqueIds.size !== index.length;
     if (!drift) return index;
-    const rebuilt = (await this.listMemories()).map((m) => toIndexEntry(m));
-    await ensureDir(path.dirname(this.layout.memoryIndexFile));
-    await fs.writeFile(
-      this.layout.memoryIndexFile,
-      JSON.stringify(rebuilt, null, 2),
-      'utf-8',
-    );
-    return rebuilt;
+    await this.rebuildIndex();
+    return JSON.parse(
+      await fs.readFile(this.layout.memoryIndexFile, 'utf-8'),
+    ) as MemoryIndexEntry[];
   }
 }
