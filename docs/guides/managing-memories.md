@@ -7,8 +7,9 @@ Memories are markdown files the agent writes to `identity/memories/` as it works
 ```
 my-agent/
 └── identity/
-    ├── index.json              ← keyword index (rebuilt automatically)
-    ├── graph.json              ← related-edge mirror (rebuilt on write)
+    ├── index.json              ← search index (rebuilt automatically)
+    ├── graph.json              ← links between memories (rebuilt on write)
+    ├── embeddings.json         ← optional; only when embeddings are enabled
     └── memories/
         ├── team-context.md     ← seeded manually
         └── deployment-notes.md ← written by the agent
@@ -59,13 +60,23 @@ Disable distillation with:
 }
 ```
 
-### Optional embeddings
+### Optional embeddings (better meaning-based search)
 
-Hybrid ranking is off by default. Enable a local (or configured) embedding provider to store vectors in `identity/embeddings.json` and fuse them with lexical ranks:
+By default, memory search matches **words** in titles, tags, summaries, and short excerpts (including close spellings). That works well when the query and the memory share the same terms.
+
+**Embeddings** are optional. When you turn them on, Artificer also stores a numeric fingerprint of each memory in `identity/embeddings.json`. At search time it compares the query’s fingerprint to those fingerprints, then **combines** that with the normal word-based ranking. The upside: a query like “auth tokens” can still surface a memory titled “JWT session signing” even when the exact words differ. Embeddings are off by default so agents stay offline-friendly and cheap to run.
+
+#### Local provider (no API key)
+
+Use this when you want meaning-aware search without calling a cloud API. Vectors are built on the machine with Artificer’s built-in hasher — no network, no cost.
+
+Add this to `artificer.config.json`:
 
 ```json
 {
+  "name": "Atlas",
   "identity": {
+    "autoCommit": true,
     "embeddings": {
       "enabled": true,
       "provider": "local"
@@ -73,6 +84,60 @@ Hybrid ranking is off by default. Enable a local (or configured) embedding provi
   }
 }
 ```
+
+What happens next:
+
+1. Restart (or start) the agent so the config loads.
+2. The next time a memory is created or updated, Artificer writes/updates that memory’s vector in `identity/embeddings.json`.
+3. `query_memories` uses word matching **and** fingerprint similarity, then returns the same Matched / Related / Notes shape as before.
+
+If you use `identity.autoCommit`, `embeddings.json` is included when Artificer commits under `identity/` (same as `index.json` and `graph.json`).
+
+To turn embeddings off again, set `"enabled": false` or remove the `embeddings` block and delete `identity/embeddings.json` if you no longer want the file around.
+
+#### Remote provider (`openai`)
+
+Use this when you want the config shaped for a hosted embedding model. Set `provider` to `"openai"`, optionally name a `model`, and put an API key in the environment.
+
+`artificer.config.json`:
+
+```json
+{
+  "name": "Atlas",
+  "identity": {
+    "autoCommit": true,
+    "embeddings": {
+      "enabled": true,
+      "provider": "openai",
+      "model": "text-embedding-3-small"
+    }
+  }
+}
+```
+
+Environment (pick one):
+
+```bash
+# .env next to the agent, or your process environment
+export OPENAI_API_KEY=sk-...
+
+# or, if you already use Artificer's LLM key env:
+export LLM_API_KEY=sk-...
+```
+
+Notes for the remote path:
+
+- If neither `OPENAI_API_KEY` nor `LLM_API_KEY` is set, Artificer **does not** write embedding vectors (search stays word-based only).
+- When keys **are** set, Artificer stores vectors in `identity/embeddings.json` the same way as local. Today those vectors are still built with the on-device hasher; the `openai` provider and `model` field reserve the hosted-API path so you can configure it without changing search callers later.
+- Word-based search always remains available. If embeddings are missing, empty, or cover too few memories, Artificer falls back to word matching alone.
+
+#### Choosing a provider
+
+| Goal | Config |
+|------|--------|
+| Simplest / offline | `"provider": "local"` |
+| Config ready for a hosted model + API key in env | `"provider": "openai"` + `model` + `OPENAI_API_KEY` or `LLM_API_KEY` |
+| Explicitly off | omit `embeddings`, or `"enabled": false`, or `"provider": "none"` |
 
 ### Large learn jobs
 
