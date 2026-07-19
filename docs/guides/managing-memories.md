@@ -43,6 +43,22 @@ By default the agent writes memory files and leaves them as untracked changes. I
 
 With `autoPush: true` the runtime also does a `git pull --rebase` followed by `git push` after each commit. The default commit message format is `memory: add <id>`, `memory: update <id>`, or `memory: delete <id>`.
 
+## Workstream chronicles and distillation
+
+Each workstream gets a `document` memory (the **chronicle**) that accumulates Goal, Plan, Worker, Review, and Outcome sections. Chronicles are capped at **32 KiB**: when they grow past that, older middle sections are dropped and a short rollup note is inserted. Goal and the newest sections are kept.
+
+When a workstream finishes (`done`, `failed`, or `cancelled`), the runtime — by default — spawns a fire-and-forget **librarian distill** that extracts 1–5 `claim` memories (and optional `entity` memories) linked back to the chronicle with `related` / `builds_on`. Distill failures only log; they never block the workstream. Re-distill is skipped when the goal+summary+status hash is unchanged.
+
+Disable distillation with:
+
+```json
+{
+  "identity": {
+    "distillWorkstreams": false
+  }
+}
+```
+
 ## How memories are searched
 
 When a role calls `query_memories`, the runtime searches the identity index (when configured). The search:

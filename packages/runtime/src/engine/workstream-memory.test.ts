@@ -5,7 +5,11 @@ import path from 'node:path';
 import { describe, it, beforeEach, afterEach } from 'node:test';
 import { IdentityStore } from '../storage/identity-store.js';
 import { Store } from '../storage/store.js';
-import { WorkstreamMemoryService } from './workstream-memory.js';
+import {
+  WorkstreamMemoryService,
+  trimChronicleContent,
+  CHRONICLE_MAX_CHARS,
+} from './workstream-memory.js';
 import type { Workstream, RunRecord, Review } from '../storage/types.js';
 
 function tmpDir(): string {
@@ -199,5 +203,79 @@ describe('WorkstreamMemoryService', () => {
     assert.ok(memories[0].content.includes('## Worker Run'));
     assert.ok(memories[0].content.includes('## Review'));
     assert.ok(memories[0].content.includes('## Outcome'));
+  });
+
+  it('trims oversized chronicles when appending', async () => {
+    const goal = 'Goal: keep me\n\nStatus: pending';
+    const oldPlan = `\n\n## Plan\n${'x'.repeat(40_000)}`;
+    const worker = `\n\n## Worker Run\nlatest worker notes`;
+    const outcome = `\n\n## Outcome\nStatus: done\nFinished.`;
+    const bloated = goal + oldPlan + worker + outcome;
+    assert.ok(bloated.length > CHRONICLE_MAX_CHARS);
+    const trimmed = trimChronicleContent(bloated, 8_000);
+    assert.ok(trimmed.length <= 8_000);
+    assert.ok(trimmed.includes('Goal: keep me'));
+    assert.ok(trimmed.includes('## Chronicle rollup'));
+    assert.ok(trimmed.includes('## Outcome'));
+    assert.ok(trimmed.includes('Finished.'));
+  });
+
+  it('spawns a librarian distill on terminal and skips unchanged re-distill', async () => {
+    const ws = makeWorkstream({
+      status: 'done',
+      summary: 'Fixed mobile login.',
+    });
+    await svc.onCreated(ws);
+
+    const spawns: Array<{ role: string; description: string }> = [];
+    const result = await svc.requestDistill(ws, async (input) => {
+      spawns.push({
+        role: input.role,
+        description: input.description,
+      });
+      return { runId: 'run_distill_1' };
+    });
+
+    assert.ok(result);
+    assert.equal(result!.runId, 'run_distill_1');
+    assert.equal(spawns.length, 1);
+    assert.equal(spawns[0].role, 'librarian');
+    assert.match(spawns[0].description, /Chronicle memory id:/);
+    assert.match(spawns[0].description, /kind: "claim"/);
+    assert.match(spawns[0].description, /builds_on/);
+
+    const skip = await svc.requestDistill(ws, async () => {
+      spawns.push({ role: 'librarian', description: 'should not run' });
+      return { runId: 'run_distill_2' };
+    });
+    assert.equal(skip, null);
+    assert.equal(spawns.length, 1);
+  });
+
+  it('does not distill blocked workstreams', async () => {
+    const ws = makeWorkstream({ status: 'blocked', summary: 'waiting' });
+    await svc.onCreated(ws);
+    let called = false;
+    const result = await svc.requestDistill(ws, async () => {
+      called = true;
+      return { runId: 'x' };
+    });
+    assert.equal(result, null);
+    assert.equal(called, false);
+  });
+
+  it('distill failure from spawn does not throw out of requestDistill callers', async () => {
+    const ws = makeWorkstream({ status: 'done', summary: 'ok' });
+    await svc.onCreated(ws);
+    await assert.rejects(
+      () =>
+        svc.requestDistill(ws, async () => {
+          throw new Error('spawn boom');
+        }),
+      /spawn boom/,
+    );
+    // Chronicle still intact
+    const memories = await identity.listMemories();
+    assert.equal(memories.length, 1);
   });
 });

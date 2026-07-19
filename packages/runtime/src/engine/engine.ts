@@ -965,7 +965,7 @@ export class Engine implements EngineApi {
           ? `Workstream "${ws.title}" is complete.\n\n${doneWs.summary}`
           : `Workstream "${ws.title}" is complete.`;
         await this.reply(doneMsg, workstreamId);
-        if (doneWs) void this.memoryService?.onTerminal(doneWs);
+        if (doneWs) void this.handleWorkstreamTerminal(doneWs);
         return;
       }
       case 'blocked':
@@ -1062,7 +1062,7 @@ export class Engine implements EngineApi {
     await this.store.updateWorkstream(id, { status: 'cancelled' });
     await this.emitWorkstream(id);
     const updated = await this.store.getWorkstream(id);
-    if (updated) void this.memoryService?.onTerminal(updated);
+    if (updated) void this.handleWorkstreamTerminal(updated);
     return true;
   }
 
@@ -1074,7 +1074,27 @@ export class Engine implements EngineApi {
     await this.emitWorkstream(ws.id);
     await this.reply(`Workstream "${ws.title}" paused: ${reason}`, ws.id);
     const updated = await this.store.getWorkstream(ws.id);
-    if (updated) void this.memoryService?.onTerminal(updated);
+    if (updated) void this.handleWorkstreamTerminal(updated);
+  }
+
+  /**
+   * Update the workstream chronicle, then optionally spawn a fire-and-forget
+   * librarian distill (claim/entity extraction). Failures only log.
+   */
+  private async handleWorkstreamTerminal(ws: Workstream): Promise<void> {
+    if (!this.memoryService) return;
+    try {
+      await this.memoryService.onTerminal(ws);
+      if (this.config.identity?.distillWorkstreams === false) return;
+      await this.memoryService.requestDistill(ws, (input) =>
+        this.spawnCall(input),
+      );
+    } catch (err) {
+      console.error(
+        `[workstream-memory] terminal handling failed for ${ws.id}:`,
+        err,
+      );
+    }
   }
 
   private async emitWorkstream(workstreamId: string): Promise<void> {

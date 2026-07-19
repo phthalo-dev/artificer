@@ -172,6 +172,10 @@
           "type": "string",
           "pattern": "^\\d+(ms|s|m|h|d)$",
           "description": "How often to pull identity from origin (e.g. '5m', '30s', '1d'). Omit to disable."
+        },
+        "distillWorkstreams": {
+          "type": "boolean",
+          "description": "After a workstream finishes, spawn a librarian to distill claim/entity memories from the chronicle. Default: true. Set false to disable."
         }
       }
     }
