@@ -396,6 +396,7 @@ export class Store {
     summary?: string;
     source?: string;
     kind?: Memory['kind'];
+    related?: Memory['related'];
   }): Promise<Memory> {
     const createdAt = now();
     const memory: Memory = {
@@ -406,6 +407,7 @@ export class Store {
       summary: input.summary,
       source: input.source,
       kind: input.kind,
+      related: input.related,
       createdAt,
       updatedAt: createdAt,
     };

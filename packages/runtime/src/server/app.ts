@@ -79,7 +79,25 @@ const createMemorySchema = z.object({
   summary: z.string().optional(),
   tags: z.array(z.string()).optional(),
   source: z.string().optional(),
-  kind: z.enum(['note', 'document', 'preference']).optional(),
+  kind: z
+    .enum(['note', 'document', 'preference', 'claim', 'entity'])
+    .optional(),
+  related: z
+    .array(
+      z.object({
+        id: z.string().min(1),
+        type: z
+          .enum([
+            'related',
+            'builds_on',
+            'contradicts',
+            'cites',
+            'categorized_under',
+          ])
+          .default('related'),
+      }),
+    )
+    .optional(),
 });
 
 const quotaWindowSchema = z.object({
@@ -460,6 +478,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
       tags: parsed.data.tags ?? [],
       source: parsed.data.source,
       kind: parsed.data.kind,
+      related: parsed.data.related,
     });
     return c.json({ memory }, 201);
   });

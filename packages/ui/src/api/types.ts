@@ -8,6 +8,25 @@ export type RoleName =
   | 'worker'
   | 'librarian';
 
+export type MemoryKind =
+  | 'note'
+  | 'document'
+  | 'preference'
+  | 'claim'
+  | 'entity';
+
+export type MemoryEdgeType =
+  | 'related'
+  | 'builds_on'
+  | 'contradicts'
+  | 'cites'
+  | 'categorized_under';
+
+export interface MemoryRelation {
+  id: string;
+  type: MemoryEdgeType;
+}
+
 export interface Memory {
   id: string;
   content: string;
@@ -16,7 +35,8 @@ export interface Memory {
   title?: string;
   summary?: string;
   source?: string;
-  kind?: 'note' | 'document' | 'preference';
+  kind?: MemoryKind;
+  related?: MemoryRelation[];
   updatedAt?: string;
 }
 

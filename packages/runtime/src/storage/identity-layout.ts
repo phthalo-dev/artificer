@@ -11,6 +11,11 @@ export class IdentityLayout {
     return path.join(this.root, 'identity', 'index.json');
   }
 
+  /** Convenience mirror of related edges; rebuilt on every memory write. */
+  get memoryGraphFile(): string {
+    return path.join(this.root, 'identity', 'graph.json');
+  }
+
   memoryFile(id: string): string {
     return path.join(this.memoriesDir, `${id}.md`);
   }
