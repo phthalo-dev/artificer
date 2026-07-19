@@ -13,6 +13,7 @@ import { createEditTool } from './edit.js';
 import { createFetchTools } from './fetch.js';
 import { createFileTools } from './files.js';
 import { createGitTools } from './git.js';
+import { createLearnBatchTools } from './learn-batches.js';
 import { createOrchestratorTools } from './orchestrator-tool.js';
 import { createSearchTools } from './search.js';
 import { createScheduleTools } from './schedules.js';
@@ -132,6 +133,7 @@ export function toolsForRole(
         ...fetchTools,
         ...reply,
         ...byName(orchestrator, ['query_memories', 'add_memory']),
+        ...createLearnBatchTools(ctx),
       ];
       break;
 

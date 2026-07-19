@@ -383,4 +383,73 @@ describe('IdentityStore', () => {
     assert.match(formatted, /builds_on/);
     assert.match(formatted, /Char budget:/);
   });
+
+  it('persists sourceHash/sourceCommit and reports freshness notes', async () => {
+    const m = await store.addMemory({
+      content: 'Evidence',
+      title: 'Hashed',
+      tags: ['x'],
+      kind: 'claim',
+      sourceHash: 'abc123hash',
+      sourceCommit: 'deadbeefcafebabe',
+    });
+    assert.equal(m.sourceHash, 'abc123hash');
+    assert.equal(m.sourceCommit, 'deadbeefcafebabe');
+
+    const reread = await store.getMemory(m.id);
+    assert.equal(reread?.sourceHash, 'abc123hash');
+
+    const packedUnknown = await store.queryMemoriesPacked('Hashed', {
+      limit: 1,
+    });
+    assert.ok(
+      packedUnknown.freshnessNotes?.some((n) =>
+        n.includes('freshness=unknown'),
+      ),
+    );
+
+    const packedStale = await store.queryMemoriesPacked('Hashed', {
+      limit: 1,
+      repoHead: '000000000000',
+    });
+    assert.ok(
+      packedStale.freshnessNotes?.some((n) => n.includes('freshness=stale')),
+    );
+
+    const formatted = store.formatPackedQuery(packedStale);
+    assert.match(formatted, /freshness=stale/);
+  });
+
+  it('writes embeddings when enabled and hybrid ranking stays lexical when disabled', async () => {
+    const enabledRoot = fs.mkdtempSync(
+      path.join(os.tmpdir(), 'artificer-emb-'),
+    );
+    try {
+      const enabled = new IdentityStore(enabledRoot, {
+        embeddings: { enabled: true, provider: 'local' },
+      });
+      await enabled.init();
+      const mem = await enabled.addMemory({
+        content: 'vector me',
+        title: 'Embeddable',
+        tags: ['vec'],
+        kind: 'note',
+      });
+      const raw = fs.readFileSync(enabled.layout.memoryEmbeddingsFile, 'utf-8');
+      const map = JSON.parse(raw) as Record<string, number[]>;
+      assert.ok(Array.isArray(map[mem.id]));
+      assert.ok(map[mem.id]!.length > 0);
+    } finally {
+      fs.rmSync(enabledRoot, { recursive: true, force: true });
+    }
+
+    // Default store (disabled) must not create embeddings.json
+    await store.addMemory({
+      content: 'no vec',
+      title: 'Plain',
+      tags: [],
+      kind: 'note',
+    });
+    assert.equal(fs.existsSync(store.layout.memoryEmbeddingsFile), false);
+  });
 });

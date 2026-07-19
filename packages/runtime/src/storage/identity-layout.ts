@@ -16,6 +16,11 @@ export class IdentityLayout {
     return path.join(this.root, 'identity', 'graph.json');
   }
 
+  /** Optional embedding vectors keyed by memory id. */
+  get memoryEmbeddingsFile(): string {
+    return path.join(this.root, 'identity', 'embeddings.json');
+  }
+
   memoryFile(id: string): string {
     return path.join(this.memoriesDir, `${id}.md`);
   }

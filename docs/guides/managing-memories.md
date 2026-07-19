@@ -47,7 +47,7 @@ With `autoPush: true` the runtime also does a `git pull --rebase` followed by `g
 
 Each workstream gets a `document` memory (the **chronicle**) that accumulates Goal, Plan, Worker, Review, and Outcome sections. Chronicles are capped at **32 KiB**: when they grow past that, older middle sections are dropped and a short rollup note is inserted. Goal and the newest sections are kept.
 
-When a workstream finishes (`done`, `failed`, or `cancelled`), the runtime — by default — spawns a fire-and-forget **librarian distill** that extracts 1–5 `claim` memories (and optional `entity` memories) linked back to the chronicle with `related` / `builds_on`. Distill failures only log; they never block the workstream. Re-distill is skipped when the goal+summary+status hash is unchanged.
+When a workstream finishes (`done`, `failed`, or `cancelled`), the runtime — by default — spawns a fire-and-forget **librarian distill** that extracts 1–5 `claim` memories (and optional `entity` memories) linked back to the chronicle with `related` / `builds_on`. Distill failures only log; they never block the workstream. Re-distill is skipped when the goal+summary+status hash is unchanged. The chronicle also records `sourceHash` (and `sourceCommit` when a git HEAD is available); `query_memories` may footnote soft freshness (`fresh` / `stale` / `unknown`) — never blocking.
 
 Disable distillation with:
 
@@ -58,6 +58,25 @@ Disable distillation with:
   }
 }
 ```
+
+### Optional embeddings
+
+Hybrid ranking is off by default. Enable a local (or configured) embedding provider to store vectors in `identity/embeddings.json` and fuse them with lexical ranks:
+
+```json
+{
+  "identity": {
+    "embeddings": {
+      "enabled": true,
+      "provider": "local"
+    }
+  }
+}
+```
+
+### Large learn jobs
+
+For many URLs or a very large paste, the librarian can call `save_learn_batch` to write scratch JSON under the exec dir, then `finalize_learn_batches` to merge, dedupe entities, normalize kinds (`decision` → `claim`), and `add_memory` once per final item. Reply content stays short; intermediates are deleted after success.
 
 ## How memories are searched
 

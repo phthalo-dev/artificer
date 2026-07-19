@@ -3,6 +3,13 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { IdentityLayout } from './identity-layout.js';
 import { rankMemories, type MemoryIndexEntry } from './memory-search.js';
+import {
+  embedTextForMemory,
+  localEmbed,
+  MemoryEmbeddingsStore,
+  rankMemoriesHybrid,
+  type EmbeddingsConfig,
+} from './memory-embeddings.js';
 import type {
   Memory,
   MemoryEdgeType,
@@ -29,6 +36,23 @@ export interface PackedMemoryQuery {
     kind?: MemoryKind;
   }>;
   charBudget: { used: number; limit: number };
+  /** Soft freshness footnotes (never blocking). */
+  freshnessNotes?: string[];
+}
+
+export type FreshnessStatus = 'fresh' | 'stale' | 'unknown';
+
+export function assessFreshness(
+  sourceCommit: string | undefined,
+  repoHead: string | null | undefined,
+): FreshnessStatus {
+  if (!sourceCommit) return 'unknown';
+  if (!repoHead) return 'unknown';
+  return sourceCommit === repoHead ||
+    repoHead.startsWith(sourceCommit) ||
+    sourceCommit.startsWith(repoHead)
+    ? 'fresh'
+    : 'stale';
 }
 
 function now(): string {
@@ -68,6 +92,8 @@ function memoryToMarkdown(memory: Memory): string {
   lines.push(`tags: [${memory.tags.map((t) => `"${t}"`).join(', ')}]`);
   lines.push(`kind: "${memory.kind ?? 'note'}"`);
   if (memory.source) lines.push(`source: "${memory.source}"`);
+  if (memory.sourceHash) lines.push(`sourceHash: "${memory.sourceHash}"`);
+  if (memory.sourceCommit) lines.push(`sourceCommit: "${memory.sourceCommit}"`);
   if (memory.related?.length) {
     lines.push('related:');
     for (const r of memory.related) {
@@ -158,6 +184,8 @@ function markdownToMemory(filePath: string, raw: string): Memory | null {
     kind,
     source: get('source'),
     related: parseRelated(fmBlock),
+    sourceHash: get('sourceHash'),
+    sourceCommit: get('sourceCommit'),
     createdAt: get('createdAt') ?? now(),
     updatedAt: get('updatedAt'),
   };
@@ -213,6 +241,11 @@ function formatPackedQuery(result: PackedMemoryQuery): string {
     return `- ${e.from} --[${e.type}]--> ${e.to}${summary}`;
   });
 
+  const noteLines = [
+    `- Char budget: ${result.charBudget.used}/${result.charBudget.limit}`,
+    ...(result.freshnessNotes ?? []),
+  ];
+
   const sections = [
     '## Matched',
     matchedLines.length ? matchedLines.join('\n\n') : '(none)',
@@ -220,18 +253,32 @@ function formatPackedQuery(result: PackedMemoryQuery): string {
   if (relatedLines.length) {
     sections.push('## Related', relatedLines.join('\n'));
   }
-  sections.push(
-    '## Notes',
-    `- Char budget: ${result.charBudget.used}/${result.charBudget.limit}`,
-  );
+  sections.push('## Notes', noteLines.join('\n'));
   return sections.join('\n\n');
+}
+
+export interface IdentityStoreOptions {
+  embeddings?: EmbeddingsConfig;
 }
 
 export class IdentityStore {
   readonly layout: IdentityLayout;
+  private readonly embeddingsConfig: EmbeddingsConfig;
+  private readonly embeddingsStore: MemoryEmbeddingsStore;
 
-  constructor(rootDir: string) {
+  constructor(rootDir: string, options: IdentityStoreOptions = {}) {
     this.layout = new IdentityLayout(rootDir);
+    this.embeddingsConfig = options.embeddings ?? { enabled: false };
+    this.embeddingsStore = new MemoryEmbeddingsStore(
+      this.layout.memoryEmbeddingsFile,
+    );
+  }
+
+  private get embeddingsEnabled(): boolean {
+    return (
+      this.embeddingsConfig.enabled === true &&
+      this.embeddingsConfig.provider !== 'none'
+    );
   }
 
   async init(): Promise<void> {
@@ -253,6 +300,7 @@ export class IdentityStore {
       'utf-8',
     );
     await this.rebuildIndex();
+    await this.maybeUpsertEmbedding(memory);
     return memory;
   }
 
@@ -302,7 +350,13 @@ export class IdentityStore {
    */
   async queryMemoriesPacked(
     query: string,
-    opts: { tags?: string[]; limit?: number; charBudget?: number } = {},
+    opts: {
+      tags?: string[];
+      limit?: number;
+      charBudget?: number;
+      /** Optional repo HEAD for soft sourceCommit freshness (never blocks). */
+      repoHead?: string | null;
+    } = {},
   ): Promise<PackedMemoryQuery> {
     const limit = Math.max(1, Math.min(opts.limit ?? 10, 50));
     const charBudget = opts.charBudget ?? 4000;
@@ -315,7 +369,7 @@ export class IdentityStore {
         e.tags.some((t) => want.has(t.toLowerCase())),
       );
     }
-    const ranked = rankMemories(query, entries).slice(0, limit);
+    const ranked = (await this.rankEntries(query, entries)).slice(0, limit);
     const matched: Memory[] = [];
     let used = 0;
     for (let i = 0; i < ranked.length; i++) {
@@ -424,10 +478,23 @@ export class IdentityStore {
       });
     }
 
+    const freshnessNotes: string[] = [];
+    for (const m of matched) {
+      if (!m.sourceCommit && !m.sourceHash) continue;
+      const status = assessFreshness(m.sourceCommit, opts.repoHead);
+      const bits = [`${m.id}`];
+      if (m.sourceCommit)
+        bits.push(`sourceCommit=${m.sourceCommit.slice(0, 12)}`);
+      if (m.sourceHash) bits.push(`sourceHash=${m.sourceHash.slice(0, 12)}`);
+      bits.push(`freshness=${status}`);
+      freshnessNotes.push(`- ${bits.join(' ')}`);
+    }
+
     return {
       matched,
       related: relatedOut,
       charBudget: { used, limit: charBudget },
+      freshnessNotes: freshnessNotes.length ? freshnessNotes : undefined,
     };
   }
 
@@ -457,7 +524,14 @@ export class IdentityStore {
     patch: Partial<
       Pick<
         Memory,
-        'content' | 'title' | 'summary' | 'tags' | 'related' | 'kind'
+        | 'content'
+        | 'title'
+        | 'summary'
+        | 'tags'
+        | 'related'
+        | 'kind'
+        | 'sourceHash'
+        | 'sourceCommit'
       >
     >,
   ): Promise<Memory | null> {
@@ -479,6 +553,7 @@ export class IdentityStore {
       'utf-8',
     );
     await this.rebuildIndex();
+    await this.maybeUpsertEmbedding(updated);
     return updated;
   }
 
@@ -486,9 +561,46 @@ export class IdentityStore {
     try {
       await fs.unlink(this.layout.memoryFile(id));
       await this.rebuildIndex();
+      if (this.embeddingsEnabled) {
+        await this.embeddingsStore.remove(id);
+      }
       return true;
     } catch {
       return false;
+    }
+  }
+
+  private async rankEntries(query: string, entries: MemoryIndexEntry[]) {
+    if (!this.embeddingsEnabled || !query.trim()) {
+      return rankMemories(query, entries);
+    }
+    const vectors = await this.embeddingsStore.readAll();
+    const queryVector = localEmbed(query);
+    return rankMemoriesHybrid(query, entries, vectors, queryVector);
+  }
+
+  private async maybeUpsertEmbedding(memory: Memory): Promise<void> {
+    if (!this.embeddingsEnabled) return;
+    if (
+      this.embeddingsConfig.provider === 'openai' &&
+      !process.env.OPENAI_API_KEY &&
+      !process.env.LLM_API_KEY
+    ) {
+      return;
+    }
+    const vector = embedTextForMemory({
+      title: memory.title,
+      summary: memory.summary,
+      tags: memory.tags,
+      excerpt: memory.content.slice(0, 200),
+    });
+    try {
+      await this.embeddingsStore.upsert(memory.id, vector);
+    } catch (err) {
+      console.warn(
+        `[identity-store] embedding upsert failed for ${memory.id}:`,
+        err,
+      );
     }
   }
 
