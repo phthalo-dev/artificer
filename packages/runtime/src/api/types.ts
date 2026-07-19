@@ -19,6 +19,11 @@ export interface IdentityConfig {
   branch?: string;
   /** How often to pull identity from origin. Duration string e.g. "5m". Absent disables. */
   pullInterval?: string;
+  /**
+   * When true (default), spawn a librarian distill after a workstream finishes
+   * to extract claim/entity memories from the chronicle. Set false to disable.
+   */
+  distillWorkstreams?: boolean;
 }
 
 export interface ResolvedIdentityConfig extends IdentityConfig {
