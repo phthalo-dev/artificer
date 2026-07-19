@@ -171,4 +171,95 @@ describe('IdentityStore', () => {
     assert.ok(reread);
     assert.equal(reread!.content, 'After');
   });
+
+  it('filters by tags before ranking and respects limit', async () => {
+    await store.addMemory({
+      content: 'Pref A',
+      title: 'A',
+      tags: ['preference', 'payments'],
+      kind: 'preference',
+    });
+    await store.addMemory({
+      content: 'Pref B',
+      title: 'B',
+      tags: ['preference', 'auth'],
+      kind: 'preference',
+    });
+    await store.addMemory({
+      content: 'Note C about preference wording',
+      title: 'C',
+      tags: ['architecture'],
+      kind: 'note',
+    });
+
+    const results = await store.queryMemories('', {
+      tags: ['preference'],
+      limit: 10,
+    });
+    assert.equal(results.length, 2);
+    assert.ok(results.every((m) => m.tags.includes('preference')));
+  });
+
+  it('truncates the top hit when it alone exceeds charBudget', async () => {
+    await store.addMemory({
+      content: 'x'.repeat(500),
+      title: 'Huge',
+      tags: ['big'],
+      kind: 'note',
+      summary: 'huge memory body',
+    });
+    await store.addMemory({
+      content: 'small second',
+      title: 'Small',
+      tags: ['big'],
+      kind: 'note',
+      summary: 'tiny',
+    });
+
+    const results = await store.queryMemories('huge', { charBudget: 100 });
+    assert.equal(results.length, 1);
+    assert.ok(results[0].content.includes('… (truncated)'));
+    assert.ok(results[0].content.length <= 100 + '… (truncated)'.length);
+  });
+
+  it('rebuilds a corrupt index.json on query', async () => {
+    await store.addMemory({
+      content: 'Recover me',
+      title: 'Recoverable',
+      tags: ['recovery'],
+      kind: 'note',
+    });
+    fs.writeFileSync(store.layout.memoryIndexFile, '{not-json', 'utf-8');
+
+    const results = await store.queryMemories('Recoverable');
+    assert.ok(results.length >= 1);
+    assert.equal(results[0].title, 'Recoverable');
+
+    const indexRaw = fs.readFileSync(store.layout.memoryIndexFile, 'utf-8');
+    const index = JSON.parse(indexRaw) as unknown[];
+    assert.equal(index.length, 1);
+  });
+
+  it('memorySignpost reports count and top tags', async () => {
+    assert.equal(await store.memorySignpost(), null);
+
+    await store.addMemory({
+      content: 'One',
+      title: 'One',
+      tags: ['alpha', 'shared'],
+      kind: 'note',
+    });
+    await store.addMemory({
+      content: 'Two',
+      title: 'Two',
+      tags: ['beta', 'shared'],
+      kind: 'note',
+    });
+
+    const signpost = await store.memorySignpost();
+    assert.ok(signpost);
+    assert.match(signpost!, /You have 2 memories/);
+    assert.match(signpost!, /shared/);
+    assert.match(signpost!, /query_memories/);
+  });
 });

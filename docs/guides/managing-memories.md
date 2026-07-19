@@ -13,7 +13,11 @@ my-agent/
         └── deployment-notes.md ← written by the agent
 ```
 
-Memories are plain markdown files with a YAML front matter block containing the memory's id, title, summary, tags, kind, source, and timestamps. The agent rebuilds `identity/index.json` every time a memory is written, updated, or deleted — that index is what makes search fast.
+Memories are plain markdown files with a YAML front matter block containing the memory's id, title, summary, tags, kind, source, and timestamps. The agent rebuilds `identity/index.json` every time a memory is written, updated, or deleted. That index is used on both write and query (and self-heals if it goes missing or drifts from the files on disk).
+
+## Signpost (passive hint)
+
+Each role call gets a short **signpost** in context — a count of memories and the top tags, with no memory content. When identity storage is configured, the signpost is built from `identity/index.json` (not the ephemeral exec store). Content is never auto-injected; the agent must call `query_memories` to recall details.
 
 ## How the agent writes memories
 
@@ -40,18 +44,22 @@ With `autoPush: true` the runtime also does a `git pull --rebase` followed by `g
 
 ## How memories are searched
 
-When a role calls `query_memories`, the runtime runs a keyword search over the index. The search:
+When a role calls `query_memories`, the runtime searches the identity index (when configured). The search:
 
-1. Tokenizes the query: lowercased, split on non-alphanumerics, stopwords removed, single-character tokens dropped.
-2. Scores each memory by counting how many query tokens appear in its title, summary, and tags combined.
-3. Boosts tag matches by 3 points per matching token (compared to 1 point for a title or summary hit).
-4. Returns only memories with a score above zero, sorted by score descending; ties break by recency.
+1. Optionally filters candidates by tag **before** ranking (OR match: any requested tag present).
+2. Tokenizes the query: lowercased, split on non-alphanumerics, stopwords removed, single-character tokens dropped.
+3. Scores candidates with weighted fuzzy matching (Fuse.js) over index fields:
+   - `title` — weight 0.4
+   - `tags` — weight 0.3
+   - `summary` — weight 0.2
+   - `excerpt` — weight 0.1 (first ~200 characters of the body; ranking only)
+4. Adds a tag-token boost (+3 per query token that appears in the memory's tags), so tag hits outrank title-only spam.
+5. Multi-token queries are OR'd (any token can match). Threshold ~0.4; near-miss / partial titles still rank.
+6. Returns the top matches within a character budget (default **4000**). The #1 hit is always included and truncated if it alone exceeds the budget.
 
-An empty query (or a query made entirely of stopwords) returns all memories in recency order.
+An empty query (or a query made entirely of stopwords) returns candidates in recency order (still subject to tag filter, limit, and char budget).
 
-You can also filter by tag — the `query_memories` tool accepts an optional `tags` array that narrows candidates before scoring.
-
-Results are capped at the requested limit (default 5 when called by the agent).
+Results are capped at the requested limit (default 5 when called by the agent tool; the store API defaults to 10).
 
 ## Seeding initial memories
 
