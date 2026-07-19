@@ -1,6 +1,6 @@
 {
   "name": "@artificer-ai/runtime",
-  "version": "0.9.4",
+  "version": "0.10.0",
   "description": "Artificer agent runtime — HTTP API and orchestration engine with bundled dashboard",
   "type": "module",
   "engines": {
