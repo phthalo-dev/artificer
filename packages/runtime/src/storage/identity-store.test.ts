@@ -301,17 +301,13 @@ describe('IdentityStore', () => {
       fs.readFileSync(store.layout.memoryIndexFile, 'utf-8'),
     ) as Array<{ id: string; related?: unknown }>;
     const claimEntry = index.find((e) => e.id === claim.id);
-    assert.deepEqual(claimEntry?.related, [
-      { id: doc.id, type: 'builds_on' },
-    ]);
+    assert.deepEqual(claimEntry?.related, [{ id: doc.id, type: 'builds_on' }]);
 
     const graph = JSON.parse(
       fs.readFileSync(store.layout.memoryGraphFile, 'utf-8'),
     ) as { version: string; edges: Array<{ from: string; to: string }> };
     assert.equal(graph.version, '1');
-    assert.ok(
-      graph.edges.some((e) => e.from === claim.id && e.to === doc.id),
-    );
+    assert.ok(graph.edges.some((e) => e.from === claim.id && e.to === doc.id));
   });
 
   it('drops unknown related targets on write and dangling edges at query', async () => {
@@ -378,9 +374,7 @@ describe('IdentityStore', () => {
     });
     assert.equal(packed.matched[0]?.id, doc.id);
     assert.ok(
-      packed.related.some(
-        (r) => r.to === claim.id && r.type === 'builds_on',
-      ),
+      packed.related.some((r) => r.to === claim.id && r.type === 'builds_on'),
       `expected claim in related, got ${JSON.stringify(packed.related)}`,
     );
     const formatted = store.formatPackedQuery(packed);

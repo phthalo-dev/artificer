@@ -176,10 +176,7 @@ function sanitizeRelated(
   return kept.length ? kept : undefined;
 }
 
-function toIndexEntry(
-  m: Memory,
-  knownIds?: Set<string>,
-): MemoryIndexEntry {
+function toIndexEntry(m: Memory, knownIds?: Set<string>): MemoryIndexEntry {
   const related = knownIds
     ? sanitizeRelated(m.related, knownIds)
     : normalizeRelated(m.related);
@@ -458,7 +455,10 @@ export class IdentityStore {
   async updateMemory(
     id: string,
     patch: Partial<
-      Pick<Memory, 'content' | 'title' | 'summary' | 'tags' | 'related' | 'kind'>
+      Pick<
+        Memory,
+        'content' | 'title' | 'summary' | 'tags' | 'related' | 'kind'
+      >
     >,
   ): Promise<Memory | null> {
     const existing = await this.getMemory(id);
