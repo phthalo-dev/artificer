@@ -2,6 +2,7 @@ import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
 import path from 'node:path';
 import {
+  ageOutLearnBatches,
   listLearnBatchFiles,
   mergeLearnBatches,
   trashLearnBatches,
@@ -60,6 +61,7 @@ export function createLearnBatchTools(ctx: ToolContext): ToolDef[] {
         required: ['batch', 'facts'],
       },
       handler: async (input) => {
+        await ageOutLearnBatches(execRoot);
         const batch = typeof input.batch === 'number' ? input.batch : 1;
         const facts = Array.isArray(input.facts)
           ? (input.facts as LearnBatchFact[])
@@ -77,6 +79,7 @@ export function createLearnBatchTools(ctx: ToolContext): ToolDef[] {
         properties: {},
       },
       handler: async () => {
+        await ageOutLearnBatches(execRoot);
         const files = await listLearnBatchFiles(execRoot, run.id);
         if (files.length === 0) {
           return 'No learn batches found for this run.';

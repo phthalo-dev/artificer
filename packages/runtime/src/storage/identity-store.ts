@@ -4,11 +4,12 @@ import path from 'node:path';
 import { IdentityLayout } from './identity-layout.js';
 import { rankMemories, type MemoryIndexEntry } from './memory-search.js';
 import {
-  embedTextForMemory,
-  localEmbed,
+  memoryTextForEmbed,
   MemoryEmbeddingsStore,
   rankMemoriesHybrid,
+  resolveEmbedFn,
   type EmbeddingsConfig,
+  type EmbedFn,
 } from './memory-embeddings.js';
 import type {
   Memory,
@@ -34,6 +35,8 @@ export interface PackedMemoryQuery {
     type: MemoryEdgeType;
     summary?: string;
     kind?: MemoryKind;
+    /** Short claim/preference body when packed within budget. */
+    content?: string;
   }>;
   charBudget: { used: number; limit: number };
   /** Soft freshness footnotes (never blocking). */
@@ -238,7 +241,8 @@ function formatPackedQuery(result: PackedMemoryQuery): string {
 
   const relatedLines = result.related.map((e) => {
     const summary = e.summary ? `: ${e.summary}` : '';
-    return `- ${e.from} --[${e.type}]--> ${e.to}${summary}`;
+    const body = e.content ? `\n  ${e.content}` : '';
+    return `- ${e.from} --[${e.type}]--> ${e.to}${summary}${body}`;
   });
 
   const noteLines = [
@@ -259,12 +263,15 @@ function formatPackedQuery(result: PackedMemoryQuery): string {
 
 export interface IdentityStoreOptions {
   embeddings?: EmbeddingsConfig;
+  /** Override embedder (tests or custom providers). */
+  embedFn?: EmbedFn;
 }
 
 export class IdentityStore {
   readonly layout: IdentityLayout;
   private readonly embeddingsConfig: EmbeddingsConfig;
   private readonly embeddingsStore: MemoryEmbeddingsStore;
+  private readonly embedFn: EmbedFn | null;
 
   constructor(rootDir: string, options: IdentityStoreOptions = {}) {
     this.layout = new IdentityLayout(rootDir);
@@ -272,13 +279,11 @@ export class IdentityStore {
     this.embeddingsStore = new MemoryEmbeddingsStore(
       this.layout.memoryEmbeddingsFile,
     );
+    this.embedFn = resolveEmbedFn(this.embeddingsConfig, options.embedFn);
   }
 
   private get embeddingsEnabled(): boolean {
-    return (
-      this.embeddingsConfig.enabled === true &&
-      this.embeddingsConfig.provider !== 'none'
-    );
+    return this.embedFn !== null;
   }
 
   async init(): Promise<void> {
@@ -458,24 +463,33 @@ export class IdentityStore {
       if (used >= charBudget) break;
       const body = await this.getMemory(n.to);
       if (!body) continue;
-      // Prefer packing claim/preference neighbors; long documents only take a summary line.
+      const summary = n.summary ?? body.summary ?? body.title;
+      // Prefer packing claim/preference bodies; documents get a summary line only.
       if (
         (body.kind === 'claim' || body.kind === 'preference') &&
         body.content.length + used <= charBudget
       ) {
         used += body.content.length;
-      } else if (used + 80 > charBudget) {
-        break;
+        relatedOut.push({
+          from: n.from,
+          to: n.to,
+          type: n.type,
+          summary,
+          kind: body.kind,
+          content: body.content,
+        });
       } else {
-        used += 80;
+        const line = `${n.from} --[${n.type}]--> ${n.to}${summary ? `: ${summary}` : ''}`;
+        if (used + line.length > charBudget) break;
+        used += line.length;
+        relatedOut.push({
+          from: n.from,
+          to: n.to,
+          type: n.type,
+          summary,
+          kind: body.kind,
+        });
       }
-      relatedOut.push({
-        from: n.from,
-        to: n.to,
-        type: n.type,
-        summary: n.summary ?? body.summary ?? body.title,
-        kind: body.kind,
-      });
     }
 
     const freshnessNotes: string[] = [];
@@ -571,30 +585,33 @@ export class IdentityStore {
   }
 
   private async rankEntries(query: string, entries: MemoryIndexEntry[]) {
-    if (!this.embeddingsEnabled || !query.trim()) {
+    if (!this.embedFn || !query.trim()) {
       return rankMemories(query, entries);
     }
     const vectors = await this.embeddingsStore.readAll();
-    const queryVector = localEmbed(query);
+    let queryVector: number[];
+    try {
+      queryVector = await this.embedFn(query);
+    } catch (err) {
+      console.warn(
+        '[identity-store] query embedding failed; lexical only:',
+        err,
+      );
+      return rankMemories(query, entries);
+    }
     return rankMemoriesHybrid(query, entries, vectors, queryVector);
   }
 
   private async maybeUpsertEmbedding(memory: Memory): Promise<void> {
-    if (!this.embeddingsEnabled) return;
-    if (
-      this.embeddingsConfig.provider === 'openai' &&
-      !process.env.OPENAI_API_KEY &&
-      !process.env.LLM_API_KEY
-    ) {
-      return;
-    }
-    const vector = embedTextForMemory({
+    if (!this.embedFn) return;
+    const text = memoryTextForEmbed({
       title: memory.title,
       summary: memory.summary,
       tags: memory.tags,
       excerpt: memory.content.slice(0, 200),
     });
     try {
+      const vector = await this.embedFn(text);
       await this.embeddingsStore.upsert(memory.id, vector);
     } catch (err) {
       console.warn(

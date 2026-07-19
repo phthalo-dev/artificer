@@ -1,4 +1,6 @@
 import path from 'node:path';
+import { execFile } from 'node:child_process';
+import { promisify } from 'node:util';
 import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
 import { findGitRepo } from '../engine/git-repo.js';
@@ -10,6 +12,23 @@ import {
 import type { MemoryEdgeType, WorkstreamStatus } from '../storage/types.js';
 import { isModelTier } from '../engine/models.js';
 
+const execFileAsync = promisify(execFile);
+
+/** Best-effort repo HEAD for soft sourceCommit freshness footnotes. */
+async function resolveQueryRepoHead(ctx: ToolContext): Promise<string | null> {
+  try {
+    const repo = await findGitRepo(ctx.workspaceDir);
+    if (!repo) return null;
+    const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], {
+      cwd: repo,
+      timeout: 10_000,
+    });
+    const head = stdout.trim();
+    return head || null;
+  } catch {
+    return null;
+  }
+}
 const WORKSTREAM_STATUSES: WorkstreamStatus[] = [
   'pending',
   'planning',
@@ -279,23 +298,37 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
             type: 'number',
             description: 'Max memories to return (default 5).',
           },
+          charBudget: {
+            type: 'number',
+            description:
+              'Max characters of memory content to return (default 4000).',
+          },
         },
       },
       handler: async (input) => {
         const tags = Array.isArray(input.tags)
           ? (input.tags as unknown[]).map(String)
           : undefined;
-        const limit = typeof input.limit === 'number' ? input.limit : undefined;
+        const limit = typeof input.limit === 'number' ? input.limit : 5;
+        const charBudget =
+          typeof input.charBudget === 'number' ? input.charBudget : 4000;
         const query = input.query ? String(input.query) : '';
         if (engine.identity) {
+          const repoHead = await resolveQueryRepoHead(ctx);
           const packed = await engine.identity.queryMemoriesPacked(query, {
             tags,
             limit,
+            charBudget,
+            repoHead,
           });
           if (packed.matched.length === 0) return '(no memories)';
           return engine.identity.formatPackedQuery(packed);
         }
-        const memories = await store.queryMemories(query, { tags, limit });
+        const memories = await store.queryMemories(query, {
+          tags,
+          limit,
+          charBudget,
+        });
         if (memories.length === 0) return '(no memories)';
         return memories
           .map((m) => {

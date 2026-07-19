@@ -127,17 +127,17 @@ export LLM_API_KEY=sk-...
 
 Notes for the remote path:
 
-- If neither `OPENAI_API_KEY` nor `LLM_API_KEY` is set, Artificer **does not** write embedding vectors (search stays word-based only).
-- When keys **are** set, Artificer stores vectors in `identity/embeddings.json` the same way as local. Today those vectors are still built with the on-device hasher; the `openai` provider and `model` field reserve the hosted-API path so you can configure it without changing search callers later.
+- Requires `OPENAI_API_KEY` or `LLM_API_KEY`. Without a key, embedding writes are skipped and search stays word-based.
+- When keys **are** set, Artificer calls the OpenAI embeddings API (default model `text-embedding-3-small`, overridable via `model`) and stores vectors in `identity/embeddings.json`.
 - Word-based search always remains available. If embeddings are missing, empty, or cover too few memories, Artificer falls back to word matching alone.
 
 #### Choosing a provider
 
-| Goal | Config |
-|------|--------|
-| Simplest / offline | `"provider": "local"` |
-| Config ready for a hosted model + API key in env | `"provider": "openai"` + `model` + `OPENAI_API_KEY` or `LLM_API_KEY` |
-| Explicitly off | omit `embeddings`, or `"enabled": false`, or `"provider": "none"` |
+| Goal                     | Config                                                               |
+| ------------------------ | -------------------------------------------------------------------- |
+| Simplest / offline       | `"provider": "local"`                                                |
+| Hosted OpenAI embeddings | `"provider": "openai"` + `model` + `OPENAI_API_KEY` or `LLM_API_KEY` |
+| Explicitly off           | omit `embeddings`, or `"enabled": false`, or `"provider": "none"`    |
 
 ### Large learn jobs
 
@@ -165,13 +165,13 @@ Results are capped at the requested limit (default 5 when called by the agent to
 
 ### Kinds and related links
 
-| Kind | Purpose |
-|------|---------|
-| `note` | Atomic fact from conversation |
-| `document` | Distilled source / workstream chronicle |
-| `preference` | Standing instruction |
-| `claim` | Distilled assertion / decision |
-| `entity` | Named person/tool/repo/org |
+| Kind         | Purpose                                 |
+| ------------ | --------------------------------------- |
+| `note`       | Atomic fact from conversation           |
+| `document`   | Distilled source / workstream chronicle |
+| `preference` | Standing instruction                    |
+| `claim`      | Distilled assertion / decision          |
+| `entity`     | Named person/tool/repo/org              |
 
 Optional frontmatter `related` links memories with typed edges (`related`, `builds_on`, `contradicts`, `cites`, `categorized_under`). Unknown target ids are dropped on write with a warning.
 

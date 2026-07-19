@@ -120,3 +120,40 @@ export async function trashLearnBatches(
   const dir = learnBatchDir(execRoot, runId);
   await fs.rm(dir, { recursive: true, force: true });
 }
+
+/** Default age-out for abandoned learn scratch dirs (24h). */
+export const LEARN_BATCH_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
+/**
+ * Remove `{exec}/tmp/learn-*` directories older than maxAgeMs.
+ * Returns the number of directories removed.
+ */
+export async function ageOutLearnBatches(
+  execRoot: string,
+  maxAgeMs = LEARN_BATCH_MAX_AGE_MS,
+  now = Date.now(),
+): Promise<number> {
+  const tmp = path.join(execRoot, 'tmp');
+  let names: string[];
+  try {
+    names = await fs.readdir(tmp);
+  } catch (err) {
+    if ((err as NodeJS.ErrnoException).code === 'ENOENT') return 0;
+    throw err;
+  }
+  let removed = 0;
+  for (const name of names) {
+    if (!name.startsWith('learn-')) continue;
+    const dir = path.join(tmp, name);
+    try {
+      const st = await fs.stat(dir);
+      if (!st.isDirectory()) continue;
+      if (now - st.mtimeMs < maxAgeMs) continue;
+      await fs.rm(dir, { recursive: true, force: true });
+      removed += 1;
+    } catch {
+      // ignore races
+    }
+  }
+  return removed;
+}
