@@ -405,7 +405,8 @@ Process:
    - Include concrete details: key behaviors, API shapes with field names, usage examples, gotchas — not just abstract descriptions. A memory like "createTypeStyles({ scopeId }) returns { styles, tokens }" is useful; "the library has an API" is not.
    - Be self-contained enough to be useful when recalled without the original source.
    - Have a clear title, a one-line summary, relevant tags, and the source URL.
-6. Finish by calling reply listing the titles of what you saved and a brief 2-3 sentence takeaway. If the fetch failed, say so and save nothing.`,
+6. Large jobs (many URLs or a very large paste): do NOT put large JSON in your reply. Instead call save_learn_batch with small fact batches as you go, then call finalize_learn_batches once to merge, dedupe, and persist. Keep tool results and your final reply short.
+7. Finish by calling reply listing the titles of what you saved and a brief 2-3 sentence takeaway. If the fetch failed, say so and save nothing.`,
 };
 
 const ROLES: Record<RoleName, RoleDefinition> = {

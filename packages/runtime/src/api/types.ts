@@ -24,6 +24,12 @@ export interface IdentityConfig {
    * to extract claim/entity memories from the chronicle. Set false to disable.
    */
   distillWorkstreams?: boolean;
+  /** Optional embedding-backed hybrid ranking (off by default). */
+  embeddings?: {
+    enabled?: boolean;
+    provider?: 'openai' | 'local' | 'none';
+    model?: string;
+  };
 }
 
 export interface ResolvedIdentityConfig extends IdentityConfig {

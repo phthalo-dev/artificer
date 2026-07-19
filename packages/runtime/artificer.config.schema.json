@@ -176,6 +176,26 @@
         "distillWorkstreams": {
           "type": "boolean",
           "description": "After a workstream finishes, spawn a librarian to distill claim/entity memories from the chronicle. Default: true. Set false to disable."
+        },
+        "embeddings": {
+          "type": "object",
+          "description": "Optional embedding-backed hybrid memory ranking. Disabled by default; lexical ranking remains the fallback.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "When true, store vectors in identity/embeddings.json and fuse with lexical ranks. Default: false."
+            },
+            "provider": {
+              "type": "string",
+              "enum": ["openai", "local", "none"],
+              "description": "Embedding provider. 'local' uses a deterministic on-device hasher; 'openai' requires API keys. Default: none."
+            },
+            "model": {
+              "type": "string",
+              "description": "Optional model id for remote providers."
+            }
+          }
         }
       }
     }
