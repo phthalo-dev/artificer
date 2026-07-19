@@ -100,6 +100,11 @@ export class Layout {
     return path.join(this.workstreamDir(workstreamId), 'memory-ref.txt');
   }
 
+  /** Hash of the last workstream distill (goal+summary+status) for skip-if-unchanged. */
+  workstreamDistillHashFile(workstreamId: string): string {
+    return path.join(this.workstreamDir(workstreamId), 'distill-hash.txt');
+  }
+
   /** Cursor/state for the GitHub activity watcher (own PRs + notifications). */
   githubWatchStateFile(): string {
     return path.join(this.root, 'github-watch-state.json');
