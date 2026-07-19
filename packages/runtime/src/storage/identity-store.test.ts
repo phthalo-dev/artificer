@@ -41,8 +41,15 @@ describe('IdentityLayout', () => {
       '/home/user/my-agent/identity/index.json',
     );
   });
-});
 
+  it('resolves memory graph path', () => {
+    const layout = new IdentityLayout('/home/user/my-agent');
+    assert.equal(
+      layout.memoryGraphFile,
+      '/home/user/my-agent/identity/graph.json',
+    );
+  });
+});
 describe('IdentityStore', () => {
   let tmpDir: string;
   let store: IdentityStore;
@@ -261,5 +268,119 @@ describe('IdentityStore', () => {
     assert.match(signpost!, /You have 2 memories/);
     assert.match(signpost!, /shared/);
     assert.match(signpost!, /query_memories/);
+  });
+
+  it('persists claim/entity kinds and related edges in index and graph', async () => {
+    const doc = await store.addMemory({
+      content: 'Long chronicle of the payments workstream.',
+      title: 'Payments chronicle',
+      summary: 'Workstream chronicle for payments',
+      tags: ['payments', 'workstream'],
+      kind: 'document',
+    });
+    const claim = await store.addMemory({
+      content: 'Evidence: tests were written first.',
+      title: 'Payments uses TDD',
+      summary: 'Always write failing tests before implementation in payments.',
+      tags: ['claim', 'payments'],
+      kind: 'claim',
+      related: [{ id: doc.id, type: 'builds_on' }],
+    });
+    assert.match(claim.id, /^claim_/);
+    assert.deepEqual(claim.related, [{ id: doc.id, type: 'builds_on' }]);
+
+    const entity = await store.addMemory({
+      content: 'The payments-api Go service.',
+      title: 'payments-api',
+      tags: ['entity', 'payments'],
+      kind: 'entity',
+    });
+    assert.match(entity.id, /^entity_/);
+
+    const index = JSON.parse(
+      fs.readFileSync(store.layout.memoryIndexFile, 'utf-8'),
+    ) as Array<{ id: string; related?: unknown }>;
+    const claimEntry = index.find((e) => e.id === claim.id);
+    assert.deepEqual(claimEntry?.related, [{ id: doc.id, type: 'builds_on' }]);
+
+    const graph = JSON.parse(
+      fs.readFileSync(store.layout.memoryGraphFile, 'utf-8'),
+    ) as { version: string; edges: Array<{ from: string; to: string }> };
+    assert.equal(graph.version, '1');
+    assert.ok(graph.edges.some((e) => e.from === claim.id && e.to === doc.id));
+  });
+
+  it('drops unknown related targets on write and dangling edges at query', async () => {
+    const warn = console.warn;
+    const warnings: string[] = [];
+    console.warn = (...args: unknown[]) => {
+      warnings.push(args.map(String).join(' '));
+    };
+    try {
+      const m = await store.addMemory({
+        content: 'orphan link',
+        title: 'Orphan',
+        tags: ['x'],
+        kind: 'note',
+        related: [{ id: 'claim_does_not_exist', type: 'related' }],
+      });
+      assert.equal(m.related, undefined);
+      assert.ok(warnings.some((w) => w.includes('claim_does_not_exist')));
+    } finally {
+      console.warn = warn;
+    }
+
+    const doc = await store.addMemory({
+      content: 'parent doc',
+      title: 'Parent',
+      tags: ['payments'],
+      kind: 'document',
+      summary: 'parent document',
+    });
+    const claim = await store.addMemory({
+      content: 'linked claim',
+      title: 'Linked claim',
+      summary: 'A claim linked to the parent',
+      tags: ['payments'],
+      kind: 'claim',
+      related: [{ id: doc.id, type: 'builds_on' }],
+    });
+    await store.deleteMemory(doc.id);
+
+    const packed = await store.queryMemoriesPacked('Linked claim');
+    assert.equal(packed.matched[0]?.id, claim.id);
+    assert.equal(packed.related.length, 0);
+  });
+
+  it('packs 1-hop related claims when querying a parent document', async () => {
+    const doc = await store.addMemory({
+      content: 'Chronicle body about payments TDD rollout.',
+      title: 'Payments TDD chronicle',
+      summary: 'Chronicle of payments TDD',
+      tags: ['payments', 'tdd'],
+      kind: 'document',
+    });
+    const claim = await store.addMemory({
+      content: 'Write failing tests first.',
+      title: 'TDD claim',
+      summary: 'Always write failing tests before implementation.',
+      tags: ['payments', 'claim'],
+      kind: 'claim',
+      related: [{ id: doc.id, type: 'builds_on' }],
+    });
+
+    const packed = await store.queryMemoriesPacked('Payments TDD chronicle', {
+      limit: 1,
+    });
+    assert.equal(packed.matched[0]?.id, doc.id);
+    assert.ok(
+      packed.related.some((r) => r.to === claim.id && r.type === 'builds_on'),
+      `expected claim in related, got ${JSON.stringify(packed.related)}`,
+    );
+    const formatted = store.formatPackedQuery(packed);
+    assert.match(formatted, /## Matched/);
+    assert.match(formatted, /## Related/);
+    assert.match(formatted, /builds_on/);
+    assert.match(formatted, /Char budget:/);
   });
 });

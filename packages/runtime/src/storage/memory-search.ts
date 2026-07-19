@@ -1,4 +1,5 @@
 import Fuse from 'fuse.js';
+import type { MemoryEdgeType, MemoryKind, MemoryRelation } from './types.js';
 
 /** Compact, searchable record for one memory; the full content lives in its own file. */
 export interface MemoryIndexEntry {
@@ -9,11 +10,13 @@ export interface MemoryIndexEntry {
   excerpt?: string;
   tags: string[];
   source?: string;
-  kind?: string;
-  /** Phase B — ignored by ranking when present. */
-  related?: Array<string | { id: string; type?: string }>;
+  kind?: MemoryKind | string;
+  /** Outbound edges for 1-hop expansion (ignored by ranking). */
+  related?: MemoryRelation[];
   createdAt: string;
 }
+
+export type { MemoryEdgeType, MemoryRelation };
 
 export interface RankedEntry {
   entry: MemoryIndexEntry;

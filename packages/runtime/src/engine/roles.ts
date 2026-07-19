@@ -61,7 +61,7 @@ A person just sent you a message. Decide what they want and act:
 - If they want to steer existing work ("for project X make sure to do Y"), call send_note to the relevant workstream.
 - If they share a link, a document, pasted reference material, or say "read/learn this", call learn — it reads, distills, and de-dupes the material into memory in the background.
 - If they want to change how you run — model preset, daily spend cap, provider routes, failover order, or quota settings — call get_provider_config first, then update_provider_config with the requested changes, then reply confirming what you changed.
-- If they state a fact or reference detail directly in chat, call add_memory (kind: "note", or omitted). If instead they give you a standing correction or instruction about how you should work going forward ("don't do X", "always do Y for this repo") rather than a one-off task note, call add_memory with kind: "preference", phrased as a short imperative rule (with the reason, if given), and tag it "preference" plus any relevant repo/topic tag so it can be recalled later.
+- If they state a fact or reference detail directly in chat, call add_memory (kind: "note", or omitted). If instead they give you a standing correction or instruction about how you should work going forward ("don't do X", "always do Y for this repo") rather than a one-off task note, call add_memory with kind: "preference", phrased as a short imperative rule (with the reason, if given), and tag it "preference" plus any relevant repo/topic tag so it can be recalled later. Distilled lasting decisions from conversation can be kind: "claim" (short assertion in summary, optional evidence in the body).
 - If it is a question or chat ("what do you think about Z?"), just reply.
 
 Repository coding tasks (fix, implement, clone, checkout a base commit):
@@ -184,7 +184,9 @@ const PLANNER: RoleDefinition = {
 Before you start: call query_memories with tags: ["preference"] (plus the repo
 name as a tag, if you know it) to check for standing preferences from earlier
 corrections — fold any matches into the plan so the worker and reviewer don't
-have to rediscover them.
+have to rediscover them. When you know the repo or topic, also call
+query_memories for that repo/topic (without the preference tag filter) so
+linked claims and prior decisions surface in the Related section.
 
 You are given a task and the workstream context. Investigate as needed using
 read_file, list_files, grep, glob, and run_shell. Use the grep tool for search;
@@ -397,9 +399,9 @@ Process:
    If the fetched content is truncated or the page is clearly an overview or index, fetch 1-2 key sub-pages for more depth — use llms.txt as a guide if available. Cap yourself at 4 fetch calls total (including llms.txt and .md attempts). If you were given raw content rather than a URL, use it directly.
 2. If a "Focus:" instruction was included in your task, use it to prioritize what to extract and save.
 3. Identify the durable, teachable facts: how things work, key APIs and their shapes, important concepts, gotchas, and reference details. Ignore navigation, ads, and transient fluff.
-4. Before saving, call query_memories to check for existing coverage. If a closely related memory already exists, complement what's there rather than duplicating it.
+4. Before saving, call query_memories to check for existing coverage. If a closely related memory already exists, complement what's there rather than duplicating it — and pass related links (id + type such as "builds_on" or "related") back to existing memories when complementing.
 5. Group related facts by topic and save one comprehensive add_memory per topic — do NOT create a separate memory for each individual fact. A single source should typically yield 1-3 memories at most. Each memory should:
-   - Use kind: "document" for URL-sourced content, kind: "note" for content pasted directly in conversation, kind: "preference" for standing instructions ("always do X").
+   - Prefer kind: "claim" for durable assertions/decisions distilled from the source (1–2 sentence summary + optional evidence in the body). Use kind: "entity" for named people/tools/repos/orgs referenced across claims. Use kind: "document" for longer URL-sourced distillations, kind: "note" for content pasted directly in conversation, kind: "preference" for standing instructions ("always do X").
    - Include concrete details: key behaviors, API shapes with field names, usage examples, gotchas — not just abstract descriptions. A memory like "createTypeStyles({ scopeId }) returns { styles, tokens }" is useful; "the library has an API" is not.
    - Be self-contained enough to be useful when recalled without the original source.
    - Have a clear title, a one-line summary, relevant tags, and the source URL.

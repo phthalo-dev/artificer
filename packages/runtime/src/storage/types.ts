@@ -156,6 +156,42 @@ export interface RunRecord {
   finishedAt?: string;
 }
 
+/** Typed edge between memories (frontmatter `related`). */
+export type MemoryEdgeType =
+  | 'related'
+  | 'builds_on'
+  | 'contradicts'
+  | 'cites'
+  | 'categorized_under';
+
+export interface MemoryRelation {
+  id: string;
+  type: MemoryEdgeType;
+}
+
+export type MemoryKind =
+  | 'note'
+  | 'document'
+  | 'preference'
+  | 'claim'
+  | 'entity';
+
+export const MEMORY_KINDS: readonly MemoryKind[] = [
+  'note',
+  'document',
+  'preference',
+  'claim',
+  'entity',
+] as const;
+
+export const MEMORY_EDGE_TYPES: readonly MemoryEdgeType[] = [
+  'related',
+  'builds_on',
+  'contradicts',
+  'cites',
+  'categorized_under',
+] as const;
+
 export interface Memory {
   id: string;
   content: string;
@@ -167,6 +203,8 @@ export interface Memory {
   summary?: string;
   /** Where this came from: a URL, or "conversation". */
   source?: string;
-  kind?: 'note' | 'document' | 'preference';
+  kind?: MemoryKind;
+  /** Outbound typed links to other memories. */
+  related?: MemoryRelation[];
   updatedAt?: string;
 }

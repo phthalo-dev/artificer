@@ -356,7 +356,16 @@ export interface CreateMemoryInput {
   summary?: string;
   tags?: string[];
   source?: string;
-  kind?: 'note' | 'document' | 'preference';
+  kind?: 'note' | 'document' | 'preference' | 'claim' | 'entity';
+  related?: Array<{
+    id: string;
+    type?:
+      | 'related'
+      | 'builds_on'
+      | 'contradicts'
+      | 'cites'
+      | 'categorized_under';
+  }>;
 }
 
 export function useCreateMemory() {

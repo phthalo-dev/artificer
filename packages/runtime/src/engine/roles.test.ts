@@ -65,6 +65,46 @@ test('communicator distinguishes facts from standing preferences when saving mem
     /tag(ged)?[^.]*preference/i,
     'expected guidance to tag standing-preference memories for later recall',
   );
+  assert.match(
+    system,
+    /kind:\s*["']claim["']/,
+    'expected guidance to allow distilled decisions as kind: "claim"',
+  );
+});
+
+test('planner also queries topic memories beyond preferences', () => {
+  const system = getRole('planner').system('TestAgent');
+
+  assert.match(
+    system,
+    /query_memories[\s\S]*preference/,
+    'expected preference query before planning',
+  );
+  assert.match(
+    system,
+    /also call\s+query_memories|repo\/topic/i,
+    'expected a second topic/repo memory query',
+  );
+});
+
+test('librarian prefers claim/entity kinds and related links', () => {
+  const system = getRole('librarian').system('TestAgent');
+
+  assert.match(
+    system,
+    /kind:\s*["']claim["']/,
+    'expected librarian to prefer claim for distilled assertions',
+  );
+  assert.match(
+    system,
+    /kind:\s*["']entity["']/,
+    'expected librarian to use entity for named things',
+  );
+  assert.match(
+    system,
+    /related/,
+    'expected librarian to emit related links when complementing',
+  );
 });
 
 test('communicator can read and update provider route and quota config', () => {

@@ -240,7 +240,7 @@ createdAt: "2024-01-01T00:00:00.000Z"
 Memory content here.
 \`\`\`
 
-Valid \`kind\` values: \`note\`, \`document\`, \`preference\`.
+Valid \`kind\` values: \`note\`, \`document\`, \`preference\`, \`claim\`, \`entity\`.
 
 Memories are created and searched by the librarian role, and can also be managed via the UI (Memories page) or \`POST /api/memories\`. Do not edit the \`id\` or \`createdAt\` fields of existing memories.
 
