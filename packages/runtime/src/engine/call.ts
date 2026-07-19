@@ -9,6 +9,7 @@ import { FileCache } from './file-cache.js';
 import { formatCallError } from '../llm/errors.js';
 import { runToolLoop } from '../llm/loop.js';
 import type { Store } from '../storage/store.js';
+import type { IdentityStore } from '../storage/identity-store.js';
 import type { RunRecord } from '../storage/types.js';
 import { emptyUsage } from '../storage/types.js';
 import { toolsForRole } from '../tools/registry.js';
@@ -121,6 +122,7 @@ async function buildContext(
   workspaceDir: string,
   config: RuntimeConfig,
   effectiveBaseRole: string,
+  identity?: IdentityStore,
 ): Promise<string> {
   const sections: string[] = [`Your task:\n${run.task}`];
 
@@ -190,7 +192,9 @@ async function buildContext(
     }
   }
 
-  const signpost = await store.memorySignpost();
+  const signpost = identity
+    ? await identity.memorySignpost()
+    : await store.memorySignpost();
   sections.push(
     [
       'You can use get_status to query more detail.',
@@ -254,6 +258,7 @@ export async function executeCall(
       workspaceDir,
       config,
       effectiveBaseRole,
+      engine.identity,
     );
 
     let resultText: string;

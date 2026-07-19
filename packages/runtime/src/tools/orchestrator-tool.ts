@@ -287,14 +287,9 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
           : undefined;
         const limit = typeof input.limit === 'number' ? input.limit : undefined;
         const query = input.query ? String(input.query) : '';
-        let memories = engine.identity
-          ? await engine.identity.queryMemories(query, limit)
+        const memories = engine.identity
+          ? await engine.identity.queryMemories(query, { tags, limit })
           : await store.queryMemories(query, { tags, limit });
-        if (engine.identity && tags) {
-          memories = memories.filter((m) =>
-            tags.some((t) => m.tags.includes(t)),
-          );
-        }
         if (memories.length === 0) return '(no memories)';
         return memories
           .map((m) => {
