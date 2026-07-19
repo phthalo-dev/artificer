@@ -457,8 +457,23 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
       return c.json({ error: 'identity store not configured' }, 503);
     const q = c.req.query('q')?.trim();
     if (q) {
-      const memories = await deps.identity.queryMemories(q, { limit: 20 });
-      return c.json({ memories });
+      const limitRaw = c.req.query('limit');
+      const budgetRaw = c.req.query('charBudget');
+      const limit = limitRaw ? Number(limitRaw) : 20;
+      const charBudget = budgetRaw ? Number(budgetRaw) : undefined;
+      const packed = await deps.identity.queryMemoriesPacked(q, {
+        limit: Number.isFinite(limit) ? limit : 20,
+        charBudget:
+          charBudget !== undefined && Number.isFinite(charBudget)
+            ? charBudget
+            : undefined,
+      });
+      return c.json({
+        memories: packed.matched,
+        related: packed.related,
+        charBudget: packed.charBudget,
+        freshnessNotes: packed.freshnessNotes,
+      });
     }
     const memories = await deps.identity.listMemories();
     memories.sort((a, b) => b.createdAt.localeCompare(a.createdAt));

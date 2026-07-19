@@ -1,7 +1,7 @@
 # Memory Infrastructure Improvements — Design Spec
 
 **Date:** 2026-07-18  
-**Status:** Draft  
+**Status:** Implemented  
 **Component:** `packages/runtime`, `packages/ui` (docs only for UI)  
 **Inspiration:** Understand-Anything wiki/knowledge pipeline patterns (claims, typed links, hop expansion, fingerprinting, intermediate-on-disk). Not adopting UA as a dependency or dashboard product.
 
@@ -15,15 +15,15 @@ Identity memories today are a **flat bag of markdown files** searched by exact t
 
 Research against Understand-Anything and the current runtime shows the transferable idea is not a codebase knowledge graph — it is:
 
-1. Separate stable facts from LLM-inferred assertions  
-2. Store assertions as linkable atoms (`claim`) with typed edges  
-3. Retrieve via search → 1-hop expand → packed results with a budget  
-4. Distill long narratives on structural change, not on every edit  
+1. Separate stable facts from LLM-inferred assertions
+2. Store assertions as linkable atoms (`claim`) with typed edges
+3. Retrieve via search → 1-hop expand → packed results with a budget
+4. Distill long narratives on structural change, not on every edit
 
 ## Constraints (must preserve)
 
 - **Git-backed identity** — memories remain ordinary files under `identity/memories/`; `IdentityGitSync` still auto-commits/pushes.
-- **Pull-only injection** — no automatic injection of memory *content* into prompts. Only a cheap signpost is passive; content arrives via `query_memories`.
+- **Pull-only injection** — no automatic injection of memory _content_ into prompts. Only a cheap signpost is passive; content arrives via `query_memories`.
 - **Markdown + frontmatter** — human-editable / seedable; no opaque DB as source of truth.
 - **Fire-and-forget writes** — memory / git failures never block orchestration.
 - **No required cloud embedding provider** — Phase D embeddings are optional and local-or-configured; lexical search remains the default.
@@ -41,12 +41,12 @@ Research against Understand-Anything and the current runtime shows the transfera
 
 ## Phased delivery
 
-| Phase | Name | Outcome |
-|-------|------|---------|
-| **A** | Hygiene | Correct signpost; identity query parity (tags before rank, char budget); better lexical rank |
-| **B** | Structure | `claim`/`entity` kinds; `related` edges; 1-hop expand on query; relationship packing |
-| **C** | Distillation | Terminal workstreams emit claim atoms; entity dedupe; size-aware chronicles |
-| **D** | Optional depth | Source freshness hashes; optional embeddings; intermediate batches for large `learn` jobs |
+| Phase | Name           | Outcome                                                                                      |
+| ----- | -------------- | -------------------------------------------------------------------------------------------- |
+| **A** | Hygiene        | Correct signpost; identity query parity (tags before rank, char budget); better lexical rank |
+| **B** | Structure      | `claim`/`entity` kinds; `related` edges; 1-hop expand on query; relationship packing         |
+| **C** | Distillation   | Terminal workstreams emit claim atoms; entity dedupe; size-aware chronicles                  |
+| **D** | Optional depth | Source freshness hashes; optional embeddings; intermediate batches for large `learn` jobs    |
 
 Ship A before B; B before C. D items may land independently once A–B exist.
 
@@ -114,10 +114,10 @@ Keep `rankMemories(query, entries): RankedEntry[]` as the API.
 Enhance scoring (still local, no new provider):
 
 1. **Fields & weights** (Fuse-style weights adapted to our index):
-   - `title` — 0.4  
-   - `tags` — 0.3  
-   - `summary` — 0.2  
-   - `excerpt` (new optional index field, first ~200 chars of body) — 0.1  
+   - `title` — 0.4
+   - `tags` — 0.3
+   - `summary` — 0.2
+   - `excerpt` (new optional index field, first ~200 chars of body) — 0.1
 2. Prefer a small fuzzy library (e.g. Fuse.js) **or** an in-repo fuzzy score if dependency policy forbids Fuse. Threshold ~0.4; multi-token queries OR’d (any token can match).
 3. Preserve: empty / stopword-only query → recency order with `score: 0`.
 4. Preserve tag boost relative to non-tag hits (document exact formula in tests).
@@ -156,13 +156,13 @@ Extend `Memory.kind`:
 kind?: 'note' | 'document' | 'preference' | 'claim' | 'entity';
 ```
 
-| Kind | Purpose | Typical content |
-|------|---------|-----------------|
-| `note` | Atomic fact from conversation | Short prose |
-| `document` | Distilled source / workstream chronicle | Longer markdown |
-| `preference` | Standing instruction | Imperative rule |
-| `claim` | Distilled assertion / decision | 1–2 sentence assertion in `summary` + optional evidence in body |
-| `entity` | Named person/tool/repo/org without its own doc | Short description |
+| Kind         | Purpose                                        | Typical content                                                 |
+| ------------ | ---------------------------------------------- | --------------------------------------------------------------- |
+| `note`       | Atomic fact from conversation                  | Short prose                                                     |
+| `document`   | Distilled source / workstream chronicle        | Longer markdown                                                 |
+| `preference` | Standing instruction                           | Imperative rule                                                 |
+| `claim`      | Distilled assertion / decision                 | 1–2 sentence assertion in `summary` + optional evidence in body |
+| `entity`     | Named person/tool/repo/org without its own doc | Short description                                               |
 
 **IDs:** Keep `${kind}_${uuid8}` (`claim_…`, `entity_…`).
 
@@ -176,10 +176,10 @@ kind?: 'note' | 'document' | 'preference' | 'claim' | 'entity';
 
 ```yaml
 related:
-  - id: "claim_abc12345"
-    type: "builds_on"
-  - id: "document_def67890"
-    type: "related"
+  - id: 'claim_abc12345'
+    type: 'builds_on'
+  - id: 'document_def67890'
+    type: 'related'
 ```
 
 Supported edge types (start small — UA knowledge set, not 38 code types):
@@ -217,9 +217,9 @@ Edges are always derivable from frontmatter; `graph.json` is a convenience mirro
 
 **`IdentityStore.queryMemories` enrichment (or new `queryMemoriesRich` used by the tool):**
 
-1. Rank + tag filter + load top hits as today (Phase A).  
-2. Collect neighbor ids from each hit’s `related` (and reverse edges from index/graph). Cap neighbors at e.g. **2× limit** (configurable constant).  
-3. Load neighbor bodies into remaining `charBudget`. Prefer `claim`/`preference` neighbors over long `document`s.  
+1. Rank + tag filter + load top hits as today (Phase A).
+2. Collect neighbor ids from each hit’s `related` (and reverse edges from index/graph). Cap neighbors at e.g. **2× limit** (configurable constant).
+3. Load neighbor bodies into remaining `charBudget`. Prefer `claim`/`preference` neighbors over long `document`s.
 4. Tool response format:
 
 ```
@@ -241,8 +241,8 @@ Keep pull-only: this packing happens **inside the tool result**, never in `build
 
 ### B4. Prompt updates
 
-- **Planner:** After preference query, also `query_memories` for repo/topic when known.  
-- **Librarian:** Emit `related` links back to existing memories when complementing; prefer `claim` for assertions.  
+- **Planner:** After preference query, also `query_memories` for repo/topic when known.
+- **Librarian:** Emit `related` links back to existing memories when complementing; prefer `claim` for assertions.
 - **Communicator:** Preferences stay `preference`; distilled lasting decisions can be `claim`.
 
 ---
@@ -253,19 +253,19 @@ Keep pull-only: this packing happens **inside the tool result**, never in `build
 
 `WorkstreamMemoryService.onTerminal` today appends outcome and sets summary. Extend:
 
-1. Still update the workstream `document` memory (chronicle).  
+1. Still update the workstream `document` memory (chronicle).
 2. Spawn a **distiller** path (reuse librarian role or a thin `distill_workstream` spawn) with:
-   - Input: workstream goal, plan excerpt, terminal summary, final chronicle path/id  
-   - Output: 1–5 `claim` memories + optional `entity` memories for repos/tools named  
-   - Each claim `related` → workstream document with `builds_on` or `related`  
-   - Preferences already applied during the workstream should not be re-copied; link via `related` if a preference id is known  
+   - Input: workstream goal, plan excerpt, terminal summary, final chronicle path/id
+   - Output: 1–5 `claim` memories + optional `entity` memories for repos/tools named
+   - Each claim `related` → workstream document with `builds_on` or `related`
+   - Preferences already applied during the workstream should not be re-copied; link via `related` if a preference id is known
 
 3. Fire-and-forget; failure only logs.
 
 **Prompt rules (borrow UA article-analyzer conservatism):**
 
-- Do not invent links without textual evidence in the chronicle.  
-- Prefer fewer claims; skip fluff.  
+- Do not invent links without textual evidence in the chronicle.
+- Prefer fewer claims; skip fluff.
 - Dedupe via `query_memories` before save.
 
 ### C2. Chronicle size guard
@@ -274,10 +274,10 @@ When appending sections, if content length exceeds a config default (e.g. **32 K
 
 ### C3. Deterministic vs LLM split
 
-| Deterministic (runtime) | LLM (distiller) |
-|-------------------------|-----------------|
+| Deterministic (runtime)                                      | LLM (distiller)                       |
+| ------------------------------------------------------------ | ------------------------------------- |
 | Tags (`workstream`, status, repo slug), `source`, timestamps | Claims, entity names, `related` edges |
-| Content hash of goal+summary for skip-if-unchanged | Summaries / phrasing |
+| Content hash of goal+summary for skip-if-unchanged           | Summaries / phrasing                  |
 
 If `sourceHash` (Phase D) matches previous terminal distill, skip re-distill.
 
@@ -290,13 +290,13 @@ If `sourceHash` (Phase D) matches previous terminal distill, skip re-distill.
 Add optional frontmatter:
 
 ```yaml
-sourceHash: "<sha256 of source bytes or workstream snapshot>"
-sourceCommit: "<git sha if applicable>"
+sourceHash: '<sha256 of source bytes or workstream snapshot>'
+sourceCommit: '<git sha if applicable>'
 ```
 
 Surfacing:
 
-- Signpost or query footnote: `stale` when workstream repo `HEAD` ≠ `sourceCommit` (best-effort; `unknown` if git unavailable — do not claim fresh).  
+- Signpost or query footnote: `stale` when workstream repo `HEAD` ≠ `sourceCommit` (best-effort; `unknown` if git unavailable — do not claim fresh).
 - Soft warning string in tool output only; never block.
 
 ### D2. Optional embeddings
@@ -321,9 +321,9 @@ Surfacing:
 
 When librarian receives many URLs or a very large paste:
 
-1. Write scratch under exec dir: `{exec}/tmp/learn-{runId}/batch-*.json` (facts extracted per batch).  
-2. Return only a short summary to the LLM turn.  
-3. Merge batches deterministically: normalize kinds (`decision`→`claim` aliases), entity-name dedupe (case-insensitive), drop dangling `related`, then `add_memory` once per final item.  
+1. Write scratch under exec dir: `{exec}/tmp/learn-{runId}/batch-*.json` (facts extracted per batch).
+2. Return only a short summary to the LLM turn.
+3. Merge batches deterministically: normalize kinds (`decision`→`claim` aliases), entity-name dedupe (case-insensitive), drop dangling `related`, then `add_memory` once per final item.
 4. Trash intermediates after success (or age out).
 
 Do not put large JSON in the librarian reply content.
@@ -349,21 +349,20 @@ identity/
 
 ```yaml
 ---
-id: "claim_a1b2c3d4"
-title: "Payments uses TDD"
-summary: "Always write failing tests before implementation in the payments repo."
-tags: ["claim", "payments"]
-kind: "claim"
-source: "workstream:ws_…"
+id: 'claim_a1b2c3d4'
+title: 'Payments uses TDD'
+summary: 'Always write failing tests before implementation in the payments repo.'
+tags: ['claim', 'payments']
+kind: 'claim'
+source: 'workstream:ws_…'
 related:
-  - id: "document_…"
-    type: "builds_on"
-sourceHash: "…"
-sourceCommit: "…"
-createdAt: "…"
-updatedAt: "…"
+  - id: 'document_…'
+    type: 'builds_on'
+sourceHash: '…'
+sourceCommit: '…'
+createdAt: '…'
+updatedAt: '…'
 ---
-
 Evidence / elaboration…
 ```
 
@@ -371,17 +370,17 @@ Evidence / elaboration…
 
 ## Implementation map
 
-| Area | Files |
-|------|--------|
-| Types | `packages/runtime/src/storage/types.ts`, `memory-search.ts` |
-| Store | `identity-store.ts`, `identity-git-sync.ts` (commit `graph.json` / `embeddings.json` when present) |
-| Context | `engine/call.ts` (+ signature changes for identity) |
-| Tools | `tools/orchestrator-tool.ts` |
-| Workstream | `engine/workstream-memory.ts`, `engine/engine.ts`, `roles.ts` |
-| API | `server/app.ts` createMemorySchema kind enum |
-| Config | `artificer.config.schema.json`, `config.ts` |
-| UI | `MemoriesPage` kind options; optional related display later |
-| Docs | `docs/guides/managing-memories.md`, this spec |
+| Area       | Files                                                                                              |
+| ---------- | -------------------------------------------------------------------------------------------------- |
+| Types      | `packages/runtime/src/storage/types.ts`, `memory-search.ts`                                        |
+| Store      | `identity-store.ts`, `identity-git-sync.ts` (commit `graph.json` / `embeddings.json` when present) |
+| Context    | `engine/call.ts` (+ signature changes for identity)                                                |
+| Tools      | `tools/orchestrator-tool.ts`                                                                       |
+| Workstream | `engine/workstream-memory.ts`, `engine/engine.ts`, `roles.ts`                                      |
+| API        | `server/app.ts` createMemorySchema kind enum                                                       |
+| Config     | `artificer.config.schema.json`, `config.ts`                                                        |
+| UI         | `MemoriesPage` kinds, related, sourceHash/sourceCommit                                             |
+| Docs       | `docs/guides/managing-memories.md`, this spec                                                      |
 
 ---
 
@@ -389,56 +388,56 @@ Evidence / elaboration…
 
 ### Phase A
 
-- [ ] Signpost with identity-only memories reports correct count/tags  
-- [ ] Tag filter before rank respects `limit`  
-- [ ] Char budget truncates without dropping the #1 hit entirely  
-- [ ] Index reconciles after corrupt `index.json`  
-- [ ] Fuzzy/weighted rank prefers near-miss titles over unrelated exact token elsewhere  
+- [x] Signpost with identity-only memories reports correct count/tags
+- [x] Tag filter before rank respects `limit`
+- [x] Char budget truncates without dropping the #1 hit entirely
+- [x] Index reconciles after corrupt `index.json`
+- [x] Fuzzy/weighted rank prefers near-miss titles over unrelated exact token elsewhere
 
 ### Phase B
 
-- [ ] `claim`/`entity` round-trip via API + tools  
-- [ ] `related` persisted and appears in index/graph  
-- [ ] Query packs 1-hop claims within budget  
-- [ ] Delete drops/orphans edges without crashing  
+- [x] `claim`/`entity` round-trip via API + tools
+- [x] `related` persisted and appears in index/graph
+- [x] Query packs 1-hop claims within budget
+- [x] Delete drops/orphans edges without crashing
 
 ### Phase C
 
-- [ ] Terminal workstream creates ≥1 claim linked to chronicle (mocked LLM or distilled fixture)  
-- [ ] Oversized chronicle is truncated / rolled up  
-- [ ] Distill failure does not fail workstream  
+- [x] Terminal workstream creates ≥1 claim linked to chronicle (mocked LLM or distilled fixture)
+- [x] Oversized chronicle is truncated / rolled up
+- [x] Distill failure does not fail workstream
 
 ### Phase D
 
-- [ ] Stale `sourceCommit` adds soft warning in query output  
-- [ ] Embeddings disabled → identical to lexical path  
-- [ ] Large learn writes batch files then merges; reply stays short  
+- [x] Stale `sourceCommit` adds soft warning in query output
+- [x] Embeddings disabled → identical to lexical path
+- [x] Large learn writes batch files then merges; reply stays short
 
 ---
 
 ## Rollout
 
-1. Land Phase A behind no flags (bugfixes + ranking).  
-2. Phase B: new kinds and frontmatter are backward compatible (absent `related` = isolated nodes).  
-3. Phase C: enable distillation by default once librarian-style spawn is reliable; allow `identity.distillWorkstreams: false` kill switch.  
+1. Land Phase A behind no flags (bugfixes + ranking).
+2. Phase B: new kinds and frontmatter are backward compatible (absent `related` = isolated nodes).
+3. Phase C: enable distillation by default once librarian-style spawn is reliable; allow `identity.distillWorkstreams: false` kill switch.
 4. Phase D: off by default (`embeddings.enabled: false`); document ops cost.
 
 ---
 
 ## Success criteria
 
-- Roles with identity memories always see an accurate signpost.  
-- `query_memories` with tags returns useful preference/claim hits without silent under-count.  
-- After a finished workstream, a later planner can recall **short claims** tied to that work, not only a keyword-hit on a long chronicle.  
-- Context size from memory tools stays bounded by `charBudget`.  
+- Roles with identity memories always see an accurate signpost.
+- `query_memories` with tags returns useful preference/claim hits without silent under-count.
+- After a finished workstream, a later planner can recall **short claims** tied to that work, not only a keyword-hit on a long chronicle.
+- Context size from memory tools stays bounded by `charBudget`.
 - Identity remains reviewable in git as markdown.
 
 ---
 
 ## References
 
-- `docs/superpowers/specs/2026-05-29-agent-memory-teaching-design.md` — pull-only + librarian + pluggable ranker  
-- `docs/superpowers/specs/2026-06-25-memory-management-design.md` — IdentityStore API migration  
-- `docs/superpowers/specs/2026-06-25-workstream-memory-design.md` — chronicle lifecycle  
-- `docs/superpowers/specs/2026-06-25-memory-git-sync-design.md` — auto commit/push  
+- `docs/superpowers/specs/2026-05-29-agent-memory-teaching-design.md` — pull-only + librarian + pluggable ranker
+- `docs/superpowers/specs/2026-06-25-memory-management-design.md` — IdentityStore API migration
+- `docs/superpowers/specs/2026-06-25-workstream-memory-design.md` — chronicle lifecycle
+- `docs/superpowers/specs/2026-06-25-memory-git-sync-design.md` — auto commit/push
 - External: Understand-Anything `understand-knowledge` skill, `article-analyzer` agent, Fuse + 1-hop chat packing patterns (local sibling checkout)
