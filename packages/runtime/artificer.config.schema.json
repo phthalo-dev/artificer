@@ -176,6 +176,26 @@
         "distillWorkstreams": {
           "type": "boolean",
           "description": "After a workstream finishes, spawn a librarian to distill claim/entity memories from the chronicle. Default: true. Set false to disable."
+        },
+        "embeddings": {
+          "type": "object",
+          "description": "Optional meaning-based memory search. When enabled, Artificer stores a numeric fingerprint per memory in identity/embeddings.json and combines that with normal word matching. Disabled by default.",
+          "additionalProperties": false,
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "description": "When true, write/update vectors in identity/embeddings.json and use them during query_memories. Default: false."
+            },
+            "provider": {
+              "type": "string",
+              "enum": ["openai", "local", "none"],
+              "description": "Where fingerprints come from. 'local' is on-device and needs no API key. 'openai' expects OPENAI_API_KEY or LLM_API_KEY (and an optional model id). 'none' disables vectors."
+            },
+            "model": {
+              "type": "string",
+              "description": "Optional model id for the openai provider (e.g. text-embedding-3-small)."
+            }
+          }
         }
       }
     }

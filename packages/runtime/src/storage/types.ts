@@ -206,5 +206,9 @@ export interface Memory {
   kind?: MemoryKind;
   /** Outbound typed links to other memories. */
   related?: MemoryRelation[];
+  /** Hash of source bytes / workstream snapshot for freshness / skip-if-unchanged. */
+  sourceHash?: string;
+  /** Git SHA of the source repo when known. */
+  sourceCommit?: string;
   updatedAt?: string;
 }

@@ -1,11 +1,16 @@
 import { createHash } from 'node:crypto';
+import { execFile } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { promisify } from 'node:util';
 import type { SpawnCallInput } from '../context.js';
 import type { IdentityStore } from '../storage/identity-store.js';
 import type { Store } from '../storage/store.js';
 import type { Review, RunRecord, Workstream } from '../storage/types.js';
+import { findGitRepo } from './git-repo.js';
 import { workerRunSummary } from './worker-report.js';
+
+const execFileAsync = promisify(execFile);
 
 /** Soft cap for workstream chronicle bodies (32 KiB). */
 export const CHRONICLE_MAX_CHARS = 32 * 1024;
@@ -194,9 +199,13 @@ export class WorkstreamMemoryService {
       const existing = await this.identity.getMemory(memId);
       if (!existing) return;
       const content = trimChronicleContent(existing.content + section);
+      const sourceHash = distillSourceHash(ws);
+      const sourceCommit = await this.tryRepoHead(ws);
       await this.identity.updateMemory(memId, {
         content,
         summary: ws.summary || undefined,
+        sourceHash,
+        sourceCommit: sourceCommit ?? undefined,
       });
     } catch (err) {
       console.error(`[workstream-memory] onTerminal failed for ${ws.id}:`, err);
@@ -230,6 +239,22 @@ export class WorkstreamMemoryService {
     });
     await this.saveDistillHash(ws.id, hash);
     return { runId };
+  }
+
+  private async tryRepoHead(ws: Workstream): Promise<string | null> {
+    try {
+      const workspaceDir = this.store.layout.workstreamWorkspace(ws.id);
+      const repo = await findGitRepo(workspaceDir);
+      if (!repo) return null;
+      const { stdout } = await execFileAsync('git', ['rev-parse', 'HEAD'], {
+        cwd: repo,
+        timeout: 10_000,
+      });
+      const head = stdout.trim();
+      return head || null;
+    } catch {
+      return null;
+    }
   }
 
   private async getMemoryId(workstreamId: string): Promise<string | null> {
