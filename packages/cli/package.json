@@ -1,6 +1,6 @@
 {
   "name": "@artificer-ai/cli",
-  "version": "0.9.4",
+  "version": "0.10.0",
   "description": "Artificer CLI — init, develop, and run local AI agents",
   "type": "module",
   "engines": {
