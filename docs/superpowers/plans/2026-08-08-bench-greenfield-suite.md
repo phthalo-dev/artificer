@@ -312,11 +312,13 @@ In `packages/runtime/bench/src/run-instance.ts`, inside `buildTaskMessage`, add 
 
 - [ ] **Step 2: Type-check**
 
+The root `tsconfig.json`'s `include` is `src/**/*` only, so `tsc --noEmit -p .` silently does not check `bench/src` — confirmed while executing this plan (Task 2 caught two type errors this command misses entirely). Use an explicit invocation covering `bench/src` instead, mirroring the root tsconfig's compiler options:
+
 ```bash
-cd packages/runtime && pnpm exec tsc --noEmit -p .
+cd packages/runtime && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --esModuleInterop --skipLibCheck --resolveJsonModule --forceConsistentCasingInFileNames --types node $(find bench/src -name '*.ts' ! -name '*.test.ts')
 ```
 
-Expected: no errors.
+Expected: no new errors. One pre-existing, out-of-scope error is expected and must NOT be fixed here — `bench/src/dataset.ts(20,3): error TS2741: Property 'suite' is missing...` — it predates this plan (present at the branch's merge-base, `git show e3c442a:packages/runtime/bench/src/dataset.ts`) and is unrelated to greenfield work.
 
 - [ ] **Step 3: Commit**
 
@@ -757,11 +759,13 @@ chmod +x packages/runtime/bench/eval/run-greenfield-eval.sh
 
 - [ ] **Step 3: Type-check**
 
+`tsc --noEmit -p .` does not cover `bench/src` (see Task 3's Step 2 note). Use the same explicit invocation:
+
 ```bash
-cd packages/runtime && pnpm exec tsc --noEmit -p .
+cd packages/runtime && pnpm exec tsc --noEmit --strict --target ES2022 --module NodeNext --moduleResolution NodeNext --esModuleInterop --skipLibCheck --resolveJsonModule --forceConsistentCasingInFileNames --types node $(find bench/src -name '*.ts' ! -name '*.test.ts')
 ```
 
-Expected: no errors.
+Expected: no new errors (the one pre-existing `dataset.ts` error from Task 3's Step 2 note is expected and out of scope).
 
 - [ ] **Step 4: Commit**
 
