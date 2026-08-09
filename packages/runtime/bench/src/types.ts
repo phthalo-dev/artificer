@@ -29,7 +29,7 @@ export type WorkstreamStatus =
   | 'failed'
   | 'cancelled';
 
-export type SuiteKind = 'swebench' | 'deepswe';
+export type SuiteKind = 'swebench' | 'deepswe' | 'greenfield';
 
 /** Unified task row for SWE-bench and DeepSWE suites. */
 export interface BenchInstance {
@@ -44,6 +44,8 @@ export interface BenchInstance {
   repository_url?: string;
   /** DeepSWE: prebuilt verifier image. */
   docker_image?: string;
+  /** Greenfield: shell command to run the hidden acceptance tests, relative to repo root. */
+  test_command?: string;
   display_title?: string;
   /** SWE-bench evaluator fields (optional for DeepSWE). */
   FAIL_TO_PASS?: string;
