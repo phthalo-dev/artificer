@@ -153,6 +153,7 @@ Two curated suites ship under `tasks/`:
 | `mini-suite.json` | SWE-bench Lite (6 instances) | `pnpm bench:eval` |
 | `deepswe-mini-suite.json` | [DeepSWE](https://deepswe.datacurve.ai/) Harbor tasks (6 instances) | `pnpm bench:eval:deepswe` |
 | `deepswe-typescript-mini.json` | DeepSWE TS/JS subset (4 instances) for local debugging | `pnpm bench:eval:deepswe` |
+| `greenfield-mini.json` | Greenfield build tasks (1 instance), graded Docker-free against hidden acceptance tests | `pnpm bench:eval:greenfield` |
 
 Run a specific suite:
 
@@ -164,6 +165,29 @@ pnpm bench --suite tasks/deepswe-mini-suite.json
 SWE-bench instance data is pulled from the HuggingFace datasets-server and cached under `tasks/.cache/`. DeepSWE tasks (Harbor format: `task.toml` + `instruction.md`) are fetched from [datacurve-ai/deep-swe](https://github.com/datacurve-ai/deep-swe) and cached under `tasks/.cache/deepswe/`.
 
 Edit the `instanceIds` array in a suite file to curate a different subset.
+
+## Greenfield build tasks
+
+Unlike the SWE-bench and DeepSWE suites (fix a bug in an existing repo), greenfield
+tasks measure sustained *build-from-scratch* work: the agent gets a stub scaffold
+and a spec, and must implement multiple files across however many plan/implement/
+review cycles it takes. Grading tests are never shown to the agent — they're
+overlaid onto its patch only at eval time, the same hide-until-grading approach
+SWE-bench uses for its official test patch.
+
+Add a new task by creating `bench/tasks/greenfield/<task-id>/` with:
+
+```
+<task-id>/
+├── meta.json      # { task_id, display_title, test_command }
+├── spec.md        # the goal text the agent receives
+├── scaffold/      # stub files (plain ESM JS, no deps) the agent implements — this becomes the cloned repo
+└── hidden/        # overlaid onto the agent's patch only at grading time; never sent to the agent
+```
+
+Fixtures are plain ESM JavaScript with no npm dependencies (graded via `node --test`)
+so eval never needs `npm install` or Docker. Add the new task id to a suite file's
+`instanceIds` (or create a new suite file) to include it in a run.
 
 ## Outputs (`results/`)
 
