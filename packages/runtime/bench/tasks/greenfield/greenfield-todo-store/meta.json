@@ -1,0 +1,5 @@
+{
+  "task_id": "greenfield-todo-store",
+  "display_title": "Build a todo list library",
+  "test_command": "node --test tests/*.test.js"
+}
