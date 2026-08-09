@@ -506,7 +506,14 @@ test('saveToFile then loadFromFile round-trips all todos including completed sta
 
 - [ ] **Step 8: Sanity-check the hidden tests against a correct implementation**
 
-This is the one place a mistake would silently make the fixture ungradeable (a wrong assertion would fail even a correct solution). Temporarily fill in `scaffold/src/store.js` and `scaffold/src/persistence.js` with a correct implementation, copy `hidden/tests/store.test.js` into a local `tests/` dir next to them, and run:
+This is the one place a mistake would silently make the fixture ungradeable (a wrong assertion would fail even a correct solution). The files from Steps 1–7 are new and not yet in git's index, so `git checkout --` cannot restore them later unless they're staged first — stage the fixture directory now, before making any temporary edit, so the stub content can be recovered afterward:
+
+```bash
+cd /path/to/artificer   # repo root
+git add packages/runtime/bench/tasks/greenfield/greenfield-todo-store
+```
+
+Then, from the scaffold directory, temporarily fill in `scaffold/src/store.js` and `scaffold/src/persistence.js` with a correct implementation, copy `hidden/tests/store.test.js` into a local `tests/` dir next to them, and run:
 
 ```bash
 cd packages/runtime/bench/tasks/greenfield/greenfield-todo-store/scaffold
@@ -514,12 +521,14 @@ mkdir -p tests && cp ../hidden/tests/store.test.js tests/
 node --test tests/
 ```
 
-Expected: all 7 tests pass. Then revert the scaffold files back to the "not implemented" stubs from Steps 4–5 and delete the temporary `tests/` directory (`rm -rf tests`) — the committed scaffold must stay unimplemented.
+Expected: all 7 tests pass. Then revert the scaffold files back to the "not implemented" stubs from Steps 4–5 using the copy staged above, and delete the temporary `tests/` directory (`rm -rf tests`) — the committed scaffold must stay unimplemented:
 
 ```bash
 git checkout -- src/store.js src/persistence.js
 rm -rf tests
 ```
+
+Confirm the revert worked before continuing: `grep -c "not implemented" src/store.js src/persistence.js` should show throws in both files, and `git status` (from the repo root) should show no diff against what was just staged.
 
 - [ ] **Step 9: Commit**
 
