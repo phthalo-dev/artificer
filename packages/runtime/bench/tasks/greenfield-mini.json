@@ -1,0 +1,6 @@
+{
+  "kind": "greenfield",
+  "name": "Greenfield build mini (1 task)",
+  "description": "From-scratch multi-file build tasks, graded against hidden acceptance tests supplied only after implementation.",
+  "instanceIds": ["greenfield-todo-store"]
+}
