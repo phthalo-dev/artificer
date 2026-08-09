@@ -350,7 +350,7 @@ git commit -m "bench: build-from-scratch task message for greenfield instances"
 {
   "task_id": "greenfield-todo-store",
   "display_title": "Build a todo list library",
-  "test_command": "node --test tests/"
+  "test_command": "node --test tests/*.test.js"
 }
 ```
 
@@ -368,7 +368,7 @@ Required behavior:
 5. `saveToFile(filePath, store)` (in `src/persistence.js`) writes all of `store`'s todos (including completed ones) to `filePath` as JSON.
 6. `loadFromFile(filePath)` reads a file written by `saveToFile` and returns a new `TodoStore` populated with the same todos, preserving each todo's `id`, `text`, and `completed` state.
 
-Verify with `npm test` (runs `node --test tests/` once the grading tests are present — you will not see them, so implement exactly the behavior above, not just enough to pass whatever you can observe).
+Verify with `npm test` (runs `node --test tests/*.test.js` once the grading tests are present — you will not see them, so implement exactly the behavior above, not just enough to pass whatever you can observe).
 ```
 
 - [ ] **Step 3: `scaffold/package.json`**
@@ -379,7 +379,7 @@ Verify with `npm test` (runs `node --test tests/` once the grading tests are pre
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/"
+    "test": "node --test tests/*.test.js"
   }
 }
 ```
@@ -518,7 +518,7 @@ Then, from the scaffold directory, temporarily fill in `scaffold/src/store.js` a
 ```bash
 cd packages/runtime/bench/tasks/greenfield/greenfield-todo-store/scaffold
 mkdir -p tests && cp ../hidden/tests/store.test.js tests/
-node --test tests/
+node --test tests/*.test.js
 ```
 
 Expected: all 7 tests pass. Then revert the scaffold files back to the "not implemented" stubs from Steps 4–5 using the copy staged above, and delete the temporary `tests/` directory (`rm -rf tests`) — the committed scaffold must stay unimplemented:
@@ -802,7 +802,7 @@ From `packages/runtime`, with runtime credentials configured per the existing be
 pnpm bench:full:greenfield
 ```
 
-Expected: the driver clones the materialized scaffold repo (from `CACHE_DIR/greenfield/greenfield-todo-store/repo`), the agent implements `src/store.js` / `src/persistence.js`, `bench:eval:greenfield` overlays `hidden/tests/store.test.js` and runs `node --test tests/` against the agent's patch, and `results/eval-report.json` records the instance under either `resolved_ids` or `unresolved_ids` (not `error_ids` — an `error` verdict means the harness itself is broken, e.g. scaffold not cached, and should be treated as a bug in Tasks 1–6, not a benchmark result).
+Expected: the driver clones the materialized scaffold repo (from `CACHE_DIR/greenfield/greenfield-todo-store/repo`), the agent implements `src/store.js` / `src/persistence.js`, `bench:eval:greenfield` overlays `hidden/tests/store.test.js` and runs `node --test tests/*.test.js` against the agent's patch, and `results/eval-report.json` records the instance under either `resolved_ids` or `unresolved_ids` (not `error_ids` — an `error` verdict means the harness itself is broken, e.g. scaffold not cached, and should be treated as a bug in Tasks 1–6, not a benchmark result).
 
 - [ ] **Step 2: Confirm the empty-patch and error paths degrade correctly**
 
