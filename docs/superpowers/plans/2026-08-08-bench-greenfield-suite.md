@@ -451,8 +451,10 @@ test('addTodo returns a todo with an id, the text, and completed=false', () => {
 
 test('addTodo rejects empty or whitespace-only text', () => {
   const store = new TodoStore();
+  store.addTodo('valid');
   assert.throws(() => store.addTodo(''));
   assert.throws(() => store.addTodo('   '));
+  assert.equal(store.listTodos({ includeCompleted: true }).length, 1);
 });
 
 test('listTodos excludes completed todos by default', () => {
@@ -476,6 +478,7 @@ test('listTodos({ includeCompleted: true }) returns everything sorted by id', ()
 
 test('completeTodo throws for an unknown id', () => {
   const store = new TodoStore();
+  store.addTodo('a');
   assert.throws(() => store.completeTodo(999));
 });
 
