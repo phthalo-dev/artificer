@@ -63,7 +63,11 @@ function counterColor(
 
   // Live in-progress statuses (a cap could still lead to blocked) and
   // blocked/failed (the color explains why it stopped) both escalate.
-  if (LIVE_RISK_STATUSES.has(status) || status === 'blocked' || status === 'failed') {
+  if (
+    LIVE_RISK_STATUSES.has(status) ||
+    status === 'blocked' ||
+    status === 'failed'
+  ) {
     return escalate(c);
   }
   return 'gray';
