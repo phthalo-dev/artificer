@@ -1,0 +1,5 @@
+{
+  "task_id": "greenfield-http-router",
+  "display_title": "Build a tiny HTTP router + middleware framework",
+  "test_command": "node --test tests/*.test.js"
+}

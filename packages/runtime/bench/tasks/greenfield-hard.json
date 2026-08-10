@@ -1,0 +1,10 @@
+{
+  "kind": "greenfield",
+  "name": "Greenfield build hard (3 tasks)",
+  "description": "Larger, multi-file build-from-scratch tasks (5-6 files each with real cross-file contracts, sized so a single turn can't plausibly one-shot the whole thing) graded against hidden acceptance tests supplied only after implementation.",
+  "instanceIds": [
+    "greenfield-http-router",
+    "greenfield-task-cli",
+    "greenfield-query-engine"
+  ]
+}
