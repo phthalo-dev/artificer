@@ -166,6 +166,7 @@ Two curated suites ship under `tasks/`:
 | `deepswe-mini-suite.json` | [DeepSWE](https://deepswe.datacurve.ai/) Harbor tasks (6 instances) | `pnpm bench:eval:deepswe` |
 | `deepswe-typescript-mini.json` | DeepSWE TS/JS subset (4 instances) for local debugging | `pnpm bench:eval:deepswe` |
 | `greenfield-mini.json` | Greenfield build tasks (6 instances), graded Docker-free against hidden acceptance tests | `pnpm bench:eval:greenfield` |
+| `greenfield-hard.json` | Larger, multi-file greenfield tasks (3 instances) — see "Greenfield difficulty tiers" below | `pnpm bench:eval:greenfield` (with `BENCH_RESULTS_DIR` set to the hard-tier results dir) |
 
 Run a specific suite:
 
@@ -210,6 +211,50 @@ grader now requires the test run report at least one executed test — see
 `eval-greenfield.ts`'s `gradeOne`), or the fixture will silently grade every
 prediction as `error`/failed-to-verify rather than a meaningful resolved/unresolved
 result.
+
+### Greenfield difficulty tiers
+
+`greenfield-mini.json`'s six fixtures (todo store, job queue, CSV/table, LRU/TTL
+cache, rate limiter, text template) are each 2-3 files, independently
+implementable, and every frontier agent tested so far (Artificer, Claude Code,
+opencode, Cursor) solved all six in a single LLM turn each. That's a sign the
+*mini* tier is too easy/too textbook-familiar to be a meaningful difficulty
+signal at frontier-model level — solving an LRU cache in one shot doesn't
+exercise "sustained build-from-scratch work," it's pattern recall.
+
+`greenfield-hard.json` targets that gap with *scope*, not trickery: 3 fixtures,
+5-6 files each, with real cross-file contracts an agent has to get right
+end-to-end (e.g. `greenfield-http-router`'s hidden tests exercise
+`App#handle()`, which only produces correct responses if the router's param
+matching, the middleware chain's short-circuit/error-propagation semantics,
+and the request/response parsing all compose correctly — no single file's
+unit-level correctness is sufficient). Sized so a single turn plausibly can't
+one-shot the whole thing correctly. Same four-file-per-fixture template and
+Docker-free `node --test` grading as the mini tier; add more fixtures to
+either tier the same way.
+
+### Running against external coding agents
+
+`bench/src/external-agent.ts` drives Claude Code, opencode, or Cursor
+headlessly (full-auto flags — `--dangerously-skip-permissions` /
+`--force --trust`) against a freshly cloned greenfield scaffold, extracts the
+resulting patch with the same `extractPatch()` Artificer's own driver uses,
+and feeds it through the *same, unmodified* `eval-greenfield.ts`/`report.ts` —
+so results are directly comparable to Artificer's own greenfield reports.
+
+```bash
+pnpm bench:greenfield:claude-code            # mini tier
+pnpm bench:greenfield-hard:claude-code       # hard tier
+pnpm bench:greenfield:opencode-cli
+pnpm bench:greenfield:cursor
+```
+
+**Never run more than one of these (or `pnpm bench:greenfield*`) against the
+same suite concurrently** — even though `loadGreenfieldTask` locks and
+privately clones the shared scaffold cache to avoid data races (see
+`greenfield.ts`), running many agents at once will still contend for the same
+`bench/results/...` output paths and make cost/timing comparisons noisy. Run
+them one at a time.
 
 ## Outputs (`results/`)
 
