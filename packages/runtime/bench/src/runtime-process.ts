@@ -6,6 +6,7 @@ import path from 'node:path';
 import type { BenchConfig } from './config.js';
 import { RUNTIME_ROOT } from './config.js';
 import { RuntimeClient } from './client.js';
+import { sandboxGithubEnv } from './git-sandbox.js';
 
 export interface RuntimeHandle {
   client: RuntimeClient;
@@ -60,17 +61,8 @@ async function waitForHealth(
 /**
  * Spawns a fully isolated runtime for a single benchmark instance: a fresh
  * temp data dir, concurrency pinned to 1, resume disabled, and the configured
- * tier models.
- *
- * The agent's `run_shell` tool must never reach the operator's real GitHub
- * session: no bench fixture is graded via a live push/PR, only via the local
- * patch/predictions.jsonl. An earlier version of this function inherited the
- * full parent environment unfiltered, which let a confused agent discover the
- * operator's already-authenticated `gh` CLI (macOS keychain-backed, so no
- * token env var required) and push/open a real PR against the operator's own
- * GitHub account. GH_CONFIG_DIR points at a fresh empty directory (gh then
- * sees no logged-in host), the git credential helper is cleared via env-based
- * git config, and any inherited token/SSH-agent env vars are stripped.
+ * tier models. Also strips ambient GitHub credential access — see
+ * sandboxGithubEnv's doc comment.
  */
 export async function startRuntime(
   config: BenchConfig,
@@ -83,19 +75,8 @@ export async function startRuntime(
 
   const port = await getAvailablePort(config.runtimePort);
 
-  const ghConfigDir = path.join(execDir, '.gh-config-empty');
-  await fs.mkdir(ghConfigDir, { recursive: true });
-
-  const {
-    GH_TOKEN: _ghToken,
-    GITHUB_TOKEN: _githubToken,
-    GH_ENTERPRISE_TOKEN: _ghEnterpriseToken,
-    SSH_AUTH_SOCK: _sshAuthSock,
-    ...inheritedEnv
-  } = process.env;
-
   const env: NodeJS.ProcessEnv = {
-    ...inheritedEnv,
+    ...(await sandboxGithubEnv(process.env, execDir)),
     ARTIFICER_EXEC_DIR: execDir,
     PORT: String(port),
     RUNTIME_CONCURRENCY: '1',
@@ -110,11 +91,6 @@ export async function startRuntime(
     // defaults are left untouched for runs that don't specify a gateway.
     ...(config.baseUrl !== undefined ? { LLM_BASE_URL: config.baseUrl } : {}),
     ...(config.apiKey !== undefined ? { LLM_API_KEY: config.apiKey } : {}),
-    // No ambient GitHub access — see doc comment above.
-    GH_CONFIG_DIR: ghConfigDir,
-    GIT_CONFIG_COUNT: '1',
-    GIT_CONFIG_KEY_0: 'credential.helper',
-    GIT_CONFIG_VALUE_0: '',
   };
 
   for (const [role, tier] of Object.entries(config.roleTiers)) {

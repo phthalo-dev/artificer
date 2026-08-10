@@ -114,7 +114,7 @@ function boolFlag(args: string[], name: string): boolean {
 }
 
 /** Resolve suite paths relative to the bench root (handles `tasks/foo.json` from any cwd). */
-function resolveSuitePath(raw: string | undefined): string {
+export function resolveSuitePath(raw: string | undefined): string {
   if (!raw) return path.join(TASKS_DIR, 'mini-suite.json');
   if (path.isAbsolute(raw)) return raw;
   if (raw.startsWith('tasks/') || raw.startsWith('tasks\\')) {
