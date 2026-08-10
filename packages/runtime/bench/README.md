@@ -76,10 +76,22 @@ Results land under `bench/results/<preset>/<suite>/` (e.g.
 
 Model presets match the runtime (`MODEL_PRESET` / Models page in the UI):
 `async-economy` (default), `ultra-budget`, `async-slow`, `quality-first`, `bench-budget`,
+`open-weights-economy`, `baseten-open-weights`,
 `go-economy`, `go-flash`, `go-mimo`, `go-quality`, `go-minimax`.
 
 Go presets require `LLM_BASE_URL=https://opencode.ai/zen/go/v1` and an [OpenCode Go](https://opencode.ai/docs/go)
 subscription key. Start with `go-economy` for the best async correctness-per-dollar tradeoff.
+
+## Open-weights presets
+
+```bash
+# Zen open-weights (requires LLM_BASE_URL=https://opencode.ai/zen/v1)
+MODEL_PRESET=open-weights-economy pnpm bench:deepswe
+
+# Baseten (requires BASETEN_API_KEY + LLM_BASE_URL=https://inference.baseten.co/v1)
+MODEL_PRESET=baseten-open-weights LLM_BASE_URL=https://inference.baseten.co/v1 \
+  LLM_API_KEY=$BASETEN_API_KEY pnpm bench:deepswe
+```
 
 ```bash
 # Generic runner with flags
