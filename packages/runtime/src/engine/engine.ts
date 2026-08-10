@@ -976,7 +976,16 @@ export class Engine implements EngineApi {
     }
   }
 
-  /** Gather the facts the state machine transitions on. */
+  /**
+   * Gather the facts the state machine transitions on.
+   *
+   * Several of these counters (workerRunsSinceReview, noProgressRepeats,
+   * consecutiveFailedRuns, plannerRunsWithoutPlan, totalRuns) are
+   * independently re-derived from the same raw records by
+   * `computeRetryCounters` in workstream-retry-counters.ts, for display on
+   * the API/UI progress badges. If you change how a counter is computed
+   * here, check that file for the same drift.
+   */
   private async computeFacts(
     ws: Workstream,
   ): Promise<{ facts: WorkstreamFacts; workerRunsSinceReview: RunRecord[] }> {
