@@ -31,7 +31,9 @@
         "go-flash",
         "go-mimo",
         "go-quality",
-        "go-minimax"
+        "go-minimax",
+        "open-weights-economy",
+        "baseten-open-weights"
       ]
     },
     "models": {
