@@ -279,6 +279,23 @@ const ENTRIES: CatalogEntry[] = [
     npm: '@ai-sdk/openai-compatible',
     pricing: FREE,
   },
+
+  // --- Baseten Model API slugs (https://inference.baseten.co/v1) ---
+  {
+    id: 'thinkingmachines/inkling',
+    npm: '@ai-sdk/openai-compatible',
+    pricing: price(1, 4.05, 0.17), // estimate — verify against Baseten /v1/models
+  },
+  {
+    id: 'thinkingmachines/inkling-small',
+    npm: '@ai-sdk/openai-compatible',
+    pricing: price(0.3, 1.2, 0.06), // estimate — verify against Baseten /v1/models
+  },
+  {
+    id: 'moonshotai/Kimi-K3',
+    npm: '@ai-sdk/openai-compatible',
+    pricing: price(3, 15, 0.3), // estimate — verify against Baseten /v1/models
+  },
 ];
 
 export const MODEL_CATALOG: Record<string, CatalogEntry> = Object.fromEntries(
