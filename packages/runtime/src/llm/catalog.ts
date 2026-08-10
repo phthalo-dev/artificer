@@ -223,6 +223,26 @@ const ENTRIES: CatalogEntry[] = [
     pricing: price(0.95, 4, 0.16),
   },
   {
+    id: 'kimi-k2.7-code',
+    npm: '@ai-sdk/openai-compatible',
+    pricing: price(0.95, 4, 0.19),
+  },
+  {
+    id: 'kimi-k3',
+    npm: '@ai-sdk/openai-compatible',
+    pricing: price(3, 15, 0.3),
+  },
+  {
+    id: 'laguna-s-2.1-free',
+    npm: '@ai-sdk/openai-compatible',
+    pricing: FREE,
+  },
+  {
+    id: 'north-mini-code-free',
+    npm: '@ai-sdk/openai-compatible',
+    pricing: FREE,
+  },
+  {
     id: 'deepseek-v4-pro',
     npm: '@ai-sdk/openai-compatible',
     pricing: price(1.74, 3.48, 0.0145),
@@ -284,6 +304,14 @@ export function inferPackage(modelId: string): LlmSdkPackage {
   }
   if (id.startsWith('gemini')) {
     return '@ai-sdk/google';
+  }
+  if (
+    id.includes('/') ||
+    id.startsWith('moonshotai/') ||
+    id.startsWith('thinkingmachines/') ||
+    id.startsWith('poolside/')
+  ) {
+    return '@ai-sdk/openai-compatible';
   }
   return '@ai-sdk/openai-compatible';
 }
