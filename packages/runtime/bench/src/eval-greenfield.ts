@@ -76,11 +76,21 @@ async function gradeOne(instanceId: string, patch: string): Promise<Verdict> {
     await execFileAsync('git', ['apply', '--whitespace=nowarn', patchFile], {
       cwd: workdir,
     });
+    // Strip any tests/ directory the patch may have created before overlaying
+    // the real hidden tests, so agent-authored test files (against
+    // instructions, but not enforced) can't affect grading.
+    await fs.rm(path.join(workdir, 'tests'), { recursive: true, force: true });
     await copyDir(path.join(fixtureDir, 'hidden'), workdir);
-    await execFileAsync('sh', ['-c', meta.test_command], {
+    const { stdout } = await execFileAsync('sh', ['-c', meta.test_command], {
       cwd: workdir,
       timeout: 120_000,
     });
+    const testsRun = /^ℹ tests (\d+)$/m.exec(stdout)?.[1];
+    if (!testsRun || Number(testsRun) === 0) {
+      throw new Error(
+        `test_command ran zero tests (expected output line "ℹ tests N" with N>0): ${meta.test_command}`,
+      );
+    }
     return 'resolved';
   } catch {
     return 'unresolved';
