@@ -174,6 +174,20 @@ export interface RuntimeState {
   >;
 }
 
+export interface RetryCounter {
+  count: number;
+  max: number;
+}
+
+export interface WorkstreamProgress {
+  reviewCycles: RetryCounter;
+  workerRunsSinceReview: RetryCounter;
+  noProgressRepeats: RetryCounter;
+  consecutiveFailedRuns: RetryCounter;
+  plannerAttempts: RetryCounter;
+  totalRuns: RetryCounter;
+}
+
 export interface WorkstreamDetail {
   workstream: Workstream;
   tasks: Task[];
@@ -181,6 +195,7 @@ export interface WorkstreamDetail {
   plan: string | null;
   runs: RunRecord[];
   tree?: RunNode[];
+  progress: WorkstreamProgress;
   usage: {
     total: UsageSummary;
     byTask: Record<string, UsageSummary>;
