@@ -166,7 +166,7 @@ Two curated suites ship under `tasks/`:
 | `deepswe-mini-suite.json` | [DeepSWE](https://deepswe.datacurve.ai/) Harbor tasks (6 instances) | `pnpm bench:eval:deepswe` |
 | `deepswe-typescript-mini.json` | DeepSWE TS/JS subset (4 instances) for local debugging | `pnpm bench:eval:deepswe` |
 | `greenfield-mini.json` | Greenfield build tasks (6 instances), graded Docker-free against hidden acceptance tests | `pnpm bench:eval:greenfield` |
-| `greenfield-hard.json` | Larger, multi-file greenfield tasks (3 instances) — see "Greenfield difficulty tiers" below | `pnpm bench:eval:greenfield` (with `BENCH_RESULTS_DIR` set to the hard-tier results dir) |
+| `greenfield-hard.json` | Larger, multi-file greenfield tasks (4 instances) — see "Greenfield difficulty tiers" below | `pnpm bench:eval:greenfield` (with `BENCH_RESULTS_DIR` set to the hard-tier results dir) |
 
 Run a specific suite:
 
@@ -222,16 +222,30 @@ opencode, Cursor) solved all six in a single LLM turn each. That's a sign the
 signal at frontier-model level — solving an LRU cache in one shot doesn't
 exercise "sustained build-from-scratch work," it's pattern recall.
 
-`greenfield-hard.json` targets that gap with *scope*, not trickery: 3 fixtures,
-5-6 files each, with real cross-file contracts an agent has to get right
-end-to-end (e.g. `greenfield-http-router`'s hidden tests exercise
-`App#handle()`, which only produces correct responses if the router's param
-matching, the middleware chain's short-circuit/error-propagation semantics,
-and the request/response parsing all compose correctly — no single file's
-unit-level correctness is sufficient). Sized so a single turn plausibly can't
-one-shot the whole thing correctly. Same four-file-per-fixture template and
-Docker-free `node --test` grading as the mini tier; add more fixtures to
-either tier the same way.
+`greenfield-hard.json` targets that gap with *scope* first: 3 fixtures (router,
+task-cli, query-engine), 5-6 files each, with real cross-file contracts an
+agent has to get right end-to-end (e.g. `greenfield-http-router`'s hidden
+tests exercise `App#handle()`, which only produces correct responses if the
+router's param matching, the middleware chain's short-circuit/error-
+propagation semantics, and the request/response parsing all compose
+correctly — no single file's unit-level correctness is sufficient).
+
+First real run: Artificer's own orchestration missed one (2/3, a genuine
+19/20-hidden-tests bug in the POST+middleware integration path) — but Claude
+Code, opencode, and Cursor all still one-shot all 3, same as the mini tier.
+Scope/file-count alone wasn't enough to stop a frontier CLI agent's *internal*
+iteration (a single headless invocation can still read/write/test many files
+across many of its own tool calls before exiting — "one LLM call" in our
+usage accounting is not "one forward pass"). `greenfield-vm` adds a different
+lever: a stack-based VM (tokenizer → parser → interpreter, 4 files) with
+genuine algorithmic depth — many interacting opcodes, jump/label resolution,
+non-commutative-operand ordering, truncating division, and a dozen-plus
+distinct error conditions — the kind of thing that's easy to get subtly wrong
+even working carefully from a precise spec, and that the agent can't
+self-verify against ground truth (the hidden tests are never visible, so it
+can only test its own possibly-wrong assumptions). Same four-file-per-fixture
+template and Docker-free `node --test` grading as the mini tier; add more
+fixtures to either tier the same way.
 
 ### Running against external coding agents
 
