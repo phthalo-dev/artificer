@@ -18,6 +18,11 @@ interface ParsedUsage {
   costUsd?: number;
   inputTokens?: number;
   outputTokens?: number;
+  // Recorded separately from inputTokens because cache tokens are typically
+  // priced very differently (often far cheaper) — folding them together
+  // would make future cost recomputation from raw tokens wrong.
+  cacheCreationInputTokens?: number;
+  cacheReadInputTokens?: number;
 }
 
 interface AgentSpec {
@@ -47,6 +52,8 @@ const AGENTS: Record<string, AgentSpec> = {
           costUsd: typeof j.total_cost_usd === 'number' ? j.total_cost_usd : undefined,
           inputTokens: j.usage?.input_tokens,
           outputTokens: j.usage?.output_tokens,
+          cacheCreationInputTokens: j.usage?.cache_creation_input_tokens,
+          cacheReadInputTokens: j.usage?.cache_read_input_tokens,
         };
       } catch {
         return {};
@@ -72,6 +79,8 @@ const AGENTS: Record<string, AgentSpec> = {
         return {
           inputTokens: j.usage?.inputTokens,
           outputTokens: j.usage?.outputTokens,
+          cacheCreationInputTokens: j.usage?.cacheWriteTokens,
+          cacheReadInputTokens: j.usage?.cacheReadTokens,
         };
       } catch {
         return {};
@@ -94,6 +103,8 @@ const AGENTS: Record<string, AgentSpec> = {
       let costUsd: number | undefined;
       let inputTokens = 0;
       let outputTokens = 0;
+      let cacheCreationInputTokens = 0;
+      let cacheReadInputTokens = 0;
       let sawTokens = false;
       for (const line of stdout.split('\n')) {
         if (!line.trim()) continue;
@@ -106,6 +117,8 @@ const AGENTS: Record<string, AgentSpec> = {
               sawTokens = true;
               inputTokens += part.tokens.input ?? 0;
               outputTokens += part.tokens.output ?? 0;
+              cacheCreationInputTokens += part.tokens.cache?.write ?? 0;
+              cacheReadInputTokens += part.tokens.cache?.read ?? 0;
             }
           }
         } catch {
@@ -116,6 +129,8 @@ const AGENTS: Record<string, AgentSpec> = {
         costUsd,
         inputTokens: sawTokens ? inputTokens : undefined,
         outputTokens: sawTokens ? outputTokens : undefined,
+        cacheCreationInputTokens: sawTokens ? cacheCreationInputTokens : undefined,
+        cacheReadInputTokens: sawTokens ? cacheReadInputTokens : undefined,
       };
     },
   },
@@ -304,8 +319,8 @@ async function runOneInstance(
         ? {
             inputTokens: usage.inputTokens ?? 0,
             outputTokens: usage.outputTokens ?? 0,
-            cacheCreationInputTokens: 0,
-            cacheReadInputTokens: 0,
+            cacheCreationInputTokens: usage.cacheCreationInputTokens ?? 0,
+            cacheReadInputTokens: usage.cacheReadInputTokens ?? 0,
             requests: 1,
             runs: 1,
             costUsd: usage.costUsd ?? 0,

@@ -4,7 +4,7 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { RESULTS_DIR } from './config.js';
-import { GREENFIELD_FIXTURES_DIR, copyDir } from './greenfield.js';
+import { GREENFIELD_FIXTURES_DIR, copyDir, withGreenfieldCacheLock } from './greenfield.js';
 import { CACHE_DIR } from './config.js';
 
 const execFileAsync = promisify(execFile);
@@ -72,7 +72,11 @@ async function gradeOne(instanceId: string, patch: string): Promise<Verdict> {
   console.log(`[greenfield-eval] grading ${instanceId}`);
 
   try {
-    await execFileAsync('git', ['clone', '-q', scaffoldRepo, workdir]);
+    // Serialize against a concurrent rebuild of the same canonical scaffold
+    // repo (e.g. another bench process re-running this instance right now).
+    await withGreenfieldCacheLock(instanceId, () =>
+      execFileAsync('git', ['clone', '-q', scaffoldRepo, workdir]),
+    );
     await execFileAsync('git', ['apply', '--whitespace=nowarn', patchFile], {
       cwd: workdir,
     });

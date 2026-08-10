@@ -23,6 +23,12 @@ interface PerInstanceRow {
   patchBytes: number;
   costUsd: number;
   runs: number;
+  // Recorded per instance (not just in the aggregate summary) so cost can be
+  // recomputed later if a provider's per-token pricing changes.
+  inputTokens: number;
+  outputTokens: number;
+  cacheCreationInputTokens: number;
+  cacheReadInputTokens: number;
 }
 
 async function readJson<T>(file: string): Promise<T | undefined> {
@@ -46,6 +52,10 @@ function rowFor(
     patchBytes: a.patchBytes,
     costUsd: a.usage?.costUsd ?? 0,
     runs: a.usage?.runs ?? 0,
+    inputTokens: a.usage?.inputTokens ?? 0,
+    outputTokens: a.usage?.outputTokens ?? 0,
+    cacheCreationInputTokens: a.usage?.cacheCreationInputTokens ?? 0,
+    cacheReadInputTokens: a.usage?.cacheReadInputTokens ?? 0,
   };
 }
 
@@ -90,14 +100,17 @@ function buildMarkdown(
   lines.push('');
   lines.push('## Per-instance');
   lines.push('');
-  lines.push('| Instance | Repo | Resolved | Outcome | Time | Patch | Cost | Calls |');
-  lines.push('| --- | --- | --- | --- | --- | --- | --- | --- |');
+  lines.push(
+    '| Instance | Repo | Resolved | Outcome | Time | Patch | Cost | Calls | Tokens (in / out) |',
+  );
+  lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- |');
   for (const r of rows) {
     const resolved =
       r.resolved === null ? '—' : r.resolved ? '✅' : '❌';
     lines.push(
       `| ${r.instanceId} | ${r.repo} | ${resolved} | ${r.outcome} | ` +
-        `${fmtDuration(r.durationMs)} | ${r.patchBytes}B | ${formatUsd(r.costUsd)} | ${r.runs} |`,
+        `${fmtDuration(r.durationMs)} | ${r.patchBytes}B | ${formatUsd(r.costUsd)} | ${r.runs} | ` +
+        `${r.inputTokens.toLocaleString()} / ${r.outputTokens.toLocaleString()} |`,
     );
   }
   lines.push('');
