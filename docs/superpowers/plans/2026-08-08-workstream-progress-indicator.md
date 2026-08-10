@@ -10,7 +10,7 @@
 
 ## Global Constraints
 
-- **Deliberate duplication, stated explicitly:** this plan does not refactor `Engine.computeFacts` — that method drives the production dispatch loop and touching it for a read-only UI feature is disproportionate risk. The new pure function in Task 1 independently re-derives the same five numbers from the same raw inputs. Task 1's file carries a comment cross-referencing `engine.ts`'s `computeFacts` so a future change to one is a prompt to check the other; Task 1's tests are the actual guardrail against drift (same-shaped fixtures, asserted counts).
+- **Deliberate duplication, stated explicitly:** this plan does not refactor `Engine.computeFacts` — that method drives the production dispatch loop and touching it for a read-only UI feature is disproportionate risk. The new pure function in Task 1 independently re-derives the same five numbers from the same raw inputs. Task 1's file carries a comment cross-referencing `engine.ts`'s `computeFacts`, and `computeFacts` carries a reciprocal comment pointing back — so an edit on either side is a prompt to check the other. (Correction from the final review: Task 1's tests only pin `computeRetryCounters`'s own behavior — they cannot detect `computeFacts` drifting elsewhere, since nothing in the suite reads `computeFacts` at all. The reciprocal comments are the actual, and only, drift mitigation; treat them as load-bearing, not decorative.)
 - Counter caps come from the exported constants already in `workstream-machine.ts` and `worker-progress.ts` — never hardcode `3` or `2` a second time.
 - The UI only renders a counter once it's non-zero (a fresh workstream showing "0 of 3" for five different counters is noise, not signal).
 - No new dependencies in either package.
