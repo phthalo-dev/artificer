@@ -1,4 +1,5 @@
 import fs from 'node:fs/promises';
+import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
@@ -28,11 +29,57 @@ export async function copyDir(src: string, dest: string): Promise<void> {
   }
 }
 
+const LOCK_RETRY_MS = 100;
+const LOCK_TIMEOUT_MS = 30_000;
+
+async function acquireLock(lockDir: string): Promise<void> {
+  const deadline = Date.now() + LOCK_TIMEOUT_MS;
+  for (;;) {
+    try {
+      await fs.mkdir(lockDir);
+      return;
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
+      if (Date.now() > deadline) {
+        throw new Error(`timed out waiting for greenfield cache lock: ${lockDir}`);
+      }
+      await new Promise((r) => setTimeout(r, LOCK_RETRY_MS));
+    }
+  }
+}
+
+async function releaseLock(lockDir: string): Promise<void> {
+  await fs.rm(lockDir, { recursive: true, force: true }).catch(() => {});
+}
+
 /**
- * Materializes a fixture's scaffold/ directory into a fresh local git repo the
- * bench driver can `git clone` like any other instance, and commits it so
- * there is a base_commit to check out. Re-materializes on every call so a
+ * Runs `fn` while holding an exclusive, cross-process lock for `taskId`'s
+ * shared cache dir (a plain `mkdir`-based mutex — atomic across processes on
+ * every platform we run on, no dependency needed). Exported so eval-greenfield
+ * (which clones from the same canonical path later, as a separate process)
+ * can serialize against a concurrent rebuild too.
+ */
+export async function withGreenfieldCacheLock<T>(
+  taskId: string,
+  fn: () => Promise<T>,
+): Promise<T> {
+  const taskCacheDir = path.join(CACHE_DIR, 'greenfield', taskId);
+  await fs.mkdir(taskCacheDir, { recursive: true });
+  const lockDir = path.join(taskCacheDir, '.lock');
+  await acquireLock(lockDir);
+  try {
+    return await fn();
+  } finally {
+    await releaseLock(lockDir);
+  }
+}
+
+/**
+ * Materializes a fixture's scaffold/ directory into a fresh local git repo at
+ * a stable, well-known path (eval-greenfield reconstructs this same path
+ * later, from just the instance id). Re-materializes on every call so a
  * fixture edit is always picked up (cheap: fixtures are a handful of files).
+ * Caller must hold withGreenfieldCacheLock(taskId, ...).
  */
 async function materializeScaffold(
   taskId: string,
@@ -52,7 +99,23 @@ async function materializeScaffold(
   return { repoDir, commit: stdout.trim() };
 }
 
-/** Loads one greenfield fixture into the shared BenchInstance shape. */
+/**
+ * Loads one greenfield fixture into the shared BenchInstance shape.
+ *
+ * Concurrent bench/external-agent processes running the same suite each call
+ * this for the same taskId. The canonical scaffold repo lives at one shared,
+ * well-known path (materializeScaffold rebuilds it in place every call) — but
+ * whoever gets handed `repository_url` clones from it *outside* this
+ * function's control, sometimes much later: for a non-preflight Artificer
+ * run, it's the agent's own LLM-issued `git clone` shell command, which
+ * driver code has no hook to wrap in a lock. So instead of handing out the
+ * shared path directly, rebuild it under lock and immediately clone a
+ * private, uniquely-named copy (also under the same lock) — every downstream
+ * clone then reads an already-isolated repo, so no further locking is needed
+ * at the point of use. This is what a prior parallel run corrupted: two
+ * processes' clones interleaved with a third process's rm+rebuild of the one
+ * shared path.
+ */
 export async function loadGreenfieldTask(taskId: string): Promise<BenchInstance> {
   const fixtureDir = path.join(GREENFIELD_FIXTURES_DIR, taskId);
   const [metaRaw, spec] = await Promise.all([
@@ -60,7 +123,15 @@ export async function loadGreenfieldTask(taskId: string): Promise<BenchInstance>
     fs.readFile(path.join(fixtureDir, 'spec.md'), 'utf8'),
   ]);
   const meta = JSON.parse(metaRaw) as GreenfieldMeta;
-  const { repoDir, commit } = await materializeScaffold(taskId);
+
+  const { repoDir, commit } = await withGreenfieldCacheLock(taskId, async () => {
+    const canonical = await materializeScaffold(taskId);
+    const privateDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), `artificer-greenfield-cache-${taskId}-`),
+    );
+    await execFileAsync('git', ['clone', '-q', canonical.repoDir, privateDir]);
+    return { repoDir: privateDir, commit: canonical.commit };
+  });
 
   return {
     instance_id: meta.task_id,
