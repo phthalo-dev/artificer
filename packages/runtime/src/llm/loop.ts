@@ -13,6 +13,7 @@ import { applyResultBudget } from '../storage/tool-results.js';
 import type { ToolResultConfig } from '../config.js';
 import type { Layout } from '../storage/layout.js';
 import type { CallResult, ToolDef } from './types.js';
+import { mergeProviderOptions } from './reasoning-options.js';
 
 export interface ToolResultSpillContext {
   layout: Layout;
@@ -30,6 +31,8 @@ export interface ToolResultSpillContext {
 export interface RunToolLoopOptions {
   /** A resolved AI SDK model (see resolveLanguageModel). */
   model: LanguageModel;
+  /** Model id used to select reasoning providerOptions (from call.ts in Task 5). */
+  modelId?: string;
   system: string;
   /** The task / message that seeds the conversation. */
   userMessage: string;
@@ -65,6 +68,7 @@ export async function runToolLoop(
 ): Promise<CallResult> {
   const {
     model,
+    modelId,
     system,
     userMessage,
     tools,
@@ -157,6 +161,7 @@ export async function runToolLoop(
   try {
     result = await generateText({
       model,
+      ...(modelId ? { providerOptions: mergeProviderOptions(modelId) } : {}),
       system: {
         role: 'system',
         content: system,
@@ -165,7 +170,13 @@ export async function runToolLoop(
         // system prompt. Both are stable across steps within a call and
         // across calls for the same role, so this turns repeated re-sends
         // into cheap cache reads. Other providers ignore this namespace.
-        providerOptions: { anthropic: { cacheControl: { type: 'ephemeral' } } },
+        ...(modelId
+          ? { providerOptions: mergeProviderOptions(modelId) }
+          : {
+              providerOptions: {
+                anthropic: { cacheControl: { type: 'ephemeral' } },
+              },
+            }),
       },
       messages,
       tools: tools.length > 0 ? sdkTools : undefined,

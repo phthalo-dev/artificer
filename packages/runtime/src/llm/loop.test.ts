@@ -34,3 +34,22 @@ test('runToolLoop marks the system prompt as an ephemeral cache breakpoint', asy
     { anthropic: { cacheControl: { type: 'ephemeral' } } },
   );
 });
+
+test('runToolLoop forwards reasoning providerOptions for kimi-k3', async () => {
+  const model = new MockLanguageModelV3({ doGenerate: textResult('done') });
+
+  await runToolLoop({
+    model,
+    modelId: 'kimi-k3',
+    system: 'You are helpful.',
+    userMessage: 'hello',
+    tools: [],
+    maxIterations: 1,
+  });
+
+  const [call] = model.doGenerateCalls;
+  const opts = (call as { providerOptions?: Record<string, unknown> })
+    .providerOptions;
+  assert.ok(opts);
+  assert.ok(JSON.stringify(opts).includes('reasoning'));
+});
