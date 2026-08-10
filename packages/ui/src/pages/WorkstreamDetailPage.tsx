@@ -33,6 +33,7 @@ import { StatusBadge } from '../components/StatusBadge';
 import { QuotaAlert } from '../components/QuotaBanner';
 import { TokenSpendByRole } from '../components/TokenSpendChart';
 import { ViewRawLink } from '../components/ViewRawLink';
+import { WorkstreamProgress } from '../components/WorkstreamProgress';
 import { formatCost, formatDuration, formatTime } from '../format';
 import { earliestQuotaReset, formatUntil } from '../quota';
 
@@ -145,6 +146,7 @@ export function WorkstreamDetailPage() {
             </Button>
           )}
         </Group>
+        {data?.progress && <WorkstreamProgress progress={data.progress} />}
         <Text c="dimmed" size="sm" mt={4} preWrap>
           {ws.goal}
         </Text>
