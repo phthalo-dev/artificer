@@ -30,9 +30,11 @@ async function selectInstances(
 }
 
 function evalHint(kind: ReturnType<typeof suiteKind>): string {
-  return kind === 'deepswe'
-    ? '`pnpm bench:eval:deepswe`, then `pnpm bench:report`'
-    : '`pnpm bench:eval`, then `pnpm bench:report`';
+  if (kind === 'deepswe')
+    return '`pnpm bench:eval:deepswe`, then `pnpm bench:report`';
+  if (kind === 'greenfield')
+    return '`pnpm bench:eval:greenfield`, then `pnpm bench:report`';
+  return '`pnpm bench:eval`, then `pnpm bench:report`';
 }
 
 /** Warn when Go gateway is paired with models that only exist on standard Zen. */
