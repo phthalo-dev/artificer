@@ -52,7 +52,11 @@ test('workSinceLastReview only counts done worker runs after the latest review',
     run({ id: 'w0', createdAt: '2026-01-01T00:05:00.000Z' }), // before the review
     run({ id: 'w1', createdAt: '2026-01-01T00:20:00.000Z' }),
     run({ id: 'w2', createdAt: '2026-01-01T00:30:00.000Z' }),
-    run({ id: 'planner', role: 'planner', createdAt: '2026-01-01T00:25:00.000Z' }), // not a worker run
+    run({
+      id: 'planner',
+      role: 'planner',
+      createdAt: '2026-01-01T00:25:00.000Z',
+    }), // not a worker run
   ];
   const counters = computeRetryCounters(true, reviews, runs);
   assert.equal(counters.workSinceLastReview, 2);
