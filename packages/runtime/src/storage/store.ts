@@ -171,7 +171,10 @@ export class Store {
   async createWorkstream(
     input: Pick<Workstream, 'title' | 'goal'> &
       Partial<
-        Pick<Workstream, 'repoUrl' | 'baseCommit' | 'summary' | 'status'>
+        Pick<
+          Workstream,
+          'repoUrl' | 'baseCommit' | 'summary' | 'status' | 'submitPr'
+        >
       >,
   ): Promise<Workstream> {
     const ts = now();
@@ -183,6 +186,7 @@ export class Store {
       summary: input.summary ?? '',
       repoUrl: input.repoUrl,
       baseCommit: input.baseCommit,
+      submitPr: input.submitPr,
       createdAt: ts,
       updatedAt: ts,
     };

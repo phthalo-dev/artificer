@@ -495,6 +495,7 @@ export class Engine implements EngineApi {
     repoUrl?: string;
     baseCommit?: string;
     autostart?: boolean;
+    submitPr?: boolean;
   }): Promise<{ workstream: Workstream; messageId: string }> {
     const message = await this.store.appendMessage({
       direction: 'inbound',
@@ -507,6 +508,7 @@ export class Engine implements EngineApi {
       goal: input.goal,
       repoUrl: input.repoUrl,
       baseCommit: input.baseCommit,
+      submitPr: input.submitPr,
       status: 'pending',
     });
     this.emit({ kind: 'workstream', at: ws.createdAt, data: ws });
@@ -1038,6 +1040,7 @@ export class Engine implements EngineApi {
     return {
       facts: {
         hasRepoUrl: Boolean(ws.repoUrl),
+        submitPr: ws.submitPr !== false,
         repoReady: repoDir !== undefined,
         planWritten: Boolean(plan),
         patchPresent,

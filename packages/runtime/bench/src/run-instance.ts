@@ -400,6 +400,11 @@ export async function runInstance(
       repoUrl,
       baseCommit: instance.base_commit,
       autostart: !config.preflightClone,
+      // Every bench suite grades from the local patch/predictions.jsonl, never
+      // a live push — the submit-PR step (push/fork/gh pr create) has no
+      // legitimate target here and previously caused workers to loop
+      // retrying against fixture repos with no real remote.
+      submitPr: false,
     });
     workstreamId = created.workstreamId;
     messageId = created.messageId;
