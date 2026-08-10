@@ -16,6 +16,14 @@ import { type LlmSdkPackage, MODEL_CATALOG } from '../llm/catalog.js';
 import { listPresets } from '../engine/presets.js';
 import { primaryAccountIdFor } from '../engine/quota-config.js';
 import type { QuotaConfig } from '../engine/quota-types.js';
+import { computeRetryCounters } from '../engine/workstream-retry-counters.js';
+import {
+  MAX_REVIEW_CYCLES,
+  MAX_WORKER_RUNS_BEFORE_REVIEW,
+  MAX_FAILED_RUNS,
+  MAX_PLANNER_ATTEMPTS,
+} from '../engine/workstream-machine.js';
+import { MAX_NO_PROGRESS_REPEATS } from '../engine/worker-progress.js';
 import { readBenchOverview, readBenchRun, readBenchSuites } from './bench.js';
 import { bearerAuth, sseAuth } from './auth.js';
 import { serveUI } from './static.js';
@@ -442,6 +450,30 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
       byTask: groupBy(runs, (r) => r.taskId),
       byRole: summarizeByRole(runs),
     };
+    const retry = computeRetryCounters(Boolean(plan), reviews, runs);
+    const progress = {
+      reviewCycles: { count: retry.reviewCount, max: MAX_REVIEW_CYCLES },
+      workerRunsSinceReview: {
+        count: retry.workSinceLastReview,
+        max: MAX_WORKER_RUNS_BEFORE_REVIEW,
+      },
+      noProgressRepeats: {
+        count: retry.noProgressRepeats,
+        max: MAX_NO_PROGRESS_REPEATS,
+      },
+      consecutiveFailedRuns: {
+        count: retry.consecutiveFailedRuns,
+        max: MAX_FAILED_RUNS,
+      },
+      plannerAttempts: {
+        count: retry.plannerRunsWithoutPlan,
+        max: MAX_PLANNER_ATTEMPTS,
+      },
+      totalRuns: {
+        count: retry.totalRuns,
+        max: engine.config.maxRunsPerWorkstream,
+      },
+    };
     return c.json({
       workstream,
       tasks,
@@ -449,6 +481,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
       plan,
       runs,
       usage,
+      progress,
       tree: buildCallTree(runs),
     });
   });

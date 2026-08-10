@@ -78,3 +78,44 @@ test('POST /workstreams rejects a request missing title/goal', async () => {
   });
   assert.equal(res.status, 400);
 });
+
+test('GET /workstreams/:id includes retry-counter progress with caps', async () => {
+  const { app, store } = await buildApp();
+
+  const res = await app.request('/api/workstreams', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      title: 'progress test',
+      goal: 'Do a thing',
+      autostart: false,
+    }),
+  });
+  const { workstreamId } = (await res.json()) as { workstreamId: string };
+
+  await store.createReview({
+    workstreamId,
+    target: 'work',
+    stage: 'work',
+    approved: false,
+    notes: 'not quite',
+  });
+
+  const detailRes = await app.request(`/api/workstreams/${workstreamId}`);
+  assert.equal(detailRes.status, 200);
+  const body = (await detailRes.json()) as {
+    progress: {
+      reviewCycles: { count: number; max: number };
+      workerRunsSinceReview: { count: number; max: number };
+      noProgressRepeats: { count: number; max: number };
+      consecutiveFailedRuns: { count: number; max: number };
+      plannerAttempts: { count: number; max: number };
+      totalRuns: { count: number; max: number };
+    };
+  };
+
+  assert.equal(body.progress.reviewCycles.count, 1);
+  assert.equal(body.progress.reviewCycles.max, 3);
+  assert.equal(body.progress.totalRuns.count, 0);
+  assert.ok(body.progress.totalRuns.max > 0);
+});
