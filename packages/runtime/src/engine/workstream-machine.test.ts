@@ -25,6 +25,7 @@ function facts(overrides: Partial<WorkstreamFacts> = {}): WorkstreamFacts {
     plannerRunsWithoutPlan: 0,
     noProgressRepeats: 0,
     prSubmitted: false,
+    submitPr: true,
     totalRuns: 1,
     maxRuns: 40,
     ...overrides,
@@ -241,6 +242,20 @@ test('non-repo task approved -> done without PR step', () => {
       reviewCount: 1,
       lastReviewApproved: true,
       hasRepoUrl: false,
+    }),
+  );
+  assert.deepEqual(a, { kind: 'done' });
+});
+
+test('repo task approved but submitPr disabled (bench) -> done without PR step', () => {
+  const a = nextWorkstreamAction(
+    facts({
+      patchPresent: true,
+      reviewCount: 1,
+      lastReviewApproved: true,
+      hasRepoUrl: true,
+      submitPr: false,
+      prSubmitted: false,
     }),
   );
   assert.deepEqual(a, { kind: 'done' });
