@@ -282,7 +282,7 @@ export function buildTaskMessage(
       `Build the feature described below from scratch in ${instance.repo}.`,
       '',
       'Setup (do this first, exactly):',
-      `1. Clone ${repoUrl} into your workspace.`,
+      `1. Clone ${repoUrl} into your workspace as \`repo\`.`,
       `2. Check out the exact base commit ${instance.base_commit}.`,
       '',
       'The repository is an empty scaffold: stub functions that throw "not implemented".',

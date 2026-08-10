@@ -353,7 +353,7 @@ export interface BenchEfficiencyPoint {
 
 export interface BenchSuiteCatalogEntry {
   id: string;
-  kind: 'swebench' | 'deepswe';
+  kind: 'swebench' | 'deepswe' | 'greenfield';
   name: string;
   description?: string;
   taskCount: number;
@@ -366,7 +366,7 @@ export interface BenchOverview {
   graded: boolean;
   modelName: string | null;
   models: BenchModels | null;
-  suiteKind: 'swebench' | 'deepswe' | null;
+  suiteKind: 'swebench' | 'deepswe' | 'greenfield' | null;
   suiteName: string | null;
   suiteDescription: string | null;
   summary: {

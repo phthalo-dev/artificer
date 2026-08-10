@@ -189,6 +189,16 @@ Fixtures are plain ESM JavaScript with no npm dependencies (graded via `node --t
 so eval never needs `npm install` or Docker. Add the new task id to a suite file's
 `instanceIds` (or create a new suite file) to include it in a run.
 
+`hidden/` is overlaid onto the patched repo at its **root**, not under a `hidden/`
+subdirectory — so hidden test files must themselves include their full intended
+path relative to the repo root. For example, `hidden/tests/foo.test.js` in the
+fixture lands at `tests/foo.test.js` in the graded repo. `meta.json`'s
+`test_command` glob must actually match those hidden test file names (and the
+grader now requires the test run report at least one executed test — see
+`eval-greenfield.ts`'s `gradeOne`), or the fixture will silently grade every
+prediction as `error`/failed-to-verify rather than a meaningful resolved/unresolved
+result.
+
 ## Outputs (`results/`)
 
 | File | Produced by | Contents |

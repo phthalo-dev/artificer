@@ -135,9 +135,19 @@ export function BenchPage() {
           {suiteKind && (
             <Badge
               variant="light"
-              color={suiteKind === 'deepswe' ? 'violet' : 'teal'}
+              color={
+                suiteKind === 'deepswe'
+                  ? 'violet'
+                  : suiteKind === 'greenfield'
+                    ? 'grape'
+                    : 'teal'
+              }
             >
-              {suiteKind === 'deepswe' ? 'DeepSWE' : 'SWE-bench'}
+              {suiteKind === 'deepswe'
+                ? 'DeepSWE'
+                : suiteKind === 'greenfield'
+                  ? 'Greenfield'
+                  : 'SWE-bench'}
             </Badge>
           )}
           {modelName && (
