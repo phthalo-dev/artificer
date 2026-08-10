@@ -41,6 +41,18 @@ test('kimi-k3 has published Zen pricing', () => {
   assert.equal(p.cacheReadPerMTok, 0.3);
 });
 
+const BASETEN_SLUG_IDS = [
+  'thinkingmachines/inkling',
+  'thinkingmachines/inkling-small',
+  'moonshotai/Kimi-K3',
+] as const;
+
+test('Baseten Model API slugs are in the catalog', () => {
+  for (const id of BASETEN_SLUG_IDS) {
+    assert.ok(MODEL_CATALOG[id], `missing catalog entry: ${id}`);
+  }
+});
+
 test('inferPackage handles baseten-style slugs', () => {
   assert.equal(
     inferPackage('moonshotai/Kimi-K3'),
