@@ -1,0 +1,5 @@
+{
+  "task_id": "greenfield-rate-limiter",
+  "display_title": "Build a token-bucket rate limiter and debounce/throttle helpers",
+  "test_command": "node --test tests/*.test.js"
+}
