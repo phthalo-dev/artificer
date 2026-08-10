@@ -146,7 +146,9 @@ export function WorkstreamDetailPage() {
             </Button>
           )}
         </Group>
-        {data?.progress && <WorkstreamProgress progress={data.progress} />}
+        {data?.progress && (
+          <WorkstreamProgress progress={data.progress} status={ws.status} />
+        )}
         <Text c="dimmed" size="sm" mt={4} preWrap>
           {ws.goal}
         </Text>

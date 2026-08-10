@@ -59,6 +59,45 @@ test('workSinceLastReview only counts done worker runs after the latest review',
   assert.equal(counters.reviewCount, 1);
 });
 
+test('workSinceLastReview excludes failed worker runs, counting only status "done"', () => {
+  const reviews = [review({ id: 'r1', createdAt: '2026-01-01T00:10:00.000Z' })];
+  const runs = [
+    run({ id: 'w1', createdAt: '2026-01-01T00:20:00.000Z' }), // done
+    run({ id: 'w2', createdAt: '2026-01-01T00:30:00.000Z' }), // done
+    run({
+      id: 'w3',
+      status: 'failed',
+      createdAt: '2026-01-01T00:40:00.000Z',
+    }), // failed worker run after the review — must be excluded
+  ];
+  const counters = computeRetryCounters(true, reviews, runs);
+  assert.equal(counters.workSinceLastReview, 2);
+});
+
+test('noProgressRepeats counts trailing worker runs with an identical, non-empty edit signature', () => {
+  const reviews = [review({ id: 'r1', createdAt: '2026-01-01T00:10:00.000Z' })];
+  const repeatedEdit = {
+    name: 'edit_file',
+    input: { path: 'foo.ts', content: 'same edit every time' },
+    output: '',
+    at: '2026-01-01T00:00:00.000Z',
+  };
+  const runs = [
+    run({
+      id: 'w1',
+      createdAt: '2026-01-01T00:20:00.000Z',
+      toolCalls: [repeatedEdit],
+    }),
+    run({
+      id: 'w2',
+      createdAt: '2026-01-01T00:30:00.000Z',
+      toolCalls: [repeatedEdit],
+    }),
+  ];
+  const counters = computeRetryCounters(true, reviews, runs);
+  assert.equal(counters.noProgressRepeats, 2);
+});
+
 test('consecutiveFailedRuns counts only the trailing run of failures', () => {
   const runs = [
     run({ id: 'a', status: 'failed', createdAt: '2026-01-01T00:01:00.000Z' }),

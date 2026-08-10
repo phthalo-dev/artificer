@@ -142,7 +142,7 @@ List all workstreams.
 
 #### `GET /api/workstreams/:id`
 
-Full workstream detail including tasks, reviews, plan, runs, usage summary, and call tree.
+Full workstream detail including tasks, reviews, plan, runs, usage summary, retry-counter progress, and call tree.
 
 **Response** — `200 OK`
 
@@ -157,6 +157,14 @@ Full workstream detail including tasks, reviews, plan, runs, usage summary, and 
     "total": { "inputTokens": 0, "outputTokens": 0, "costDollars": 0 },
     "byTask": { "<taskId>": { ... } },
     "byRole": { "<role>": { ... } }
+  },
+  "progress": {
+    "reviewCycles": { "count": 0, "max": 3 },
+    "workerRunsSinceReview": { "count": 0, "max": 3 },
+    "noProgressRepeats": { "count": 0, "max": 2 },
+    "consecutiveFailedRuns": { "count": 0, "max": 3 },
+    "plannerAttempts": { "count": 0, "max": 3 },
+    "totalRuns": { "count": 0, "max": 60 }
   },
   "tree": [ ... ]
 }
