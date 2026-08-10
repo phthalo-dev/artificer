@@ -442,6 +442,14 @@ export const mockWorkstreamDetails: Record<string, WorkstreamDetail> = {
 5. Add integration tests for rotation + revocation`,
     runs: wsAuthRuns,
     tree: buildTree(wsAuthRuns),
+    progress: {
+      reviewCycles: { count: 1, max: 3 },
+      workerRunsSinceReview: { count: 2, max: 3 },
+      noProgressRepeats: { count: 0, max: 2 },
+      consecutiveFailedRuns: { count: 0, max: 3 },
+      plannerAttempts: { count: 0, max: 3 },
+      totalRuns: { count: wsAuthRuns.length, max: 20 },
+    },
     usage: {
       total: summarizeRuns(wsAuthRuns),
       byRole: byRole(wsAuthRuns),
@@ -466,6 +474,14 @@ export const mockWorkstreamDetails: Record<string, WorkstreamDetail> = {
     plan: null,
     runs: [],
     tree: [],
+    progress: {
+      reviewCycles: { count: 0, max: 3 },
+      workerRunsSinceReview: { count: 0, max: 3 },
+      noProgressRepeats: { count: 0, max: 2 },
+      consecutiveFailedRuns: { count: 0, max: 3 },
+      plannerAttempts: { count: 0, max: 3 },
+      totalRuns: { count: 0, max: 20 },
+    },
     usage: {
       total: usage({
         inputTokens: 4200,
@@ -501,6 +517,14 @@ export const mockWorkstreamDetails: Record<string, WorkstreamDetail> = {
     plan: null,
     runs: [],
     tree: [],
+    progress: {
+      reviewCycles: { count: 0, max: 3 },
+      workerRunsSinceReview: { count: 0, max: 3 },
+      noProgressRepeats: { count: 0, max: 2 },
+      consecutiveFailedRuns: { count: 0, max: 3 },
+      plannerAttempts: { count: 0, max: 3 },
+      totalRuns: { count: 0, max: 20 },
+    },
     usage: {
       total: usage({
         inputTokens: 0,
