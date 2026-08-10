@@ -60,6 +60,33 @@ Set `BASETEN_API_KEY` in your environment (or platform secrets). The `baseten-op
 
 **Poolside Laguna S** weights are released under [OpenMDW-1.1](https://poolside.ai/). OpenMDW restricts certain use cases (including training competing models on outputs). Confirm your workload complies before relying on `laguna-s-2.1-free` at scale.
 
+## Validation checklist
+
+- [x] `pnpm --filter @artificer-ai/runtime test` passes (450/450, 2026-08-09)
+- [x] `pnpm --filter @artificer-ai/runtime models` lists new Zen entries (`north-mini-code-free`, `laguna-s-2.1-free`, `kimi-k3`) and Baseten slugs (`thinkingmachines/inkling`, `moonshotai/Kimi-K3`)
+- [ ] Multi-tool smoke test passes for `north-mini-code-free` — see [Manual smoke test](#manual-smoke-test) below
+- [ ] Multi-tool smoke test passes for `laguna-s-2.1-free` — see [Manual smoke test](#manual-smoke-test) below
+- [ ] (Optional) DeepSWE mini bench run recorded under `bench/results/open-weights-economy/`
+
+### Manual smoke test
+
+Start the runtime with the open-weights preset:
+
+```bash
+cd packages/runtime
+MODEL_PRESET=open-weights-economy LLM_BASE_URL=https://opencode.ai/zen/v1 pnpm dev
+```
+
+POST a workstream task that requires **3+ tool calls** (for example: "read package.json, read src/llm/catalog.ts, and list which models are missing from the catalog"). Inspect run logs for:
+
+- [ ] No 400 errors mentioning `reasoning` or `reasoning_effort`
+- [ ] Tool loop completes without `truncated: true` on first iteration
+- [ ] Quality does not visibly degrade between tool call 1 and tool call 3
+
+Repeat with `north-mini-code-free` as an explicit `LLM_MODEL` override, then again with `laguna-s-2.1-free`.
+
+**Minimal API probe (2026-08-09):** `laguna-s-2.1-free` via Zen returned HTTP 200 with `reasoning_effort: high` (no 400). `north-mini-code-free` returned upstream 401 from the Cohere provider on Zen — reasoning field validation was inconclusive; retry when Zen/Cohere auth is resolved.
+
 ## Further reading
 
 - [Poolside](https://poolside.ai/)
