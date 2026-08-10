@@ -2,13 +2,14 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { TASKS_DIR } from './config.js';
 import { loadDeepSweInstances } from './deepswe.js';
+import { loadGreenfieldInstances } from './greenfield.js';
 import { loadInstances } from './dataset.js';
 import type { BenchInstance, SuiteDefinition } from './types.js';
 
 export interface SuiteCatalogEntry {
   id: string;
   path: string;
-  kind: 'swebench' | 'deepswe';
+  kind: 'swebench' | 'deepswe' | 'greenfield';
   name: string;
   description?: string;
   taskCount: number;
@@ -21,7 +22,7 @@ export async function readSuite(suitePath: string): Promise<SuiteDefinition> {
   return JSON.parse(raw) as SuiteDefinition;
 }
 
-export function suiteKind(suite: SuiteDefinition): 'swebench' | 'deepswe' {
+export function suiteKind(suite: SuiteDefinition): 'swebench' | 'deepswe' | 'greenfield' {
   return suite.kind ?? 'swebench';
 }
 
@@ -38,6 +39,9 @@ export async function loadSuiteInstances(
   if (kind === 'deepswe') {
     const instances = await loadDeepSweInstances(instanceIds);
     return instances;
+  }
+  if (kind === 'greenfield') {
+    return loadGreenfieldInstances(instanceIds);
   }
   if (!suite.dataset || !suite.split) {
     throw new Error('SWE-bench suite requires dataset and split fields');
@@ -70,7 +74,12 @@ export async function listSuiteCatalog(): Promise<SuiteCatalogEntry[]> {
       description: suite.description,
       taskCount: suite.instanceIds.length,
       runCommand: `pnpm bench --suite tasks/${file}`,
-      evalCommand: kind === 'deepswe' ? 'pnpm bench:eval:deepswe' : 'pnpm bench:eval',
+      evalCommand:
+        kind === 'deepswe'
+          ? 'pnpm bench:eval:deepswe'
+          : kind === 'greenfield'
+            ? 'pnpm bench:eval:greenfield'
+            : 'pnpm bench:eval',
     });
   }
   return entries;
