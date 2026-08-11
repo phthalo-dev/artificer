@@ -122,6 +122,16 @@ export interface WorkstreamFacts {
   noProgressRepeats: number;
   /** Whether changes have been pushed and a PR opened. */
   prSubmitted: boolean;
+  /**
+   * Whether a submit-PR step should ever run for this workstream. False for
+   * grading-only workstreams (the bench harness) where correctness is judged
+   * from the local patch/working tree, never a live push — SUBMIT_TASK's
+   * push/fork/gh-pr-create instructions have no legitimate target there and
+   * previously caused workers to loop retrying against fixture repos with no
+   * real remote (or, worse, a same-named real repo on the operator's own
+   * GitHub account).
+   */
+  submitPr: boolean;
   /** Total runs in this workstream (drives the hard run cap). */
   totalRuns: number;
   /** Hard per-workstream run cap. */
@@ -169,7 +179,7 @@ export function nextWorkstreamAction(f: WorkstreamFacts): WorkstreamAction {
   // patchPresent so a committed (clean) working tree doesn't re-trigger
   // implementation after the submit worker commits the change.
   if (f.lastReviewApproved === true) {
-    if (f.hasRepoUrl && !f.prSubmitted) {
+    if (f.hasRepoUrl && f.submitPr && !f.prSubmitted) {
       return { kind: 'dispatch', role: 'worker', task: SUBMIT_TASK };
     }
     return { kind: 'done' };

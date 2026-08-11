@@ -328,8 +328,10 @@ export async function executeCall(
         ? `${roleDef.system(config.agentName)}\n\n${config.globalInstructions}`
         : roleDef.system(config.agentName);
 
+      const modelId = run.model ?? config.model;
       const result = await runToolLoop({
-        model: resolveModel(run.model ?? config.model),
+        model: resolveModel(modelId),
+        modelId,
         system,
         userMessage,
         tools,

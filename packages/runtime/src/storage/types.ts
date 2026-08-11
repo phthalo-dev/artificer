@@ -42,6 +42,12 @@ export interface Workstream {
   repoUrl?: string;
   /** Optional base commit to check out after cloning (bench / SWE tasks). */
   baseCommit?: string;
+  /**
+   * Whether the workstream should push/open a PR after review approval.
+   * Defaults to true; the bench harness sets this false for every suite,
+   * since correctness is graded from the local patch, never a live push.
+   */
+  submitPr?: boolean;
   createdAt: string;
   updatedAt: string;
 }

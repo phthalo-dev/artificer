@@ -1,0 +1,5 @@
+{
+  "task_id": "greenfield-lru-cache",
+  "display_title": "Build an LRU cache and a TTL cache",
+  "test_command": "node --test tests/*.test.js"
+}

@@ -60,6 +60,7 @@ const createWorkstreamSchema = z.object({
   repoUrl: z.string().min(1).optional(),
   baseCommit: z.string().min(1).optional(),
   autostart: z.boolean().optional(),
+  submitPr: z.boolean().optional(),
 });
 
 const startWorkstreamSchema = z.object({

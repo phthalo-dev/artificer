@@ -223,6 +223,26 @@ const ENTRIES: CatalogEntry[] = [
     pricing: price(0.95, 4, 0.16),
   },
   {
+    id: 'kimi-k2.7-code',
+    npm: '@ai-sdk/openai-compatible',
+    pricing: price(0.95, 4, 0.19),
+  },
+  {
+    id: 'kimi-k3',
+    npm: '@ai-sdk/openai-compatible',
+    pricing: price(3, 15, 0.3),
+  },
+  {
+    id: 'laguna-s-2.1-free',
+    npm: '@ai-sdk/openai-compatible',
+    pricing: FREE,
+  },
+  {
+    id: 'north-mini-code-free',
+    npm: '@ai-sdk/openai-compatible',
+    pricing: FREE,
+  },
+  {
     id: 'deepseek-v4-pro',
     npm: '@ai-sdk/openai-compatible',
     pricing: price(1.74, 3.48, 0.0145),
@@ -259,6 +279,23 @@ const ENTRIES: CatalogEntry[] = [
     npm: '@ai-sdk/openai-compatible',
     pricing: FREE,
   },
+
+  // --- Baseten Model API slugs (https://inference.baseten.co/v1) ---
+  {
+    id: 'thinkingmachines/inkling',
+    npm: '@ai-sdk/openai-compatible',
+    pricing: price(1, 4.05, 0.17), // estimate — verify against Baseten /v1/models
+  },
+  {
+    id: 'thinkingmachines/inkling-small',
+    npm: '@ai-sdk/openai-compatible',
+    pricing: price(0.3, 1.2, 0.06), // estimate — verify against Baseten /v1/models
+  },
+  {
+    id: 'moonshotai/Kimi-K3',
+    npm: '@ai-sdk/openai-compatible',
+    pricing: price(3, 15, 0.3), // estimate — verify against Baseten /v1/models
+  },
 ];
 
 export const MODEL_CATALOG: Record<string, CatalogEntry> = Object.fromEntries(
@@ -284,6 +321,14 @@ export function inferPackage(modelId: string): LlmSdkPackage {
   }
   if (id.startsWith('gemini')) {
     return '@ai-sdk/google';
+  }
+  if (
+    id.includes('/') ||
+    id.startsWith('moonshotai/') ||
+    id.startsWith('thinkingmachines/') ||
+    id.startsWith('poolside/')
+  ) {
+    return '@ai-sdk/openai-compatible';
   }
   return '@ai-sdk/openai-compatible';
 }

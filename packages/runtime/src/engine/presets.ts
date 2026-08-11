@@ -168,6 +168,37 @@ export const MODEL_PRESETS: ModelPreset[] = [
     },
     roleTiers: ASYNC_ECONOMY_ROLES,
   },
+  {
+    id: 'open-weights-economy',
+    name: 'Open weights economy',
+    description:
+      'Zen-hosted open-weight stack: North Mini Code and Laguna S free tiers for bulk work, Kimi K3 for escalation. Requires LLM_BASE_URL=https://opencode.ai/zen/v1.',
+    tiers: {
+      low: 'north-mini-code-free',
+      medium: 'laguna-s-2.1-free',
+      high: 'kimi-k3',
+    },
+    roleTiers: {
+      ...ASYNC_ECONOMY_ROLES,
+      reviewer: 'medium',
+    },
+  },
+  {
+    id: 'baseten-open-weights',
+    name: 'Baseten open weights',
+    description:
+      'Baseten Model APIs: Inkling Small workers, Inkling coordination, Kimi K3 escalation. Requires LLM_BASE_URL=https://inference.baseten.co/v1 and BASETEN_API_KEY.',
+    tiers: {
+      low: 'thinkingmachines/inkling-small',
+      medium: 'thinkingmachines/inkling',
+      high: 'moonshotai/Kimi-K3',
+    },
+    roleTiers: {
+      ...ASYNC_ECONOMY_ROLES,
+      orchestrator: 'medium',
+      reviewer: 'medium',
+    },
+  },
 ];
 
 export const DEFAULT_PRESET_ID = 'async-economy';

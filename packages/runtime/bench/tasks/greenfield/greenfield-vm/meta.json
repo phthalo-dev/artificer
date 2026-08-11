@@ -1,0 +1,5 @@
+{
+  "task_id": "greenfield-vm",
+  "display_title": "Build a tiny stack-based VM: tokenizer, parser, interpreter",
+  "test_command": "node --test tests/*.test.js"
+}

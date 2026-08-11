@@ -1,7 +1,8 @@
+import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import 'dotenv/config';
-import { type BenchConfig, loadBenchConfig } from './config.js';
+import { BENCH_DIR, type BenchConfig, loadBenchConfig, RUNTIME_ROOT } from './config.js';
 import { formatUsd, sumUsage } from './cost.js';
 import { archiveBenchRun } from './history.js';
 import { runInstance } from './run-instance.js';
@@ -29,10 +30,61 @@ async function selectInstances(
   return { suite, instances: limited };
 }
 
-function evalHint(kind: ReturnType<typeof suiteKind>): string {
-  return kind === 'deepswe'
-    ? '`pnpm bench:eval:deepswe`, then `pnpm bench:report`'
-    : '`pnpm bench:eval`, then `pnpm bench:report`';
+async function fileExists(p: string): Promise<boolean> {
+  try {
+    await fs.access(p);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+function runStep(
+  command: string,
+  args: string[],
+  env: NodeJS.ProcessEnv,
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const child = spawn(command, args, { cwd: RUNTIME_ROOT, env, stdio: 'inherit' });
+    child.on('error', reject);
+    child.on('close', (code) => {
+      if (code === 0) resolve();
+      else reject(new Error(`${command} ${args.join(' ')} exited with code ${code}`));
+    });
+  });
+}
+
+/** Grade correctness and (re)generate the report, right after the driver run finishes. */
+async function gradeAndReport(
+  config: BenchConfig,
+  kind: ReturnType<typeof suiteKind>,
+): Promise<void> {
+  const runId = (config.modelName ?? 'artificer-bench').replace(/\//g, '-');
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    BENCH_RESULTS_DIR: config.resultsDir,
+    RUN_ID: runId,
+  };
+
+  // eslint-disable-next-line no-console
+  console.log(`\n[bench] grading with the ${kind} evaluator...`);
+  if (kind === 'swebench') {
+    const venvPython = path.join(BENCH_DIR, 'eval', '.venv', 'bin', 'python');
+    const python = (await fileExists(venvPython)) ? venvPython : 'python';
+    await runStep('bash', [path.join(BENCH_DIR, 'eval', 'run-eval.sh')], {
+      ...env,
+      RESULTS_DIR: config.resultsDir,
+      PYTHON: python,
+    });
+  } else if (kind === 'deepswe') {
+    await runStep('bash', [path.join(BENCH_DIR, 'eval', 'run-deepswe-eval.sh')], env);
+  } else {
+    await runStep('bash', [path.join(BENCH_DIR, 'eval', 'run-greenfield-eval.sh')], env);
+  }
+
+  // eslint-disable-next-line no-console
+  console.log(`\n[bench] writing report...`);
+  await runStep('pnpm', ['exec', 'tsx', path.join(BENCH_DIR, 'src', 'report.ts')], env);
 }
 
 /** Warn when Go gateway is paired with models that only exist on standard Zen. */
@@ -149,10 +201,9 @@ async function main(): Promise<void> {
 
   printSummary(attempts);
   // eslint-disable-next-line no-console
-  console.log(
-    `\n[bench] wrote results to ${config.resultsDir}\n` +
-      `[bench] next: grade correctness with ${evalHint(kind)}`,
-  );
+  console.log(`\n[bench] wrote results to ${config.resultsDir}`);
+
+  await gradeAndReport(config, kind);
 }
 
 async function writeArtifacts(
