@@ -1,7 +1,7 @@
-import { createTypeStyles, cx as typestylesCx } from 'typestyles';
+import { createTypeStyles, cx } from 'typestyles';
 
 export const { styles, tokens, global } = createTypeStyles({
   scopeId: '@artificer-ai/ui',
 });
 
-export { typestylesCx as cx };
+export { cx };
