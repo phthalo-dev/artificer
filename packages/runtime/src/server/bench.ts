@@ -51,7 +51,7 @@ interface RunConfig {
   modelName?: string;
   instanceTimeoutMs?: number;
   maxRunsPerWorkstream?: number;
-  suiteKind?: 'swebench' | 'deepswe';
+  suiteKind?: 'swebench' | 'deepswe' | 'greenfield';
   suiteName?: string;
   suiteDescription?: string | null;
   suitePath?: string;
@@ -60,7 +60,7 @@ interface RunConfig {
 interface BenchHistorySnapshot {
   id: string;
   archivedAt: string;
-  suiteKind: 'swebench' | 'deepswe';
+  suiteKind: 'swebench' | 'deepswe' | 'greenfield';
   suiteName: string;
   modelName: string;
   instanceCount: number;
@@ -73,7 +73,7 @@ interface BenchHistorySnapshot {
 
 export interface BenchSuiteCatalogEntry {
   id: string;
-  kind: 'swebench' | 'deepswe';
+  kind: 'swebench' | 'deepswe' | 'greenfield';
   name: string;
   description?: string;
   taskCount: number;
@@ -124,7 +124,7 @@ export interface BenchOverview {
   graded: boolean;
   modelName: string | null;
   models: RunConfig['models'] | null;
-  suiteKind: 'swebench' | 'deepswe' | null;
+  suiteKind: 'swebench' | 'deepswe' | 'greenfield' | null;
   suiteName: string | null;
   suiteDescription: string | null;
   summary: {
@@ -271,7 +271,7 @@ export async function readBenchSuites(): Promise<BenchSuiteCatalogEntry[]> {
       const suite = JSON.parse(
         await fs.readFile(path.join(TASKS_DIR, file), 'utf8'),
       ) as {
-        kind?: 'swebench' | 'deepswe';
+        kind?: 'swebench' | 'deepswe' | 'greenfield';
         name?: string;
         description?: string;
         instanceIds?: string[];
@@ -286,7 +286,11 @@ export async function readBenchSuites(): Promise<BenchSuiteCatalogEntry[]> {
         taskCount: suite.instanceIds?.length ?? 0,
         runCommand: `pnpm bench --suite tasks/${file}`,
         evalCommand:
-          kind === 'deepswe' ? 'pnpm bench:eval:deepswe' : 'pnpm bench:eval',
+          kind === 'deepswe'
+            ? 'pnpm bench:eval:deepswe'
+            : kind === 'greenfield'
+              ? 'pnpm bench:eval:greenfield'
+              : 'pnpm bench:eval',
       });
     } catch {
       // skip invalid suite files

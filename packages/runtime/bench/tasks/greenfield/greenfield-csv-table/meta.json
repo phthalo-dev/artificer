@@ -1,0 +1,5 @@
+{
+  "task_id": "greenfield-csv-table",
+  "display_title": "Build a CSV parser and tabular query utility",
+  "test_command": "node --test tests/*.test.js"
+}

@@ -1,0 +1,5 @@
+{
+  "task_id": "greenfield-job-queue",
+  "display_title": "Build a job queue with a retry helper",
+  "test_command": "node --test tests/*.test.js"
+}

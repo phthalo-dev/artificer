@@ -8,7 +8,7 @@ import { suiteKind, suiteName } from './suites.js';
 export interface BenchHistorySnapshot {
   id: string;
   archivedAt: string;
-  suiteKind: 'swebench' | 'deepswe';
+  suiteKind: 'swebench' | 'deepswe' | 'greenfield';
   suiteName: string;
   suitePath: string;
   modelName: string;

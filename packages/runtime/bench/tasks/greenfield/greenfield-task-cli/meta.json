@@ -1,0 +1,5 @@
+{
+  "task_id": "greenfield-task-cli",
+  "display_title": "Build a task-tracker CLI with persistence",
+  "test_command": "node --test tests/*.test.js"
+}

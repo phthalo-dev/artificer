@@ -105,6 +105,8 @@ Pass a preset ID as the `preset` field to select a model assignment profile on s
 | `async-slow` | Async slow | Same role map as async economy but kimi-k2.6 as the workhorse — slower, still cheap on DeepSWE. |
 | `quality-first` | Quality first | Latency/quality profile. Haiku comms, Sonnet coordination, Opus for planning and coding. |
 | `bench-budget` | Bench budget | Previous bench experiment stack (nano / gemini-3-flash / gpt-5.4-mini) for A/B comparison. |
+| `open-weights-economy` | Open weights economy | Zen-hosted open-weight stack: North Mini Code and Laguna S free tiers for bulk work, Kimi K3 for escalation. Requires `LLM_BASE_URL=https://opencode.ai/zen/v1`. |
+| `baseten-open-weights` | Baseten open weights | Baseten Model APIs: Inkling Small workers, Inkling coordination, Kimi K3 escalation. Requires `LLM_BASE_URL=https://inference.baseten.co/v1` and `BASETEN_API_KEY`. |
 
 **Go presets (OpenCode Zen `/zen/go/v1`):**
 

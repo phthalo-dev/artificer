@@ -257,6 +257,45 @@ export function buildTaskMessage(
     ].join('\n');
   }
 
+  if (instance.suite === 'greenfield') {
+    if (options?.preflight) {
+      return [
+        header,
+        '',
+        `Build the feature described below from scratch in ${instance.repo}.`,
+        '',
+        'The repository is already cloned at `repo/` and checked out at the base',
+        'commit. It is an empty scaffold: stub functions that throw "not implemented".',
+        'Implement every function so the full described behavior below is correct —',
+        'cover every case mentioned, not just the headline case. Grading tests are',
+        'supplied separately after you finish: do NOT create files under a `tests/`',
+        'directory and do not modify the `test` script in `package.json`. Do not open',
+        'a pull request; leave your implementation in the working tree.',
+        '',
+        instance.problem_statement,
+      ].join('\n');
+    }
+
+    return [
+      header,
+      '',
+      `Build the feature described below from scratch in ${instance.repo}.`,
+      '',
+      'Setup (do this first, exactly):',
+      `1. Clone ${repoUrl} into your workspace as \`repo\`.`,
+      `2. Check out the exact base commit ${instance.base_commit}.`,
+      '',
+      'The repository is an empty scaffold: stub functions that throw "not implemented".',
+      'Implement every function so the full described behavior below is correct —',
+      'cover every case mentioned, not just the headline case. Grading tests are',
+      'supplied separately after you finish: do NOT create files under a `tests/`',
+      'directory and do not modify the `test` script in `package.json`. Do not open',
+      'a pull request; leave your implementation in the working tree.',
+      '',
+      instance.problem_statement,
+    ].join('\n');
+  }
+
   if (options?.preflight) {
     return [
       header,
@@ -361,6 +400,11 @@ export async function runInstance(
       repoUrl,
       baseCommit: instance.base_commit,
       autostart: !config.preflightClone,
+      // Every bench suite grades from the local patch/predictions.jsonl, never
+      // a live push — the submit-PR step (push/fork/gh pr create) has no
+      // legitimate target here and previously caused workers to loop
+      // retrying against fixture repos with no real remote.
+      submitPr: false,
     });
     workstreamId = created.workstreamId;
     messageId = created.messageId;

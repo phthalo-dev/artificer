@@ -6,6 +6,7 @@ import path from 'node:path';
 import type { BenchConfig } from './config.js';
 import { RUNTIME_ROOT } from './config.js';
 import { RuntimeClient } from './client.js';
+import { sandboxGithubEnv } from './git-sandbox.js';
 
 export interface RuntimeHandle {
   client: RuntimeClient;
@@ -60,8 +61,8 @@ async function waitForHealth(
 /**
  * Spawns a fully isolated runtime for a single benchmark instance: a fresh
  * temp data dir, concurrency pinned to 1, resume disabled, and the configured
- * tier models. The agent's own credentials (LLM key, optional GITHUB_TOKEN)
- * are inherited from the parent environment / the runtime's .env.
+ * tier models. Also strips ambient GitHub credential access — see
+ * sandboxGithubEnv's doc comment.
  */
 export async function startRuntime(
   config: BenchConfig,
@@ -75,7 +76,7 @@ export async function startRuntime(
   const port = await getAvailablePort(config.runtimePort);
 
   const env: NodeJS.ProcessEnv = {
-    ...process.env,
+    ...(await sandboxGithubEnv(process.env, execDir)),
     ARTIFICER_EXEC_DIR: execDir,
     PORT: String(port),
     RUNTIME_CONCURRENCY: '1',

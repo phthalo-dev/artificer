@@ -1,0 +1,13 @@
+{
+  "kind": "greenfield",
+  "name": "Greenfield build mini (6 tasks)",
+  "description": "From-scratch multi-file build tasks, graded against hidden acceptance tests supplied only after implementation.",
+  "instanceIds": [
+    "greenfield-todo-store",
+    "greenfield-job-queue",
+    "greenfield-csv-table",
+    "greenfield-lru-cache",
+    "greenfield-rate-limiter",
+    "greenfield-text-template"
+  ]
+}

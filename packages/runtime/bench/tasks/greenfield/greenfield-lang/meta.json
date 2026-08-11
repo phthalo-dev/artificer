@@ -1,0 +1,5 @@
+{
+  "task_id": "greenfield-lang",
+  "display_title": "Build a tree-walking interpreter for a small language",
+  "test_command": "node --test tests/*.test.js"
+}

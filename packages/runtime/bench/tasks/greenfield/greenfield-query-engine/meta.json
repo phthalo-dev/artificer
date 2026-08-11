@@ -1,0 +1,5 @@
+{
+  "task_id": "greenfield-query-engine",
+  "display_title": "Build a tiny multi-table query engine with joins",
+  "test_command": "node --test tests/*.test.js"
+}

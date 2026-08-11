@@ -95,6 +95,7 @@ export class RuntimeClient {
     repoUrl?: string;
     baseCommit?: string;
     autostart?: boolean;
+    submitPr?: boolean;
   }): Promise<{ workstreamId: string; messageId: string }> {
     const res = await fetch(`${this.apiBase}/workstreams`, {
       method: 'POST',

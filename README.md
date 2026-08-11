@@ -74,7 +74,7 @@ pnpm ci:packages  # what CI runs: type-check, test, and build the publishable pa
 
 - [What is Artificer?](docs/introduction/what-is-artificer.md) / [How it works](docs/introduction/how-it-works.md)
 - [Quickstart](docs/getting-started/quickstart.md) / [Core concepts](docs/getting-started/core-concepts.md)
-- Guides: [agent identity setup](docs/guides/agent-identity-setup.md), [Slack & Discord](docs/guides/slack-discord-connections.md), [custom tools](docs/guides/writing-custom-tools.md), [custom channels](docs/guides/writing-custom-channels.md), [managing memories](docs/guides/managing-memories.md), [custom CLI executors](docs/guides/custom-cli-executor.md), [deploying to production](docs/guides/deploying-to-production.md)
+- Guides: [agent identity setup](docs/guides/agent-identity-setup.md), [writing good goals](docs/guides/writing-good-goals.md), [Slack & Discord](docs/guides/slack-discord-connections.md), [custom tools](docs/guides/writing-custom-tools.md), [custom channels](docs/guides/writing-custom-channels.md), [managing memories](docs/guides/managing-memories.md), [custom CLI executors](docs/guides/custom-cli-executor.md), [deploying to production](docs/guides/deploying-to-production.md)
 - Reference: [CLI](docs/reference/cli.md), [config](docs/reference/config.md), [env vars](docs/reference/env-vars.md), [HTTP API](docs/reference/api.md), [roles](docs/reference/roles.md)
 
 ## Deployment

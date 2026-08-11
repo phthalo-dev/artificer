@@ -19,6 +19,7 @@ Where a variable lists an "Alias", that alias exists for compatibility with earl
 | `RUNTIME_TIER_PLANNER` | No | `medium` | Override planner role model tier |
 | `RUNTIME_TIER_REVIEWER` | No | `low` | Override reviewer role model tier |
 | `RUNTIME_TIER_WORKER` | No | `medium` | Override worker role model tier |
+| `BASETEN_API_KEY` | For Baseten routes | — | API key for `https://inference.baseten.co/v1`; referenced by `quota.routes[].llm.apiKeyEnv` |
 
 ## GitHub identity
 
