@@ -1,0 +1,5 @@
+{
+  "name": "greenfield-hello-tool",
+  "private": true,
+  "type": "module"
+}

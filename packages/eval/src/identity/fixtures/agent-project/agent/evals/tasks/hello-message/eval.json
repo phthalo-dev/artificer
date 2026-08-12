@@ -1,0 +1,6 @@
+{
+  "id": "hello-message",
+  "title": "Hello",
+  "kind": "message",
+  "grade": { "type": "message-contains", "pattern": "preset" }
+}

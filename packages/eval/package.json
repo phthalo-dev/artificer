@@ -1,0 +1,49 @@
+{
+  "name": "@artificer-ai/eval",
+  "version": "0.1.0",
+  "description": "Artificer identity eval driver and maintainer bench harness",
+  "type": "module",
+  "engines": {
+    "node": ">=21"
+  },
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts",
+    "./bench": "./src/bench/main.ts"
+  },
+  "files": [
+    "dist",
+    "bench"
+  ],
+  "scripts": {
+    "build": "tsc",
+    "type-check": "tsc --noEmit",
+    "test": "node --import tsx --test \"src/**/*.test.ts\"",
+    "lint": "prettier --check \"src/**/*.ts\""
+  },
+  "dependencies": {
+    "@artificer-ai/runtime": "workspace:*",
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^20.11.5",
+    "tsx": "^4.19.2",
+    "typescript": "^5.3.3"
+  },
+  "publishConfig": {
+    "access": "public",
+    "main": "./dist/index.js",
+    "types": "./dist/index.d.ts",
+    "exports": {
+      ".": {
+        "types": "./dist/index.d.ts",
+        "import": "./dist/index.js"
+      },
+      "./bench": {
+        "types": "./dist/bench/main.d.ts",
+        "import": "./dist/bench/main.js"
+      }
+    }
+  }
+}

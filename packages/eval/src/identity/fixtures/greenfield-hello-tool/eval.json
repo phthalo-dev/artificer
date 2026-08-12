@@ -1,0 +1,10 @@
+{
+  "id": "greenfield-hello-tool",
+  "title": "Implement a hello function",
+  "kind": "greenfield",
+  "test_command": "node --test tests/*.test.js",
+  "grade": {
+    "type": "shell",
+    "command": "node --test tests/*.test.js"
+  }
+}
