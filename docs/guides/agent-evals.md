@@ -283,7 +283,7 @@ Use **`artificer eval`** for the day-to-day loop:
 edit identity → artificer eval run → review Benchmark UI → commit or revert
 ```
 
-Use **`pnpm bench`** only if you are developing Artificer itself and need SWE-bench/DeepSWE correctness signals. See [Runtime benchmarking harness](../../packages/runtime/bench/README.md) for maintainer usage.
+Use **`pnpm bench`** only if you are developing Artificer itself and need SWE-bench/DeepSWE correctness signals. The harness implementation lives in `@artificer-ai/eval` (`packages/eval/src/bench/`); task fixtures and results stay under `packages/runtime/bench/`. See [Runtime benchmarking harness](../../packages/runtime/bench/README.md) for maintainer usage.
 
 The underlying driver lives in `@artificer-ai/eval` — both paths share HTTP polling, cost collection, and report shapes. Consumer evals add identity loading and eval-mode guards; maintainer bench adds Docker-based SWE-bench grading and external-agent comparison.
 

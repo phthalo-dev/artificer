@@ -1,13 +1,15 @@
+import { createRequire } from 'node:module';
 import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import type { RoleName } from '@artificer-ai/runtime';
 import { DEFAULT_PRESET_ID, getPreset } from './presets.js';
-import type { RoleName } from '../../src/storage/types.js';
 
-const here = path.dirname(fileURLToPath(import.meta.url));
+const require = createRequire(import.meta.url);
 
-/** Repo paths derived relative to this file (bench/src). */
-export const BENCH_DIR = path.resolve(here, '..');
-export const RUNTIME_ROOT = path.resolve(BENCH_DIR, '..');
+/** Runtime package root — tasks/eval/results still live under packages/runtime/bench. */
+export const RUNTIME_ROOT = path.dirname(
+  require.resolve('@artificer-ai/runtime/package.json'),
+);
+export const BENCH_DIR = path.join(RUNTIME_ROOT, 'bench');
 export const TASKS_DIR = path.join(BENCH_DIR, 'tasks');
 export const RESULTS_DIR = path.join(BENCH_DIR, 'results');
 export const CACHE_DIR = path.join(TASKS_DIR, '.cache');

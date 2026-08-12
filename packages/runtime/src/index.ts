@@ -12,7 +12,12 @@ import { Store } from './storage/store.js';
 
 export { loadConfig, mergeWithDefinition } from './config.js';
 export { Engine } from './engine/engine.js';
-export { DEFAULT_PRESET_ID, getPreset, listPresets } from './engine/presets.js';
+export {
+  DEFAULT_PRESET_ID,
+  getPreset,
+  isPresetId,
+  listPresets,
+} from './engine/presets.js';
 export type { ModelPreset } from './engine/presets.js';
 export { Store } from './storage/store.js';
 export { createApp } from './server/app.js';

@@ -5,7 +5,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import 'dotenv/config';
 import { BENCH_DIR, RESULTS_DIR, resolveSuitePath } from './config.js';
-import { extractPatch } from './extract-patch.js';
+import { extractPatch } from '../driver/extract-patch.js';
 import { sandboxGithubEnv } from './git-sandbox.js';
 import { buildTaskMessage } from './run-instance.js';
 import { loadSuiteInstances, readSuite, suiteKind, suiteName } from './suites.js';
