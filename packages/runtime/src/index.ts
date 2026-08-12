@@ -73,7 +73,12 @@ export async function startRuntime(): Promise<void> {
   await store.init();
 
   const identity = config.identity
-    ? new IdentityGitSync(config.identityDir, config.identity, config.github)
+    ? new IdentityGitSync(
+        config.identityDir,
+        config.identity,
+        config.github,
+        Boolean(config.evalMode),
+      )
     : undefined;
   await identity?.init();
   const engine = new Engine(config, store, undefined, undefined, identity);
@@ -103,7 +108,11 @@ export async function startRuntime(): Promise<void> {
   console.log('[artificer-runtime] Schedule runner enabled');
 
   const pullIntervalMs = config.identity?.pullIntervalMs;
-  if (pullIntervalMs && engine.identity instanceof IdentityGitSync) {
+  if (
+    pullIntervalMs &&
+    engine.identity instanceof IdentityGitSync &&
+    !config.evalMode
+  ) {
     const scheduleNextPull = () => {
       setTimeout(() => {
         runIdentityPullCycle({

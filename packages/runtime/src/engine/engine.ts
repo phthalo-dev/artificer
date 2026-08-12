@@ -617,6 +617,7 @@ export class Engine implements EngineApi {
    * when identity.autoCommit is true.
    */
   async persistConfig(): Promise<void> {
+    if (this.config.evalMode) return;
     const configPath = path.join(
       this.config.identityDir,
       'artificer.config.json',

@@ -39,6 +39,31 @@ test('init scaffolds expected files and directories', () => {
   assert.ok(fs.existsSync(path.join(dir, 'agent', 'channels')));
   assert.ok(fs.existsSync(path.join(dir, 'agent', 'skills')));
   assert.ok(fs.existsSync(path.join(dir, 'identity', 'memories')));
+  assert.ok(fs.existsSync(path.join(dir, 'agent', 'evals', 'suites', 'smoke.json')));
+  assert.ok(
+    fs.existsSync(
+      path.join(dir, 'agent', 'evals', 'tasks', 'status-preset-query', 'prompt.md'),
+    ),
+  );
+  assert.ok(
+    fs.existsSync(
+      path.join(
+        dir,
+        'agent',
+        'evals',
+        'tasks',
+        'implement-hello-tool',
+        'fixture',
+        'src',
+        'hello.js',
+      ),
+    ),
+  );
+  assert.ok(
+    fs.existsSync(
+      path.join(dir, 'agent', 'evals', 'tasks', 'workstream-smoke', 'eval.json'),
+    ),
+  );
 
   const written = JSON.parse(
     fs.readFileSync(path.join(dir, 'artificer.config.json'), 'utf8'),

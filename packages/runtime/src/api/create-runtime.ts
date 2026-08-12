@@ -93,7 +93,12 @@ export async function createRuntime(
   const store = new Store(execDir);
   await store.init();
   const identity = config.identity
-    ? new IdentityGitSync(rootDir, config.identity, config.github)
+    ? new IdentityGitSync(
+        rootDir,
+        config.identity,
+        config.github,
+        Boolean(config.evalMode),
+      )
     : new IdentityStore(rootDir);
   await identity.init();
 
@@ -101,7 +106,11 @@ export async function createRuntime(
 
   const channels = await loadChannelsFromDisk(manifest.channels);
 
-  const memoryService = new WorkstreamMemoryService(identity, store);
+  const memoryService = new WorkstreamMemoryService(
+    identity,
+    store,
+    Boolean(config.evalMode),
+  );
   const engine = new Engine(config, store, memoryService, registry, identity);
   const scheduleRunner = createScheduleRunnerForEngine(engine);
   const app = createApp(engine, { identity, channels });
@@ -118,7 +127,11 @@ export async function createRuntime(
       const p = port ?? config.port;
       scheduleRunner.start();
       const pullIntervalMs = config.identity?.pullIntervalMs;
-      if (pullIntervalMs && identity instanceof IdentityGitSync) {
+      if (
+        pullIntervalMs &&
+        identity instanceof IdentityGitSync &&
+        !config.evalMode
+      ) {
         const scheduleNextPull = () => {
           setTimeout(() => {
             runIdentityPullCycle({

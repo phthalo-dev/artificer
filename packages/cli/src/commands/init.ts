@@ -383,6 +383,115 @@ const DOCKERIGNORE_TEMPLATE = `node_modules
 *.log
 `;
 
+/** Scaffold Pack A smoke evals under agent/evals/. */
+function writePackAEvals(dir: string): void {
+  const suitesDir = path.join(dir, 'agent', 'evals', 'suites');
+  const tasksDir = path.join(dir, 'agent', 'evals', 'tasks');
+  fs.mkdirSync(suitesDir, { recursive: true });
+
+  fs.writeFileSync(
+    path.join(suitesDir, 'smoke.json'),
+    JSON.stringify(
+      {
+        name: 'Smoke',
+        description: 'Fast regression checks for a new agent.',
+        taskIds: [
+          'status-preset-query',
+          'implement-hello-tool',
+          'workstream-smoke',
+        ],
+      },
+      null,
+      2,
+    ) + '\n',
+  );
+
+  const presetDir = path.join(tasksDir, 'status-preset-query');
+  fs.mkdirSync(presetDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(presetDir, 'eval.json'),
+    JSON.stringify(
+      {
+        id: 'status-preset-query',
+        title: 'Report current model preset',
+        kind: 'message',
+        grade: { type: 'message-contains', pattern: 'preset' },
+      },
+      null,
+      2,
+    ) + '\n',
+  );
+  fs.writeFileSync(
+    path.join(presetDir, 'prompt.md'),
+    'What model preset is this agent using?\n',
+  );
+
+  const helloDir = path.join(tasksDir, 'implement-hello-tool');
+  fs.mkdirSync(path.join(helloDir, 'fixture', 'src'), { recursive: true });
+  fs.mkdirSync(path.join(helloDir, 'hidden', 'tests'), { recursive: true });
+  fs.writeFileSync(
+    path.join(helloDir, 'eval.json'),
+    JSON.stringify(
+      {
+        id: 'implement-hello-tool',
+        title: 'Implement a hello function',
+        kind: 'greenfield',
+        test_command: 'node --test tests/*.test.js',
+        grade: {
+          type: 'shell',
+          command: 'node --test tests/*.test.js',
+        },
+      },
+      null,
+      2,
+    ) + '\n',
+  );
+  fs.writeFileSync(
+    path.join(helloDir, 'prompt.md'),
+    'Implement `hello(name)` in `src/hello.js` so it returns `Hello, ${name}!`.\n',
+  );
+  fs.writeFileSync(
+    path.join(helloDir, 'fixture', 'package.json'),
+    JSON.stringify({ name: 'hello-tool', type: 'module', private: true }, null, 2) +
+      '\n',
+  );
+  fs.writeFileSync(
+    path.join(helloDir, 'fixture', 'src', 'hello.js'),
+    "export function hello(_name) {\n  throw new Error('Not implemented');\n}\n",
+  );
+  fs.writeFileSync(
+    path.join(helloDir, 'hidden', 'tests', 'hello.test.js'),
+    `import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { hello } from '../src/hello.js';
+
+test('hello greets the supplied name', () => {
+  assert.equal(hello('Ada'), 'Hello, Ada!');
+});
+`,
+  );
+
+  const wsDir = path.join(tasksDir, 'workstream-smoke');
+  fs.mkdirSync(wsDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(wsDir, 'eval.json'),
+    JSON.stringify(
+      {
+        id: 'workstream-smoke',
+        title: 'Eval Smoke',
+        kind: 'workstream',
+        grade: { type: 'workstream-status', expect: ['done'] },
+      },
+      null,
+      2,
+    ) + '\n',
+  );
+  fs.writeFileSync(
+    path.join(wsDir, 'prompt.md'),
+    'Create a short note file named eval-smoke.txt in the workspace that says "ok", then finish the workstream as done.\n',
+  );
+}
+
 export function init(name: string, targetDir?: string): void {
   const dir = targetDir ?? path.resolve(process.cwd(), name);
 
@@ -394,6 +503,7 @@ export function init(name: string, targetDir?: string): void {
   fs.mkdirSync(path.join(dir, 'agent', 'channels'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'agent', 'skills'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'identity', 'memories'), { recursive: true });
+  writePackAEvals(dir);
 
   fs.writeFileSync(
     path.join(dir, 'artificer.config.json'),
