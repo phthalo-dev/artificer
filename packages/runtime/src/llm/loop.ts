@@ -170,13 +170,11 @@ export async function runToolLoop(
         // system prompt. Both are stable across steps within a call and
         // across calls for the same role, so this turns repeated re-sends
         // into cheap cache reads. Other providers ignore this namespace.
-        ...(modelId
-          ? { providerOptions: mergeProviderOptions(modelId) }
+        providerOptions: modelId
+          ? mergeProviderOptions(modelId)
           : {
-              providerOptions: {
-                anthropic: { cacheControl: { type: 'ephemeral' } },
-              },
-            }),
+              anthropic: { cacheControl: { type: 'ephemeral' as const } },
+            },
       },
       messages,
       tools: tools.length > 0 ? sdkTools : undefined,

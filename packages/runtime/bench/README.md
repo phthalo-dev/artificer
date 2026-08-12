@@ -1,5 +1,9 @@
 # Runtime benchmarking harness (SWE-bench-style)
 
+> **Consumers:** for identity-based agent evals (`agent/evals/`, `artificer eval run`),
+> see [Agent evals](../../../docs/guides/agent-evals.md). This README covers the
+> **maintainer** SWE-bench / DeepSWE harness that lives under `packages/runtime/bench/`.
+
 Drives the `@artificer-ai/runtime` agent over HTTP against a curated suite of real
 repo-fixing tasks, then measures **correctness** (does the agent's patch make
 the failing tests pass) and **cost/efficiency** (tokens, USD, LLM call count)

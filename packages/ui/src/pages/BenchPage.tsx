@@ -79,37 +79,35 @@ export function BenchPage() {
         <Title order={3}>Benchmark</Title>
         <Alert
           color="gray"
-          title="No benchmark results yet"
+          title="No eval results yet"
           icon={<IconFlask size={18} />}
         >
-          Run a suite from <Code>packages/runtime</Code>:
+          Run from your agent project root:
           <Stack gap={6} mt={4}>
-            {(
-              suites ?? [
-                {
-                  id: 'mini-suite',
-                  runCommand: 'pnpm bench --suite tasks/mini-suite.json',
-                  evalCommand: 'pnpm bench:eval',
-                  name: 'SWE-bench Lite mini',
-                  kind: 'swebench' as const,
-                  taskCount: 6,
-                },
-                {
-                  id: 'deepswe-mini-suite',
-                  runCommand:
-                    'pnpm bench --suite tasks/deepswe-mini-suite.json',
-                  evalCommand: 'pnpm bench:eval:deepswe',
-                  name: 'DeepSWE mini',
-                  kind: 'deepswe' as const,
-                  taskCount: 6,
-                },
-              ]
-            ).map((s) => (
-              <Text key={s.id} ff="monospace" size="sm">
-                {s.runCommand}
-              </Text>
-            ))}
+            <Text ff="monospace" size="sm">
+              artificer eval run
+            </Text>
+            <Text ff="monospace" size="sm">
+              artificer eval run --suite smoke
+            </Text>
+            <Text ff="monospace" size="sm">
+              artificer eval list
+            </Text>
           </Stack>
+          {suites && suites.length > 0 && (
+            <>
+              <Text size="sm" mt="md" fw={600}>
+                Available suites
+              </Text>
+              <Stack gap={6} mt={4}>
+                {suites.map((s) => (
+                  <Text key={s.id} ff="monospace" size="sm">
+                    {s.runCommand}
+                  </Text>
+                ))}
+              </Stack>
+            </>
+          )}
         </Alert>
       </Stack>
     );

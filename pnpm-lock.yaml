@@ -58,6 +58,9 @@ importers:
 
   packages/cli:
     dependencies:
+      '@artificer-ai/eval':
+        specifier: workspace:*
+        version: link:../eval
       '@artificer-ai/runtime':
         specifier: workspace:*
         version: link:../runtime
@@ -67,6 +70,25 @@ importers:
         version: 4.21.0
       typescript:
         specifier: ^5.5.0
+        version: 5.9.3
+
+  packages/eval:
+    dependencies:
+      '@artificer-ai/runtime':
+        specifier: workspace:*
+        version: link:../runtime
+      dotenv:
+        specifier: ^16.4.5
+        version: 16.6.1
+    devDependencies:
+      '@types/node':
+        specifier: ^20.11.5
+        version: 20.19.35
+      tsx:
+        specifier: ^4.19.2
+        version: 4.21.0
+      typescript:
+        specifier: ^5.3.3
         version: 5.9.3
 
   packages/runtime:

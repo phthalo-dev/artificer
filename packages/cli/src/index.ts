@@ -23,11 +23,31 @@ switch (command) {
     await start(args[0]);
     break;
   }
+  case 'eval': {
+    const sub = args[0];
+    const rest = args.slice(1);
+    const { evalRun, evalList } = await import('./commands/eval.js');
+    if (sub === 'run') {
+      await evalRun(rest);
+      break;
+    }
+    if (sub === 'list') {
+      await evalList(rest);
+      break;
+    }
+    console.log('Usage: artificer eval <run|list> [args]');
+    console.log('');
+    console.log('  eval run [--suite smoke] [--task <id>] [--preset <id>]');
+    console.log('  eval list');
+    process.exit(sub ? 1 : 0);
+    break;
+  }
   default:
-    console.log('Usage: artificer <init|dev|start> [args]');
+    console.log('Usage: artificer <init|dev|start|eval> [args]');
     console.log('');
     console.log('Commands:');
     console.log('  init <name>    Create a new agent project');
     console.log('  dev            Start in development mode');
     console.log('  start          Start in production mode');
+    console.log('  eval run|list  Run or list identity evals');
 }

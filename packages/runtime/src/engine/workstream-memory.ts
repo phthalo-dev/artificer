@@ -131,9 +131,11 @@ export class WorkstreamMemoryService {
   constructor(
     private readonly identity: IdentityStore,
     private readonly store: Store,
+    private readonly evalMode = false,
   ) {}
 
   async onCreated(ws: Workstream): Promise<void> {
+    if (this.evalMode) return;
     try {
       const tags = ['workstream', ws.status];
       if (ws.repoUrl) tags.push(repoSlug(ws.repoUrl));
@@ -153,6 +155,7 @@ export class WorkstreamMemoryService {
   }
 
   async onPlanWritten(ws: Workstream, plan: string): Promise<void> {
+    if (this.evalMode) return;
     try {
       const section = `\n\n## Plan\n${truncate(plan, 1000)}`;
       await this.appendToMemory(ws.id, section);
@@ -165,6 +168,7 @@ export class WorkstreamMemoryService {
   }
 
   async onWorkerRunFinished(ws: Workstream, run: RunRecord): Promise<void> {
+    if (this.evalMode) return;
     try {
       const summary = workerRunSummary(run) ?? truncate(run.output, 500);
       const section = `\n\n## Worker Run (${run.createdAt})\n${summary}`;
@@ -178,6 +182,7 @@ export class WorkstreamMemoryService {
   }
 
   async onReviewCompleted(ws: Workstream, review: Review): Promise<void> {
+    if (this.evalMode) return;
     try {
       const outcome = review.approved ? 'approved' : 'rejected';
       const stage = review.stage ? ` (${review.stage})` : '';
@@ -192,6 +197,7 @@ export class WorkstreamMemoryService {
   }
 
   async onTerminal(ws: Workstream): Promise<void> {
+    if (this.evalMode) return;
     try {
       const section = `\n\n## Outcome\nStatus: ${ws.status}${ws.summary ? `\n${ws.summary}` : ''}`;
       const memId = await this.getMemoryId(ws.id);
@@ -223,6 +229,7 @@ export class WorkstreamMemoryService {
     ws: Workstream,
     spawn: DistillSpawn,
   ): Promise<{ runId: string } | null> {
+    if (this.evalMode) return null;
     if (ws.status === 'blocked') return null;
     if (!['done', 'failed', 'cancelled'].includes(ws.status)) return null;
 

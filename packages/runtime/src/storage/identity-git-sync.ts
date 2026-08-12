@@ -13,16 +13,19 @@ const exec = promisify(execFile);
 export class IdentityGitSync extends IdentityStore {
   private readonly syncConfig: IdentityConfig;
   private readonly github: GitHubConfig | undefined;
+  private readonly evalMode: boolean;
   private gitQueue: Promise<void> = Promise.resolve();
 
   constructor(
     rootDir: string,
     syncConfig: IdentityConfig,
     github?: GitHubConfig,
+    evalMode = false,
   ) {
     super(rootDir, { embeddings: syncConfig.embeddings });
     this.syncConfig = syncConfig;
     this.github = github;
+    this.evalMode = evalMode;
   }
 
   override async addMemory(
@@ -61,10 +64,12 @@ export class IdentityGitSync extends IdentityStore {
   }
 
   pullFromRemote(): Promise<'updated' | 'unchanged' | 'conflict' | 'error'> {
+    if (this.evalMode) return Promise.resolve('unchanged');
     return this.enqueue(() => this.doPullFromRemote());
   }
 
   commitPaths(action: string, paths: string[]): Promise<void> {
+    if (this.evalMode) return Promise.resolve();
     return this.enqueue(() => this.doCommitAndPush(action, paths));
   }
 
@@ -78,6 +83,7 @@ export class IdentityGitSync extends IdentityStore {
   }
 
   private commitAndPush(action: string): Promise<void> {
+    if (this.evalMode) return Promise.resolve();
     return this.enqueue(() => this.doCommitAndPush(action));
   }
 

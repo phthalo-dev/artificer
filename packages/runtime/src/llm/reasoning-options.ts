@@ -1,3 +1,8 @@
+import type { SystemModelMessage } from 'ai';
+
+/** Provider option bags accepted by AI SDK system/call options. */
+type ProviderOptions = NonNullable<SystemModelMessage['providerOptions']>;
+
 /**
  * Model-specific providerOptions for reasoning-enabled models.
  * Shapes follow the AI SDK openai-compatible provider namespace.
@@ -9,7 +14,7 @@
  */
 const REASONING_MODEL_PATTERNS: Array<{
   match: RegExp;
-  options: Record<string, unknown>;
+  options: ProviderOptions;
 }> = [
   {
     // Kimi K3: preserved thinking, effort configurable
@@ -49,7 +54,7 @@ const REASONING_MODEL_PATTERNS: Array<{
 
 export function reasoningProviderOptions(
   modelId: string,
-): Record<string, unknown> | undefined {
+): ProviderOptions | undefined {
   const id = modelId.trim();
   for (const { match, options } of REASONING_MODEL_PATTERNS) {
     if (match.test(id)) return options;
@@ -58,9 +63,7 @@ export function reasoningProviderOptions(
 }
 
 /** Merge anthropic cache breakpoint options with model-specific reasoning options. */
-export function mergeProviderOptions(
-  modelId: string,
-): Record<string, unknown> | undefined {
+export function mergeProviderOptions(modelId: string): ProviderOptions {
   const reasoning = reasoningProviderOptions(modelId);
   const anthropic = { cacheControl: { type: 'ephemeral' as const } };
   if (!reasoning) {
