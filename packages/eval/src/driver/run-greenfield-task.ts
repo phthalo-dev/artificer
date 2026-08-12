@@ -1,0 +1,141 @@
+import path from 'node:path';
+import type { EvalTaskResult, LoadedEvalTask } from '../types.js';
+import {
+  materializeGreenfieldFixture,
+  type MaterializedGreenfieldFixture,
+} from '../identity/greenfield-fixture.js';
+import { gradeGreenfieldPatch } from '../identity/grade-greenfield.js';
+import type { RuntimeClient } from './client.js';
+import { extractPatch } from './extract-patch.js';
+import { TERMINAL } from './poll.js';
+
+export interface GreenfieldTaskConfig {
+  execDir: string;
+  timeoutMs?: number;
+  pollIntervalMs?: number;
+  gradeTimeoutMs?: number;
+}
+
+const DEFAULT_TIMEOUT_MS = 5 * 60_000;
+const DEFAULT_POLL_INTERVAL_MS = 500;
+
+export async function runGreenfieldTask(
+  client: RuntimeClient,
+  task: LoadedEvalTask,
+  config: GreenfieldTaskConfig,
+): Promise<EvalTaskResult> {
+  const startedAt = Date.now();
+  const result: EvalTaskResult = {
+    instanceId: task.manifest.id,
+    outcome: 'error',
+    durationMs: 0,
+    outboundMessages: [],
+  };
+  let fixture: MaterializedGreenfieldFixture | undefined;
+
+  try {
+    if (
+      task.manifest.kind !== 'greenfield' ||
+      task.manifest.grade.type !== 'shell' ||
+      !task.fixtureDir ||
+      !task.hiddenDir
+    ) {
+      return finish(result);
+    }
+
+    fixture = await materializeGreenfieldFixture(task.fixtureDir);
+    const created = await client.createWorkstream({
+      title: task.manifest.title,
+      goal: task.prompt,
+      repoUrl: fixture.repoDir,
+      baseCommit: fixture.baseCommit,
+      autostart: true,
+    });
+    result.messageId = created.messageId;
+
+    const completed = await waitForTerminal(
+      client,
+      created.workstreamId,
+      task.manifest.timeoutMs ?? config.timeoutMs ?? DEFAULT_TIMEOUT_MS,
+      config.pollIntervalMs ?? DEFAULT_POLL_INTERVAL_MS,
+    );
+    if (!completed) {
+      result.outcome = 'timeout';
+      result.resolved = false;
+      return await withUsage(client, result);
+    }
+
+    const workspaceDir = path.join(
+      config.execDir,
+      'workspace',
+      created.workstreamId,
+    );
+    const extracted = await extractPatch(workspaceDir, fixture.baseCommit);
+    if (!extracted.patch.trim()) {
+      result.outcome = 'failed';
+      result.resolved = false;
+      return await withUsage(client, result);
+    }
+
+    result.resolved = await gradeGreenfieldPatch({
+      repoDir: fixture.repoDir,
+      patch: extracted.patch,
+      hiddenDir: task.hiddenDir,
+      command: task.manifest.test_command ?? task.manifest.grade.command,
+      cwd: task.manifest.grade.cwd,
+      timeoutMs: config.gradeTimeoutMs,
+    });
+    result.outcome = result.resolved ? 'submitted' : 'failed';
+    return await withUsage(client, result);
+  } catch {
+    result.outcome = 'error';
+    return await withUsage(client, result);
+  } finally {
+    await fixture?.cleanup().catch(() => {});
+    finish(result);
+  }
+
+  function finish(value: EvalTaskResult): EvalTaskResult {
+    value.durationMs = Date.now() - startedAt;
+    return value;
+  }
+}
+
+async function waitForTerminal(
+  client: RuntimeClient,
+  workstreamId: string,
+  timeoutMs: number,
+  pollIntervalMs: number,
+): Promise<boolean> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    try {
+      const state = await client.getState();
+      const workstream = state.workstreams.find(
+        (candidate) => candidate.id === workstreamId,
+      );
+      if (workstream && TERMINAL.has(workstream.status)) return true;
+    } catch {
+      // Runtime state may be briefly unavailable; retry until the deadline.
+    }
+    await sleep(pollIntervalMs);
+  }
+  return false;
+}
+
+async function withUsage(
+  client: RuntimeClient,
+  result: EvalTaskResult,
+): Promise<EvalTaskResult> {
+  if (result.messageId) {
+    const cost = await client
+      .messageCost(result.messageId)
+      .catch(() => undefined);
+    if (cost) result.usage = cost.total;
+  }
+  return result;
+}
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
