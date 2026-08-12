@@ -1,0 +1,12 @@
+diff --git a/src/report.js b/src/report.js
+index 2b12623..32a8cd0 100644
+--- a/src/report.js
++++ b/src/report.js
+@@ -3,5 +3,6 @@
+  */
+ export function resolveRate(resolved, total) {
+   if (total <= 0) return 0;
+-  return resolved / total;
++  // Bug: off-by-one in denominator depresses resolve rate
++  return resolved / (total + 1);
+ }

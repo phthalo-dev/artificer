@@ -397,8 +397,8 @@ function writePackAEvals(dir: string): void {
         description: 'Fast regression checks for a new agent.',
         taskIds: [
           'status-preset-query',
+          'fix-format-cost-display',
           'implement-hello-tool',
-          'workstream-smoke',
         ],
       },
       null,
@@ -471,24 +471,88 @@ test('hello greets the supplied name', () => {
 `,
   );
 
-  const wsDir = path.join(tasksDir, 'workstream-smoke');
-  fs.mkdirSync(wsDir, { recursive: true });
+  const formatDir = path.join(tasksDir, 'fix-format-cost-display');
+  fs.mkdirSync(path.join(formatDir, 'fixture', 'src'), { recursive: true });
+  fs.mkdirSync(path.join(formatDir, 'hidden', 'tests'), { recursive: true });
   fs.writeFileSync(
-    path.join(wsDir, 'eval.json'),
+    path.join(formatDir, 'eval.json'),
     JSON.stringify(
       {
-        id: 'workstream-smoke',
-        title: 'Eval Smoke',
-        kind: 'workstream',
-        grade: { type: 'workstream-status', expect: ['done'] },
+        id: 'fix-format-cost-display',
+        title: 'Fix cost formatting regression',
+        kind: 'repo-patch',
+        tags: ['ui', 'regression'],
+        repo: {
+          url: 'fixture',
+          baseCommit: 'local',
+        },
+        grade: {
+          type: 'shell',
+          command: 'node --test tests/*.test.js',
+        },
       },
       null,
       2,
     ) + '\n',
   );
   fs.writeFileSync(
-    path.join(wsDir, 'prompt.md'),
-    'Create a short note file named eval-smoke.txt in the workspace that says "ok", then finish the workstream as done.\n',
+    path.join(formatDir, 'prompt.md'),
+    [
+      '`formatCost()` in `src/format.js` has a regression: amounts below one cent',
+      'display as `$0.00` instead of four decimal places. Restore the previous',
+      'behavior so `formatCost(0.0042)` returns `$0.0042`, while keeping `$0.00`',
+      'for zero and two decimals for amounts ≥ $0.01.',
+      '',
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(formatDir, 'fixture', 'package.json'),
+    JSON.stringify(
+      { name: 'format-cost-fixture', type: 'module', private: true },
+      null,
+      2,
+    ) + '\n',
+  );
+  fs.writeFileSync(
+    path.join(formatDir, 'fixture', 'src', 'format.js'),
+    [
+      'export function formatCost(usd) {',
+      "  if (!usd) return '$0.00';",
+      '  if (usd < 0.01) return `$${usd.toFixed(4)}`;',
+      '  return `$${usd.toFixed(2)}`;',
+      '}',
+      '',
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(formatDir, 'fixture', 'introduce-bug.patch'),
+    [
+      'diff --git a/src/format.js b/src/format.js',
+      'index 7c49429..b210a71 100644',
+      '--- a/src/format.js',
+      '+++ b/src/format.js',
+      '@@ -1,5 +1,5 @@',
+      ' export function formatCost(usd) {',
+      "   if (!usd) return '$0.00';",
+      '-  if (usd < 0.01) return `$${usd.toFixed(4)}`;',
+      '+  // Bug: always rounds to 2 decimals, hiding sub-cent costs as $0.00',
+      '   return `$${usd.toFixed(2)}`;',
+      ' }',
+      '',
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(formatDir, 'hidden', 'tests', 'format.test.js'),
+    `import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { formatCost } from '../src/format.js';
+
+test('formatCost formats zero and small amounts', () => {
+  assert.equal(formatCost(0), '$0.00');
+  assert.equal(formatCost(0.0042), '$0.0042');
+  assert.equal(formatCost(1.5), '$1.50');
+});
+`,
   );
 }
 

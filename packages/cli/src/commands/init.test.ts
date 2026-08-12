@@ -61,9 +61,28 @@ test('init scaffolds expected files and directories', () => {
   );
   assert.ok(
     fs.existsSync(
-      path.join(dir, 'agent', 'evals', 'tasks', 'workstream-smoke', 'eval.json'),
+      path.join(
+        dir,
+        'agent',
+        'evals',
+        'tasks',
+        'fix-format-cost-display',
+        'fixture',
+        'introduce-bug.patch',
+      ),
     ),
   );
+  const smoke = JSON.parse(
+    fs.readFileSync(
+      path.join(dir, 'agent', 'evals', 'suites', 'smoke.json'),
+      'utf8',
+    ),
+  ) as { taskIds: string[] };
+  assert.deepEqual(smoke.taskIds, [
+    'status-preset-query',
+    'fix-format-cost-display',
+    'implement-hello-tool',
+  ]);
 
   const written = JSON.parse(
     fs.readFileSync(path.join(dir, 'artificer.config.json'), 'utf8'),

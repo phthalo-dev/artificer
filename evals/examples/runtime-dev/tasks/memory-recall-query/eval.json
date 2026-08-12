@@ -1,0 +1,10 @@
+{
+  "id": "memory-recall-query",
+  "title": "Recall a pre-seeded identity memory",
+  "kind": "message",
+  "tags": ["memory", "identity"],
+  "grade": {
+    "type": "message-contains",
+    "pattern": "pack-b-token"
+  }
+}

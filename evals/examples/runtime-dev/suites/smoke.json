@@ -1,0 +1,11 @@
+{
+  "name": "Runtime-dev smoke",
+  "description": "Maintainer Pack B — offline vendored fixtures for dogfooding identity evals. Not shipped in npm.",
+  "taskIds": [
+    "workstream-status-api",
+    "quota-window-pause",
+    "bench-report-regression",
+    "role-override-loaded",
+    "memory-recall-query"
+  ]
+}

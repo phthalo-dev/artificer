@@ -12,6 +12,13 @@ function flag(argv: string[], name: string): string | undefined {
   return index === -1 ? undefined : argv[index + 1];
 }
 
+function hasFlag(argv: string[], name: string): boolean {
+  return (
+    argv.includes(`--${name}`) ||
+    argv.some((arg) => arg.startsWith(`--${name}=`))
+  );
+}
+
 function defaultExecDir(identityDir: string): string {
   return path.join(
     os.homedir(),
@@ -19,6 +26,10 @@ function defaultExecDir(identityDir: string): string {
     path.basename(path.resolve(identityDir)),
     'eval-runs',
   );
+}
+
+function positionalArgs(argv: string[]): string[] {
+  return argv.filter((arg) => !arg.startsWith('--'));
 }
 
 export async function evalRun(argv: string[]): Promise<void> {
@@ -53,5 +64,32 @@ export async function evalList(_argv: string[]): Promise<void> {
   console.log(`Tasks (${tasks.length}):`);
   for (const task of tasks) {
     console.log(`  ${task}`);
+  }
+}
+
+export async function evalCompare(argv: string[]): Promise<void> {
+  const identityDir = process.cwd();
+  const execDir =
+    process.env.ARTIFICER_EXEC_DIR ?? defaultExecDir(identityDir);
+  const writeSidecar = hasFlag(argv, 'write') || hasFlag(argv, 'sidecar');
+  const positionals = positionalArgs(argv);
+
+  const {
+    compareEvalRuns,
+    formatCompareTable,
+    resolveCompareRunDirs,
+  } = await import('@artificer-ai/eval');
+
+  const { baselineDir, candidateDir } = await resolveCompareRunDirs(
+    execDir,
+    positionals[0],
+    positionals[1],
+  );
+  const result = await compareEvalRuns(baselineDir, candidateDir, {
+    writeSidecar,
+  });
+  console.log(formatCompareTable(result));
+  if (writeSidecar) {
+    console.log(`Wrote ${path.join(candidateDir, 'compare.json')}`);
   }
 }
