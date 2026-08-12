@@ -4,6 +4,7 @@ import {
   materializeGreenfieldFixture,
   type MaterializedGreenfieldFixture,
 } from '../identity/greenfield-fixture.js';
+import { gradeFileExists } from '../identity/grade.js';
 import { gradeGreenfieldPatch } from '../identity/grade-greenfield.js';
 import type { RuntimeClient } from './client.js';
 import { extractPatch } from './extract-patch.js';
@@ -34,12 +35,15 @@ export async function runGreenfieldTask(
   let fixture: MaterializedGreenfieldFixture | undefined;
 
   try {
-    if (
-      task.manifest.kind !== 'greenfield' ||
-      task.manifest.grade.type !== 'shell' ||
-      !task.fixtureDir ||
-      !task.hiddenDir
-    ) {
+    if (task.manifest.kind !== 'greenfield' || !task.fixtureDir) {
+      return finish(result);
+    }
+
+    const grade = task.manifest.grade;
+    if (grade.type !== 'shell' && grade.type !== 'file-exists') {
+      return finish(result);
+    }
+    if (grade.type === 'shell' && !task.hiddenDir) {
       return finish(result);
     }
 
@@ -70,6 +74,15 @@ export async function runGreenfieldTask(
       'workspace',
       created.workstreamId,
     );
+
+    if (grade.type === 'file-exists') {
+      const extracted = await extractPatch(workspaceDir, fixture.baseCommit);
+      const checkDir = extracted.repoDir ?? workspaceDir;
+      result.resolved = await gradeFileExists(checkDir, grade.path);
+      result.outcome = result.resolved ? 'submitted' : 'failed';
+      return await withUsage(client, result);
+    }
+
     const extracted = await extractPatch(workspaceDir, fixture.baseCommit);
     if (!extracted.patch.trim()) {
       result.outcome = 'failed';
@@ -80,9 +93,9 @@ export async function runGreenfieldTask(
     result.resolved = await gradeGreenfieldPatch({
       repoDir: fixture.repoDir,
       patch: extracted.patch,
-      hiddenDir: task.hiddenDir,
-      command: task.manifest.test_command ?? task.manifest.grade.command,
-      cwd: task.manifest.grade.cwd,
+      hiddenDir: task.hiddenDir!,
+      command: task.manifest.test_command ?? grade.command,
+      cwd: grade.cwd,
       timeoutMs: config.gradeTimeoutMs,
     });
     result.outcome = result.resolved ? 'submitted' : 'failed';

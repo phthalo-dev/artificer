@@ -114,3 +114,64 @@ function runtimeState(status: 'in_progress' | 'done'): RuntimeState {
     workstreams: [{ id: 'ws-greenfield', title: 'Implement hello', status }],
   };
 }
+
+test('grades greenfield with file-exists against the workspace repo', async () => {
+  const execDir = await fs.mkdtemp(path.join(os.tmpdir(), 'greenfield-exists-'));
+  let stateCalls = 0;
+
+  const client = {
+    createWorkstream: async (
+      input: Parameters<RuntimeClient['createWorkstream']>[0],
+    ) => {
+      const workspace = path.join(execDir, 'workspace', 'ws-greenfield');
+      await fs.mkdir(workspace, { recursive: true });
+      await execFileAsync('git', ['clone', '-q', input.repoUrl!, 'repo'], {
+        cwd: workspace,
+      });
+      await fs.writeFile(path.join(workspace, 'repo', 'plan.md'), '# Plan\n');
+      return { workstreamId: 'ws-greenfield', messageId: 'msg-exists' };
+    },
+    getState: async (): Promise<RuntimeState> => {
+      stateCalls += 1;
+      return runtimeState(stateCalls === 1 ? 'in_progress' : 'done');
+    },
+    messageCost: async () => ({
+      message: {
+        id: 'msg-exists',
+        direction: 'inbound' as const,
+        content: 'Write a plan',
+        createdAt: '2026-08-11T00:00:00.000Z',
+      },
+      total: {
+        inputTokens: 4,
+        outputTokens: 2,
+        cacheCreationInputTokens: 0,
+        cacheReadInputTokens: 0,
+        requests: 1,
+        runs: 1,
+        costUsd: 0.01,
+      },
+      byWorkstream: {},
+      byRole: {},
+    }),
+  } as RuntimeClient;
+
+  try {
+    const result = await runGreenfieldTask(
+      client,
+      {
+        ...greenfieldTask(),
+        manifest: {
+          ...greenfieldTask().manifest,
+          grade: { type: 'file-exists', path: 'plan.md' },
+        },
+      },
+      { execDir, pollIntervalMs: 0, timeoutMs: 100 },
+    );
+    assert.equal(result.resolved, true);
+    assert.equal(result.outcome, 'submitted');
+  } finally {
+    await fs.rm(execDir, { recursive: true, force: true });
+  }
+});
+

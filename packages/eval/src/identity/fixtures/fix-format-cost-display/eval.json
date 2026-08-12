@@ -1,0 +1,14 @@
+{
+  "id": "fix-format-cost-display",
+  "title": "Fix cost formatting regression",
+  "kind": "repo-patch",
+  "tags": ["ui", "regression"],
+  "repo": {
+    "url": "fixture",
+    "baseCommit": "local"
+  },
+  "grade": {
+    "type": "shell",
+    "command": "node --test tests/*.test.js"
+  }
+}

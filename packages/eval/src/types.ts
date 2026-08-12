@@ -1,19 +1,36 @@
 import type { UsageSummary } from './bench/types.js';
 
-export type EvalTaskKind = 'message' | 'workstream' | 'greenfield';
+export type EvalTaskKind =
+  | 'message'
+  | 'workstream'
+  | 'greenfield'
+  | 'repo-patch';
 
 export type EvalGrade =
   | { type: 'message-contains'; pattern: string }
   | { type: 'workstream-status'; expect: string[] }
-  | { type: 'shell'; command: string; cwd?: string };
+  | { type: 'shell'; command: string; cwd?: string }
+  | { type: 'file-exists'; path: string };
+
+/** Pinned repository for `repo-patch` (and optional workstream context). */
+export interface EvalRepoPin {
+  /** Remote git URL, or the sentinel `"fixture"` for a vendored task fixture. */
+  url: string;
+  /** Commit SHA to check out, or `"local"` when `url` is `"fixture"`. */
+  baseCommit: string;
+  /** Optional subdirectory the agent / grader should focus on. */
+  subpath?: string;
+}
 
 export interface EvalTaskManifest {
   id: string;
   title: string;
   kind: EvalTaskKind;
+  tags?: string[];
   timeoutMs?: number;
   maxRuns?: number;
   test_command?: string;
+  repo?: EvalRepoPin;
   grade: EvalGrade;
 }
 
@@ -55,7 +72,11 @@ const EVAL_TASK_KINDS = new Set<EvalTaskKind>([
   'message',
   'workstream',
   'greenfield',
+  'repo-patch',
 ]);
+
+/** Sentinel `repo.url` for Pack A-style vendored fixture snapshots. */
+export const FIXTURE_REPO_URL = 'fixture';
 
 function requireObject(raw: unknown, label: string): Record<string, unknown> {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
@@ -96,6 +117,35 @@ function requireStringArray(
   return value;
 }
 
+function parseOptionalStringArray(
+  obj: Record<string, unknown>,
+  key: string,
+): string[] | undefined {
+  if (obj[key] === undefined) return undefined;
+  const value = obj[key];
+  if (!Array.isArray(value)) {
+    throw new Error(`${key} must be an array of strings`);
+  }
+  for (const item of value) {
+    if (typeof item !== 'string' || item.length === 0) {
+      throw new Error(`${key} must be an array of non-empty strings`);
+    }
+  }
+  return value;
+}
+
+function parseEvalRepo(raw: unknown): EvalRepoPin {
+  const obj = requireObject(raw, 'repo');
+  const repo: EvalRepoPin = {
+    url: requireString(obj, 'url'),
+    baseCommit: requireString(obj, 'baseCommit'),
+  };
+  if (obj.subpath !== undefined) {
+    repo.subpath = requireString(obj, 'subpath');
+  }
+  return repo;
+}
+
 function parseEvalGrade(raw: unknown): EvalGrade {
   const obj = requireObject(raw, 'grade');
   const type = requireString(obj, 'type');
@@ -115,6 +165,8 @@ function parseEvalGrade(raw: unknown): EvalGrade {
       }
       return grade;
     }
+    case 'file-exists':
+      return { type, path: requireString(obj, 'path') };
     default:
       throw new Error(`Unknown eval grade type: ${type}`);
   }
@@ -126,9 +178,6 @@ export function parseEvalTaskManifest(raw: unknown): EvalTaskManifest {
   const title = requireString(obj, 'title');
   const kind = requireString(obj, 'kind');
 
-  if (kind === 'repo-patch') {
-    throw new Error('repo-patch tasks are not supported in phase 1');
-  }
   if (!EVAL_TASK_KINDS.has(kind as EvalTaskKind)) {
     throw new Error(`Unknown eval task kind: ${kind}`);
   }
@@ -148,6 +197,18 @@ export function parseEvalTaskManifest(raw: unknown): EvalTaskManifest {
   }
   if (obj.test_command !== undefined) {
     manifest.test_command = requireString(obj, 'test_command');
+  }
+  const tags = parseOptionalStringArray(obj, 'tags');
+  if (tags) manifest.tags = tags;
+
+  if (obj.repo !== undefined) {
+    manifest.repo = parseEvalRepo(obj.repo);
+  }
+
+  if (manifest.kind === 'repo-patch') {
+    if (!manifest.repo) {
+      throw new Error('repo-patch tasks require repo.url and repo.baseCommit');
+    }
   }
 
   return manifest;

@@ -1,9 +1,12 @@
+import path from 'node:path';
 import type { EvalTaskResult, LoadedEvalTask } from '../types.js';
-import { gradeWorkstreamStatus } from '../identity/grade.js';
+import { gradeFileExists, gradeWorkstreamStatus } from '../identity/grade.js';
 import type { RuntimeClient } from './client.js';
+import { extractPatch } from './extract-patch.js';
 import { TERMINAL } from './poll.js';
 
 export interface WorkstreamTaskConfig {
+  execDir?: string;
   timeoutMs?: number;
   pollIntervalMs?: number;
 }
@@ -25,13 +28,23 @@ export async function runWorkstreamTask(
   };
 
   try {
-    if (task.manifest.grade.type !== 'workstream-status') return finish(result);
+    const grade = task.manifest.grade;
+    if (grade.type !== 'workstream-status' && grade.type !== 'file-exists') {
+      return finish(result);
+    }
 
-    const created = await client.createWorkstream({
+    const createInput: Parameters<RuntimeClient['createWorkstream']>[0] = {
       title: task.manifest.title,
       goal: task.prompt,
       autostart: true,
-    });
+    };
+    if (task.manifest.repo?.url) {
+      createInput.repoUrl = task.manifest.repo.url;
+    }
+    if (task.manifest.repo?.baseCommit) {
+      createInput.baseCommit = task.manifest.repo.baseCommit;
+    }
+    const created = await client.createWorkstream(createInput);
     result.messageId = created.messageId;
 
     const status = await waitForTerminalStatus(client, created.workstreamId, {
@@ -43,12 +56,26 @@ export async function runWorkstreamTask(
     if (status === undefined) {
       result.outcome = 'timeout';
       result.resolved = false;
-    } else {
-      result.resolved = gradeWorkstreamStatus(
-        status,
-        task.manifest.grade.expect,
-      );
+    } else if (grade.type === 'workstream-status') {
+      result.resolved = gradeWorkstreamStatus(status, grade.expect);
       result.outcome = result.resolved ? 'submitted' : 'failed';
+    } else {
+      const execDir = config.execDir;
+      if (!execDir) {
+        result.outcome = 'error';
+        result.resolved = false;
+      } else {
+        const workspaceDir = path.join(
+          execDir,
+          'workspace',
+          created.workstreamId,
+        );
+        const baseCommit = task.manifest.repo?.baseCommit ?? 'HEAD';
+        const extracted = await extractPatch(workspaceDir, baseCommit);
+        const checkDir = extracted.repoDir ?? workspaceDir;
+        result.resolved = await gradeFileExists(checkDir, grade.path);
+        result.outcome = result.resolved ? 'submitted' : 'failed';
+      }
     }
   } catch {
     result.outcome = 'error';

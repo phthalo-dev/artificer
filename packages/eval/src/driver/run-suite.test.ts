@@ -27,7 +27,12 @@ test('runIdentityEval dispatches a suite and writes reusable result artifacts', 
     path.join(evalsDir, 'suites', 'smoke.json'),
     JSON.stringify({
       name: 'Smoke',
-      taskIds: ['message-task', 'workstream-task', 'greenfield-task'],
+      taskIds: [
+        'message-task',
+        'workstream-task',
+        'greenfield-task',
+        'repo-patch-task',
+      ],
     }),
   );
 
@@ -48,6 +53,13 @@ test('runIdentityEval dispatches a suite and writes reusable result artifacts', 
       id: 'greenfield-task',
       title: 'Greenfield',
       kind: 'greenfield',
+      grade: { type: 'shell', command: 'true' },
+    },
+    {
+      id: 'repo-patch-task',
+      title: 'Repo patch',
+      kind: 'repo-patch',
+      repo: { url: 'fixture', baseCommit: 'local' },
       grade: { type: 'shell', command: 'true' },
     },
   ];
@@ -97,6 +109,10 @@ test('runIdentityEval dispatches a suite and writes reusable result artifacts', 
           dispatched.push(task.manifest.kind);
           return result(task.manifest.id, true);
         },
+        runRepoPatchTask: async (_client, task) => {
+          dispatched.push(task.manifest.kind);
+          return result(task.manifest.id, true);
+        },
         getIdentityGitSha: async () => 'abc123',
       },
     );
@@ -104,14 +120,24 @@ test('runIdentityEval dispatches a suite and writes reusable result artifacts', 
     assert.equal(output.resultsDir, resultsDir);
     assert.equal(starts, 1);
     assert.equal(stops, 1);
-    assert.deepEqual(dispatched, ['message', 'workstream', 'greenfield']);
+    assert.deepEqual(dispatched, [
+      'message',
+      'workstream',
+      'greenfield',
+      'repo-patch',
+    ]);
 
     const attempts = JSON.parse(
       await fs.readFile(path.join(resultsDir, 'attempts.json'), 'utf8'),
     ) as Array<Record<string, unknown>>;
     assert.deepEqual(
       attempts.map((attempt) => attempt.instanceId),
-      ['message-task', 'workstream-task', 'greenfield-task'],
+      [
+        'message-task',
+        'workstream-task',
+        'greenfield-task',
+        'repo-patch-task',
+      ],
     );
     assert.equal(attempts[0]?.repo, 'identity');
     assert.equal(attempts[0]?.baseCommit, 'abc123');
@@ -122,12 +148,14 @@ test('runIdentityEval dispatches a suite and writes reusable result artifacts', 
     assert.deepEqual(evalReport.resolved_ids, [
       'message-task',
       'greenfield-task',
+      'repo-patch-task',
     ]);
     assert.deepEqual(evalReport.unresolved_ids, ['workstream-task']);
     assert.deepEqual(evalReport.completed_ids, [
       'message-task',
       'workstream-task',
       'greenfield-task',
+      'repo-patch-task',
     ]);
 
     const runConfig = JSON.parse(

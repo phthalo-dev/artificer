@@ -13,6 +13,7 @@ import type {
 } from '../types.js';
 import { runGreenfieldTask } from './run-greenfield-task.js';
 import { runMessageTask } from './run-message-task.js';
+import { runRepoPatchTask } from './run-repo-patch-task.js';
 import { runWorkstreamTask } from './run-workstream-task.js';
 import { writeReport } from './report.js';
 import { newEvalRunDir, updateLatestSymlink } from './results-paths.js';
@@ -42,6 +43,7 @@ interface RunIdentityEvalDependencies {
   runMessageTask: typeof runMessageTask;
   runWorkstreamTask: typeof runWorkstreamTask;
   runGreenfieldTask: typeof runGreenfieldTask;
+  runRepoPatchTask: typeof runRepoPatchTask;
   writeReport: typeof writeReport;
   getIdentityGitSha: (identityDir: string) => Promise<string>;
 }
@@ -53,6 +55,7 @@ const defaultDependencies: RunIdentityEvalDependencies = {
   runMessageTask,
   runWorkstreamTask,
   runGreenfieldTask,
+  runRepoPatchTask,
   writeReport,
   getIdentityGitSha,
 };
@@ -147,9 +150,15 @@ async function dispatchTask(
     case 'message':
       return dependencies.runMessageTask(runtime.client, task);
     case 'workstream':
-      return dependencies.runWorkstreamTask(runtime.client, task);
+      return dependencies.runWorkstreamTask(runtime.client, task, {
+        execDir: runtime.execDir,
+      });
     case 'greenfield':
       return dependencies.runGreenfieldTask(runtime.client, task, {
+        execDir: runtime.execDir,
+      });
+    case 'repo-patch':
+      return dependencies.runRepoPatchTask(runtime.client, task, {
         execDir: runtime.execDir,
       });
   }
