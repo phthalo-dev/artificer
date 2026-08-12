@@ -22,6 +22,7 @@ function toInstance(row: Record<string, unknown>): SweBenchInstance {
     repo: String(row.repo),
     base_commit: String(row.base_commit),
     problem_statement: String(row.problem_statement ?? ''),
+    suite: 'swebench',
     FAIL_TO_PASS: row.FAIL_TO_PASS != null ? String(row.FAIL_TO_PASS) : undefined,
     PASS_TO_PASS: row.PASS_TO_PASS != null ? String(row.PASS_TO_PASS) : undefined,
     version: row.version != null ? String(row.version) : undefined,

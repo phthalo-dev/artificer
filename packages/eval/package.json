@@ -9,11 +9,13 @@
   "main": "./src/index.ts",
   "types": "./src/index.ts",
   "exports": {
-    ".": "./src/index.ts"
+    ".": "./src/index.ts",
+    "./bench": "./src/bench/main.ts",
+    "./bench/report": "./src/bench/report.ts",
+    "./bench/external": "./src/bench/external-agent.ts"
   },
   "files": [
-    "dist",
-    "bench"
+    "dist"
   ],
   "scripts": {
     "build": "tsc",
@@ -38,6 +40,18 @@
       ".": {
         "types": "./dist/index.d.ts",
         "import": "./dist/index.js"
+      },
+      "./bench": {
+        "types": "./dist/bench/main.d.ts",
+        "import": "./dist/bench/main.js"
+      },
+      "./bench/report": {
+        "types": "./dist/bench/report.d.ts",
+        "import": "./dist/bench/report.js"
+      },
+      "./bench/external": {
+        "types": "./dist/bench/external-agent.d.ts",
+        "import": "./dist/bench/external-agent.js"
       }
     }
   }

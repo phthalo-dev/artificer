@@ -1,8 +1,12 @@
 # Runtime benchmarking harness (SWE-bench-style)
 
 > **Consumers:** for identity-based agent evals (`agent/evals/`, `artificer eval run`),
-> see [Agent evals](../../../docs/guides/agent-evals.md). This README covers the
-> **maintainer** SWE-bench / DeepSWE harness that lives under `packages/runtime/bench/`.
+> see [Agent evals](../../../docs/guides/agent-evals.md).
+>
+> **Source of truth:** harness code lives in `@artificer-ai/eval` (`packages/eval/src/bench/`).
+> This directory keeps task fixtures (`tasks/`), graders (`eval/`), and results.
+> Runtime `pnpm bench*` scripts invoke the eval package via relative `tsx ../eval/src/bench/...`
+> paths (no package dependency — avoids an eval ↔ runtime cycle).
 
 Drives the `@artificer-ai/runtime` agent over HTTP against a curated suite of real
 repo-fixing tasks, then measures **correctness** (does the agent's patch make
@@ -261,7 +265,7 @@ same way.
 
 ### Running against external coding agents
 
-`bench/src/external-agent.ts` drives Claude Code, opencode, or Cursor
+`packages/eval/src/bench/external-agent.ts` (via `pnpm bench:external`) drives Claude Code, opencode, or Cursor
 headlessly (full-auto flags — `--dangerously-skip-permissions` /
 `--force --trust`) against a freshly cloned greenfield scaffold, extracts the
 resulting patch with the same `extractPatch()` Artificer's own driver uses,

@@ -1,7 +1,7 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { RESULTS_DIR } from './config.js';
-import { formatUsd, sumUsage } from './cost.js';
+import { formatUsd, sumUsage } from '../driver/cost.js';
 import type { AttemptRecord, UsageSummary } from './types.js';
 
 /** Shape of the official SWE-bench harness report (fields we consume). */

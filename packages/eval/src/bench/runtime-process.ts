@@ -3,9 +3,9 @@ import fs from 'node:fs/promises';
 import net from 'node:net';
 import os from 'node:os';
 import path from 'node:path';
+import { RuntimeClient } from '../driver/client.js';
 import type { BenchConfig } from './config.js';
 import { RUNTIME_ROOT } from './config.js';
-import { RuntimeClient } from './client.js';
 import { sandboxGithubEnv } from './git-sandbox.js';
 
 export interface RuntimeHandle {
@@ -16,7 +16,17 @@ export interface RuntimeHandle {
   stop: () => Promise<void>;
 }
 
-const RUNTIME_ENTRY = path.join(RUNTIME_ROOT, 'src', 'index.ts');
+const RUNTIME_DIST_ENTRY = path.join(RUNTIME_ROOT, 'dist', 'index.js');
+const RUNTIME_SOURCE_ENTRY = path.join(RUNTIME_ROOT, 'src', 'index.ts');
+
+async function runtimeArgs(): Promise<string[]> {
+  try {
+    await fs.access(RUNTIME_DIST_ENTRY);
+    return [RUNTIME_DIST_ENTRY];
+  } catch {
+    return ['--import', 'tsx', RUNTIME_SOURCE_ENTRY];
+  }
+}
 
 /** Prefer `preferred`; if taken, bind port 0 and return whatever the OS assigns. */
 function getAvailablePort(preferred?: number): Promise<number> {
@@ -97,11 +107,11 @@ export async function startRuntime(
     env[`RUNTIME_TIER_${role.toUpperCase()}`] = tier;
   }
 
-  const child: ChildProcess = spawn(
-    process.execPath,
-    ['--import', 'tsx', RUNTIME_ENTRY],
-    { cwd: RUNTIME_ROOT, env, stdio: ['ignore', 'pipe', 'pipe'] },
-  );
+  const child: ChildProcess = spawn(process.execPath, await runtimeArgs(), {
+    cwd: RUNTIME_ROOT,
+    env,
+    stdio: ['ignore', 'pipe', 'pipe'],
+  });
 
   // Surface runtime logs with an instance prefix so a long suite is debuggable.
   const prefix = `[runtime:${safeLabel}]`;

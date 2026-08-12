@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import 'dotenv/config';
 import { BENCH_DIR, type BenchConfig, loadBenchConfig, RUNTIME_ROOT } from './config.js';
-import { formatUsd, sumUsage } from './cost.js';
+import { formatUsd, sumUsage } from '../driver/cost.js';
 import { archiveBenchRun } from './history.js';
 import { runInstance } from './run-instance.js';
 import { startRuntime } from './runtime-process.js';

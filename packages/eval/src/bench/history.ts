@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { sumUsage } from './cost.js';
+import { sumUsage } from '../driver/cost.js';
 import type { AttemptRecord, BenchInstance, SuiteDefinition } from './types.js';
 import type { BenchConfig } from './config.js';
 import { suiteKind, suiteName } from './suites.js';
