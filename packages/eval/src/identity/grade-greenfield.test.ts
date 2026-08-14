@@ -4,7 +4,28 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { materializeGreenfieldFixture } from './greenfield-fixture.js';
-import { gradeGreenfieldPatch } from './grade-greenfield.js';
+import { gradeGreenfieldPatch, nodeTestCount } from './grade-greenfield.js';
+
+test('nodeTestCount reads spec and TAP summaries', () => {
+  assert.equal(nodeTestCount('ℹ tests 3\nℹ pass 3\n'), 3);
+  assert.equal(
+    nodeTestCount(
+      [
+        'TAP version 13',
+        '# Subtest: formatCost formats zero and small amounts',
+        'ok 1 - formatCost formats zero and small amounts',
+        '1..1',
+        '# tests 1',
+        '# pass 1',
+        '# fail 0',
+        '',
+      ].join('\n'),
+    ),
+    1,
+  );
+  assert.equal(nodeTestCount('1..2\n'), 2);
+  assert.equal(nodeTestCount('no reporter summary here\n'), 0);
+});
 
 test('shell grader applies a patch and runs hidden ESM node tests', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'greenfield-grade-'));
@@ -48,7 +69,7 @@ test('shell grader applies a patch and runs hidden ESM node tests', async () => 
       repoDir: fixture.repoDir,
       patch,
       hiddenDir,
-      command: 'node --test tests/*.test.js',
+      command: 'node --test --test-reporter=tap tests/*.test.js',
     });
 
     assert.equal(passed, true);

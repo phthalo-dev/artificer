@@ -248,6 +248,9 @@ export function createCommunicatorTools(ctx: ToolContext): ToolDef[] {
         required: ['material'],
       },
       handler: async (input) => {
+        if (engine.config?.evalMode) {
+          return 'Error: Identity writes are disabled during eval mode.';
+        }
         const material = String(input.material);
         if (isRepoTaskMessage(run.task) || looksLikeRepoSource(material)) {
           return 'Error: Use start_workstream for repo tasks; learn is for reference material only.';

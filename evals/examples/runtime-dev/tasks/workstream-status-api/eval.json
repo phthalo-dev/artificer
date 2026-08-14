@@ -1,0 +1,14 @@
+{
+  "id": "workstream-status-api",
+  "title": "Add paused field to status API",
+  "kind": "repo-patch",
+  "tags": ["runtime", "api", "regression"],
+  "repo": {
+    "url": "fixture",
+    "baseCommit": "local"
+  },
+  "grade": {
+    "type": "shell",
+    "command": "node --test tests/*.test.js"
+  }
+}

@@ -395,6 +395,9 @@ export function createOrchestratorTools(ctx: ToolContext): ToolDef[] {
         required: ['content'],
       },
       handler: async (input) => {
+        if (engine.config?.evalMode) {
+          return 'Error: Identity writes are disabled during eval mode.';
+        }
         const tags = Array.isArray(input.tags)
           ? (input.tags as unknown[]).map(String)
           : [];

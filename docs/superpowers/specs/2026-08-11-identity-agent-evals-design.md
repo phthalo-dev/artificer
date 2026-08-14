@@ -407,9 +407,9 @@ Record in `run-config.json`:
 
 ### Phase 3 — Power user packs (optional)
 
-- [ ] Downloadable SWE-bench Lite curated suite (`artificer eval run --pack swebench-lite-30`)
-- [ ] CI recipe (GitHub Action) for eval on PRs touching `agent/`
-- [ ] LLM-as-judge grader behind explicit opt-in
+- [x] Downloadable SWE-bench Lite curated suite (`artificer eval run --pack swebench-lite-30`)
+- [x] CI recipe (GitHub Action) for eval on PRs touching `agent/`
+- [x] LLM-as-judge grader behind explicit opt-in
 
 ---
 

@@ -12,7 +12,12 @@ import { Store } from './storage/store.js';
 
 export { loadConfig, mergeWithDefinition } from './config.js';
 export { Engine } from './engine/engine.js';
-export { DEFAULT_PRESET_ID, getPreset, listPresets } from './engine/presets.js';
+export {
+  DEFAULT_PRESET_ID,
+  getPreset,
+  isPresetId,
+  listPresets,
+} from './engine/presets.js';
 export type { ModelPreset } from './engine/presets.js';
 export { Store } from './storage/store.js';
 export { createApp } from './server/app.js';
@@ -73,7 +78,12 @@ export async function startRuntime(): Promise<void> {
   await store.init();
 
   const identity = config.identity
-    ? new IdentityGitSync(config.identityDir, config.identity, config.github)
+    ? new IdentityGitSync(
+        config.identityDir,
+        config.identity,
+        config.github,
+        Boolean(config.evalMode),
+      )
     : undefined;
   await identity?.init();
   const engine = new Engine(config, store, undefined, undefined, identity);
@@ -103,7 +113,11 @@ export async function startRuntime(): Promise<void> {
   console.log('[artificer-runtime] Schedule runner enabled');
 
   const pullIntervalMs = config.identity?.pullIntervalMs;
-  if (pullIntervalMs && engine.identity instanceof IdentityGitSync) {
+  if (
+    pullIntervalMs &&
+    engine.identity instanceof IdentityGitSync &&
+    !config.evalMode
+  ) {
     const scheduleNextPull = () => {
       setTimeout(() => {
         runIdentityPullCycle({

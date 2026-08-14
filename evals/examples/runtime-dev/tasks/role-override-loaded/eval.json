@@ -1,0 +1,10 @@
+{
+  "id": "role-override-loaded",
+  "title": "Worker role override is reflected",
+  "kind": "message",
+  "tags": ["roles", "identity"],
+  "grade": {
+    "type": "message-contains",
+    "pattern": "eval-dogfood"
+  }
+}

@@ -383,6 +383,182 @@ const DOCKERIGNORE_TEMPLATE = `node_modules
 *.log
 `;
 
+/** Scaffold Pack A smoke evals under agent/evals/. */
+function writePackAEvals(dir: string): void {
+  const suitesDir = path.join(dir, 'agent', 'evals', 'suites');
+  const tasksDir = path.join(dir, 'agent', 'evals', 'tasks');
+  fs.mkdirSync(suitesDir, { recursive: true });
+
+  fs.writeFileSync(
+    path.join(suitesDir, 'smoke.json'),
+    JSON.stringify(
+      {
+        name: 'Smoke',
+        description: 'Fast regression checks for a new agent.',
+        taskIds: [
+          'status-preset-query',
+          'fix-format-cost-display',
+          'implement-hello-tool',
+        ],
+      },
+      null,
+      2,
+    ) + '\n',
+  );
+
+  const presetDir = path.join(tasksDir, 'status-preset-query');
+  fs.mkdirSync(presetDir, { recursive: true });
+  fs.writeFileSync(
+    path.join(presetDir, 'eval.json'),
+    JSON.stringify(
+      {
+        id: 'status-preset-query',
+        title: 'Report current model preset',
+        kind: 'message',
+        grade: { type: 'message-contains', pattern: 'preset' },
+      },
+      null,
+      2,
+    ) + '\n',
+  );
+  fs.writeFileSync(
+    path.join(presetDir, 'prompt.md'),
+    'What model preset is this agent using?\n',
+  );
+
+  const helloDir = path.join(tasksDir, 'implement-hello-tool');
+  fs.mkdirSync(path.join(helloDir, 'fixture', 'src'), { recursive: true });
+  fs.mkdirSync(path.join(helloDir, 'hidden', 'tests'), { recursive: true });
+  fs.writeFileSync(
+    path.join(helloDir, 'eval.json'),
+    JSON.stringify(
+      {
+        id: 'implement-hello-tool',
+        title: 'Implement a hello function',
+        kind: 'greenfield',
+        test_command: 'node --test tests/*.test.js',
+        grade: {
+          type: 'shell',
+          command: 'node --test tests/*.test.js',
+        },
+      },
+      null,
+      2,
+    ) + '\n',
+  );
+  fs.writeFileSync(
+    path.join(helloDir, 'prompt.md'),
+    'Implement `hello(name)` in `src/hello.js` so it returns `Hello, ${name}!`.\n',
+  );
+  fs.writeFileSync(
+    path.join(helloDir, 'fixture', 'package.json'),
+    JSON.stringify(
+      { name: 'hello-tool', type: 'module', private: true },
+      null,
+      2,
+    ) + '\n',
+  );
+  fs.writeFileSync(
+    path.join(helloDir, 'fixture', 'src', 'hello.js'),
+    "export function hello(_name) {\n  throw new Error('Not implemented');\n}\n",
+  );
+  fs.writeFileSync(
+    path.join(helloDir, 'hidden', 'tests', 'hello.test.js'),
+    `import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { hello } from '../src/hello.js';
+
+test('hello greets the supplied name', () => {
+  assert.equal(hello('Ada'), 'Hello, Ada!');
+});
+`,
+  );
+
+  const formatDir = path.join(tasksDir, 'fix-format-cost-display');
+  fs.mkdirSync(path.join(formatDir, 'fixture', 'src'), { recursive: true });
+  fs.mkdirSync(path.join(formatDir, 'hidden', 'tests'), { recursive: true });
+  fs.writeFileSync(
+    path.join(formatDir, 'eval.json'),
+    JSON.stringify(
+      {
+        id: 'fix-format-cost-display',
+        title: 'Fix cost formatting regression',
+        kind: 'repo-patch',
+        tags: ['ui', 'regression'],
+        repo: {
+          url: 'fixture',
+          baseCommit: 'local',
+        },
+        grade: {
+          type: 'shell',
+          command: 'node --test tests/*.test.js',
+        },
+      },
+      null,
+      2,
+    ) + '\n',
+  );
+  fs.writeFileSync(
+    path.join(formatDir, 'prompt.md'),
+    [
+      '`formatCost()` in `src/format.js` has a regression: amounts below one cent',
+      'display as `$0.00` instead of four decimal places. Restore the previous',
+      'behavior so `formatCost(0.0042)` returns `$0.0042`, while keeping `$0.00`',
+      'for zero and two decimals for amounts ≥ $0.01.',
+      '',
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(formatDir, 'fixture', 'package.json'),
+    JSON.stringify(
+      { name: 'format-cost-fixture', type: 'module', private: true },
+      null,
+      2,
+    ) + '\n',
+  );
+  fs.writeFileSync(
+    path.join(formatDir, 'fixture', 'src', 'format.js'),
+    [
+      'export function formatCost(usd) {',
+      "  if (!usd) return '$0.00';",
+      '  if (usd < 0.01) return `$${usd.toFixed(4)}`;',
+      '  return `$${usd.toFixed(2)}`;',
+      '}',
+      '',
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(formatDir, 'fixture', 'introduce-bug.patch'),
+    [
+      'diff --git a/src/format.js b/src/format.js',
+      'index 7c49429..b210a71 100644',
+      '--- a/src/format.js',
+      '+++ b/src/format.js',
+      '@@ -1,5 +1,5 @@',
+      ' export function formatCost(usd) {',
+      "   if (!usd) return '$0.00';",
+      '-  if (usd < 0.01) return `$${usd.toFixed(4)}`;',
+      '+  // Bug: always rounds to 2 decimals, hiding sub-cent costs as $0.00',
+      '   return `$${usd.toFixed(2)}`;',
+      ' }',
+      '',
+    ].join('\n'),
+  );
+  fs.writeFileSync(
+    path.join(formatDir, 'hidden', 'tests', 'format.test.js'),
+    `import assert from 'node:assert/strict';
+import { test } from 'node:test';
+import { formatCost } from '../src/format.js';
+
+test('formatCost formats zero and small amounts', () => {
+  assert.equal(formatCost(0), '$0.00');
+  assert.equal(formatCost(0.0042), '$0.0042');
+  assert.equal(formatCost(1.5), '$1.50');
+});
+`,
+  );
+}
+
 export function init(name: string, targetDir?: string): void {
   const dir = targetDir ?? path.resolve(process.cwd(), name);
 
@@ -394,6 +570,7 @@ export function init(name: string, targetDir?: string): void {
   fs.mkdirSync(path.join(dir, 'agent', 'channels'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'agent', 'skills'), { recursive: true });
   fs.mkdirSync(path.join(dir, 'identity', 'memories'), { recursive: true });
+  writePackAEvals(dir);
 
   fs.writeFileSync(
     path.join(dir, 'artificer.config.json'),

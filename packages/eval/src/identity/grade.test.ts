@@ -1,9 +1,16 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 import type { RuntimeClient, RuntimeState } from '../driver/client.js';
 import { runMessageTask } from '../driver/run-message-task.js';
 import type { LoadedEvalTask } from '../types.js';
-import { gradeMessageContains, gradeWorkstreamStatus } from './grade.js';
+import {
+  gradeFileExists,
+  gradeMessageContains,
+  gradeWorkstreamStatus,
+} from './grade.js';
 
 test('message-contains passes when pattern matches an outbound message', () => {
   assert.equal(
@@ -26,6 +33,27 @@ test('workstream-status passes only for an expected terminal status', () => {
   assert.equal(gradeWorkstreamStatus('done', ['done']), true);
   assert.equal(gradeWorkstreamStatus('failed', ['done']), false);
   assert.equal(gradeWorkstreamStatus('blocked', ['done', 'blocked']), true);
+});
+
+test('file-exists passes for a path under the workspace', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'file-exists-'));
+  try {
+    await fs.writeFile(path.join(root, 'plan.md'), '# Plan\n');
+    assert.equal(await gradeFileExists(root, 'plan.md'), true);
+    assert.equal(await gradeFileExists(root, 'missing.md'), false);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
+});
+
+test('file-exists rejects absolute paths and workspace escapes', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'file-exists-'));
+  try {
+    assert.equal(await gradeFileExists(root, '/etc/passwd'), false);
+    assert.equal(await gradeFileExists(root, '../outside.md'), false);
+  } finally {
+    await fs.rm(root, { recursive: true, force: true });
+  }
 });
 
 test('runMessageTask submits, captures outbound messages, and records usage', async () => {
