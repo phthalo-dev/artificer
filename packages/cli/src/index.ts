@@ -26,7 +26,8 @@ switch (command) {
   case 'eval': {
     const sub = args[0];
     const rest = args.slice(1);
-    const { evalRun, evalList, evalCompare } = await import('./commands/eval.js');
+    const { evalRun, evalList, evalCompare } =
+      await import('./commands/eval.js');
     if (sub === 'run') {
       await evalRun(rest);
       break;
@@ -42,7 +43,9 @@ switch (command) {
     console.log('Usage: artificer eval <run|list|compare> [args]');
     console.log('');
     console.log('  eval run [--suite smoke] [--task <id>] [--preset <id>]');
-    console.log('           [--pack swebench-lite-30] [--limit N] [--llm-judge]');
+    console.log(
+      '           [--pack swebench-lite-30] [--limit N] [--llm-judge]',
+    );
     console.log('  eval list');
     console.log('  eval compare [baseline] [candidate] [--write]');
     process.exit(sub ? 1 : 0);
@@ -55,5 +58,7 @@ switch (command) {
     console.log('  init <name>    Create a new agent project');
     console.log('  dev            Start in development mode');
     console.log('  start          Start in production mode');
-    console.log('  eval run|list|compare  Run, list, or compare identity evals');
+    console.log(
+      '  eval run|list|compare  Run, list, or compare identity evals',
+    );
 }

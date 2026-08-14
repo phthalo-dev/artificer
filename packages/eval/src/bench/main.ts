@@ -2,7 +2,12 @@ import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import 'dotenv/config';
-import { BENCH_DIR, type BenchConfig, loadBenchConfig, RUNTIME_ROOT } from './config.js';
+import {
+  BENCH_DIR,
+  type BenchConfig,
+  loadBenchConfig,
+  RUNTIME_ROOT,
+} from './config.js';
 import { formatUsd, sumUsage } from '../driver/cost.js';
 import { archiveBenchRun } from './history.js';
 import { runInstance } from './run-instance.js';
@@ -45,11 +50,18 @@ function runStep(
   env: NodeJS.ProcessEnv,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd: RUNTIME_ROOT, env, stdio: 'inherit' });
+    const child = spawn(command, args, {
+      cwd: RUNTIME_ROOT,
+      env,
+      stdio: 'inherit',
+    });
     child.on('error', reject);
     child.on('close', (code) => {
       if (code === 0) resolve();
-      else reject(new Error(`${command} ${args.join(' ')} exited with code ${code}`));
+      else
+        reject(
+          new Error(`${command} ${args.join(' ')} exited with code ${code}`),
+        );
     });
   });
 }
@@ -77,14 +89,26 @@ async function gradeAndReport(
       PYTHON: python,
     });
   } else if (kind === 'deepswe') {
-    await runStep('bash', [path.join(BENCH_DIR, 'eval', 'run-deepswe-eval.sh')], env);
+    await runStep(
+      'bash',
+      [path.join(BENCH_DIR, 'eval', 'run-deepswe-eval.sh')],
+      env,
+    );
   } else {
-    await runStep('bash', [path.join(BENCH_DIR, 'eval', 'run-greenfield-eval.sh')], env);
+    await runStep(
+      'bash',
+      [path.join(BENCH_DIR, 'eval', 'run-greenfield-eval.sh')],
+      env,
+    );
   }
 
   // eslint-disable-next-line no-console
   console.log(`\n[bench] writing report...`);
-  await runStep('pnpm', ['exec', 'tsx', path.join(BENCH_DIR, 'src', 'report.ts')], env);
+  await runStep(
+    'pnpm',
+    ['exec', 'tsx', path.join(BENCH_DIR, 'src', 'report.ts')],
+    env,
+  );
 }
 
 /** Warn when Go gateway is paired with models that only exist on standard Zen. */
@@ -92,7 +116,9 @@ function warnGoModelMismatch(config: BenchConfig): void {
   const base = config.baseUrl ?? process.env.LLM_BASE_URL ?? '';
   if (!base.includes('/zen/go/')) return;
   const zenOnly = (id: string) =>
-    id.startsWith('gpt-') || id.startsWith('gemini-') || id.startsWith('claude-');
+    id.startsWith('gpt-') ||
+    id.startsWith('gemini-') ||
+    id.startsWith('claude-');
   const bad = Object.entries(config.models).filter(([, id]) => zenOnly(id));
   if (bad.length === 0) return;
   // eslint-disable-next-line no-console
@@ -110,7 +136,9 @@ async function main(): Promise<void> {
 
   if (instances.length === 0) {
     // eslint-disable-next-line no-console
-    console.error('[bench] no instances to run (check the suite / instance ids)');
+    console.error(
+      '[bench] no instances to run (check the suite / instance ids)',
+    );
     process.exit(1);
   }
 
@@ -258,7 +286,9 @@ function printSummary(attempts: AttemptRecord[]): void {
   const withPatch = attempts.filter((a) => a.patchBytes > 0).length;
 
   // eslint-disable-next-line no-console
-  console.log('\n[bench] ===== driver summary (correctness pending eval) =====');
+  console.log(
+    '\n[bench] ===== driver summary (correctness pending eval) =====',
+  );
   // eslint-disable-next-line no-console
   console.log(`[bench] instances:        ${attempts.length}`);
   // eslint-disable-next-line no-console

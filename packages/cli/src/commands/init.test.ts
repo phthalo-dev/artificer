@@ -39,10 +39,19 @@ test('init scaffolds expected files and directories', () => {
   assert.ok(fs.existsSync(path.join(dir, 'agent', 'channels')));
   assert.ok(fs.existsSync(path.join(dir, 'agent', 'skills')));
   assert.ok(fs.existsSync(path.join(dir, 'identity', 'memories')));
-  assert.ok(fs.existsSync(path.join(dir, 'agent', 'evals', 'suites', 'smoke.json')));
+  assert.ok(
+    fs.existsSync(path.join(dir, 'agent', 'evals', 'suites', 'smoke.json')),
+  );
   assert.ok(
     fs.existsSync(
-      path.join(dir, 'agent', 'evals', 'tasks', 'status-preset-query', 'prompt.md'),
+      path.join(
+        dir,
+        'agent',
+        'evals',
+        'tasks',
+        'status-preset-query',
+        'prompt.md',
+      ),
     ),
   );
   assert.ok(

@@ -66,10 +66,7 @@ export async function subscribeEvents(
   }
 }
 
-function dispatch(
-  block: string,
-  onEvent: (event: RuntimeEvent) => void,
-): void {
+function dispatch(block: string, onEvent: (event: RuntimeEvent) => void): void {
   let eventName = 'message';
   let data = '';
   for (const line of block.split('\n')) {

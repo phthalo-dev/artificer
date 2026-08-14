@@ -56,7 +56,9 @@ test('compareEvalRuns diffs resolved ids and cost per solved', async () => {
 });
 
 test('resolveCompareRunDirs picks the latest two runs when args omitted', async () => {
-  const execDir = await fs.mkdtemp(path.join(os.tmpdir(), 'eval-compare-exec-'));
+  const execDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'eval-compare-exec-'),
+  );
   const runs = path.join(execDir, 'evals', 'runs');
   await fs.mkdir(runs, { recursive: true });
   const older = path.join(runs, '2026-08-11T09-00-00Z-smoke');

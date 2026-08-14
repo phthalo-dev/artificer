@@ -41,7 +41,9 @@ async function acquireLock(lockDir: string): Promise<void> {
     } catch (err) {
       if ((err as NodeJS.ErrnoException).code !== 'EEXIST') throw err;
       if (Date.now() > deadline) {
-        throw new Error(`timed out waiting for greenfield cache lock: ${lockDir}`);
+        throw new Error(
+          `timed out waiting for greenfield cache lock: ${lockDir}`,
+        );
       }
       await new Promise((r) => setTimeout(r, LOCK_RETRY_MS));
     }
@@ -116,7 +118,9 @@ async function materializeScaffold(
  * processes' clones interleaved with a third process's rm+rebuild of the one
  * shared path.
  */
-export async function loadGreenfieldTask(taskId: string): Promise<BenchInstance> {
+export async function loadGreenfieldTask(
+  taskId: string,
+): Promise<BenchInstance> {
   const fixtureDir = path.join(GREENFIELD_FIXTURES_DIR, taskId);
   const [metaRaw, spec] = await Promise.all([
     fs.readFile(path.join(fixtureDir, 'meta.json'), 'utf8'),
@@ -124,14 +128,22 @@ export async function loadGreenfieldTask(taskId: string): Promise<BenchInstance>
   ]);
   const meta = JSON.parse(metaRaw) as GreenfieldMeta;
 
-  const { repoDir, commit } = await withGreenfieldCacheLock(taskId, async () => {
-    const canonical = await materializeScaffold(taskId);
-    const privateDir = await fs.mkdtemp(
-      path.join(os.tmpdir(), `artificer-greenfield-cache-${taskId}-`),
-    );
-    await execFileAsync('git', ['clone', '-q', canonical.repoDir, privateDir]);
-    return { repoDir: privateDir, commit: canonical.commit };
-  });
+  const { repoDir, commit } = await withGreenfieldCacheLock(
+    taskId,
+    async () => {
+      const canonical = await materializeScaffold(taskId);
+      const privateDir = await fs.mkdtemp(
+        path.join(os.tmpdir(), `artificer-greenfield-cache-${taskId}-`),
+      );
+      await execFileAsync('git', [
+        'clone',
+        '-q',
+        canonical.repoDir,
+        privateDir,
+      ]);
+      return { repoDir: privateDir, commit: canonical.commit };
+    },
+  );
 
   return {
     instance_id: meta.task_id,

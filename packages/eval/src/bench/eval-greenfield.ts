@@ -4,7 +4,11 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
 import { RESULTS_DIR } from './config.js';
-import { GREENFIELD_FIXTURES_DIR, copyDir, withGreenfieldCacheLock } from './greenfield.js';
+import {
+  GREENFIELD_FIXTURES_DIR,
+  copyDir,
+  withGreenfieldCacheLock,
+} from './greenfield.js';
 import { CACHE_DIR } from './config.js';
 
 const execFileAsync = promisify(execFile);

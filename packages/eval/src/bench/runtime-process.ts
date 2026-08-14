@@ -43,8 +43,7 @@ function getAvailablePort(preferred?: number): Promise<number> {
       });
       server.listen(port, () => {
         const addr = server.address();
-        const assigned =
-          typeof addr === 'object' && addr ? addr.port : port;
+        const assigned = typeof addr === 'object' && addr ? addr.port : port;
         server.close(() => resolve(assigned));
       });
     };

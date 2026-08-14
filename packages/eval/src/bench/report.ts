@@ -73,7 +73,9 @@ function buildMarkdown(
   const n = rows.length;
   const solved = resolvedCount;
   const resolveRate =
-    solved !== null && n > 0 ? `${((solved / n) * 100).toFixed(1)}%` : 'n/a (run eval)';
+    solved !== null && n > 0
+      ? `${((solved / n) * 100).toFixed(1)}%`
+      : 'n/a (run eval)';
   const costPerSolved =
     solved && solved > 0 ? formatUsd(totals.costUsd / solved) : 'n/a';
   const avgRuns = n > 0 ? (totals.runs / n).toFixed(1) : '0';
@@ -105,8 +107,7 @@ function buildMarkdown(
   );
   lines.push('| --- | --- | --- | --- | --- | --- | --- | --- | --- |');
   for (const r of rows) {
-    const resolved =
-      r.resolved === null ? '—' : r.resolved ? '✅' : '❌';
+    const resolved = r.resolved === null ? '—' : r.resolved ? '✅' : '❌';
     lines.push(
       `| ${r.instanceId} | ${r.repo} | ${resolved} | ${r.outcome} | ` +
         `${fmtDuration(r.durationMs)} | ${r.patchBytes}B | ${formatUsd(r.costUsd)} | ${r.runs} | ` +

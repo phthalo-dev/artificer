@@ -197,10 +197,10 @@ async function preflightClone(
       timeout: 30_000,
     });
   } catch {
-    await execAsync(
-      `git fetch --depth 1 origin ${shellQuote(baseCommit)}`,
-      { cwd: repoDir, timeout: 120_000 },
-    );
+    await execAsync(`git fetch --depth 1 origin ${shellQuote(baseCommit)}`, {
+      cwd: repoDir,
+      timeout: 120_000,
+    });
   }
   await execAsync(`git checkout ${shellQuote(baseCommit)}`, {
     cwd: repoDir,
@@ -477,8 +477,7 @@ export async function runInstance(
     const clonePath = await findGitRepoInWorkspace(workspaceDir);
     rec.localRepoReady = clonePath !== undefined;
     if (clonePath) {
-      rec.cloneLocation =
-        path.relative(workspaceDir, clonePath) || '.';
+      rec.cloneLocation = path.relative(workspaceDir, clonePath) || '.';
     }
 
     const result = await extractPatch(workspaceDir, instance.base_commit).catch(

@@ -3,11 +3,17 @@ import { test } from 'node:test';
 import type { SweBenchInstance } from '../bench/types.js';
 import { getEvalPack, listEvalPacks } from './registry.js';
 import { loadEvalPack, sweBenchInstanceToEvalTask } from './load-pack.js';
-import { SWE_BENCH_LITE_30, SWE_BENCH_LITE_30_PACK_ID } from './swebench-lite-30.js';
+import {
+  SWE_BENCH_LITE_30,
+  SWE_BENCH_LITE_30_PACK_ID,
+} from './swebench-lite-30.js';
 
 test('listEvalPacks includes swebench-lite-30 with 30 instance ids', () => {
   const packs = listEvalPacks();
-  assert.equal(packs.some((pack) => pack.id === SWE_BENCH_LITE_30_PACK_ID), true);
+  assert.equal(
+    packs.some((pack) => pack.id === SWE_BENCH_LITE_30_PACK_ID),
+    true,
+  );
   assert.equal(SWE_BENCH_LITE_30.instanceIds.length, 30);
   assert.ok(SWE_BENCH_LITE_30.instanceIds.includes('pallets__flask-4045'));
 });

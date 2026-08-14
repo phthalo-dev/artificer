@@ -86,8 +86,7 @@ export async function compareEvalRuns(
   };
 
   if (options.writeSidecar || options.sidecarPath) {
-    const out =
-      options.sidecarPath ?? path.join(candidate, 'compare.json');
+    const out = options.sidecarPath ?? path.join(candidate, 'compare.json');
     await fs.writeFile(out, `${JSON.stringify(result, null, 2)}\n`, 'utf8');
   }
 

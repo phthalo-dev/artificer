@@ -41,19 +41,16 @@ export async function gradeLlmJudge(options: {
  * Default judge: OpenAI-compatible chat completions using the same env the
  * runtime already documents (LLM_API_KEY / LLM_BASE_URL / LLM_MODEL).
  */
-export async function defaultLlmJudgeComplete(
-  prompt: string,
-): Promise<string> {
+export async function defaultLlmJudgeComplete(prompt: string): Promise<string> {
   const apiKey = process.env.LLM_API_KEY;
   if (!apiKey) {
     throw new Error(
       'llm-judge requires LLM_API_KEY (or pass a custom complete function)',
     );
   }
-  const baseUrl = (process.env.LLM_BASE_URL ?? 'https://api.openai.com/v1').replace(
-    /\/$/,
-    '',
-  );
+  const baseUrl = (
+    process.env.LLM_BASE_URL ?? 'https://api.openai.com/v1'
+  ).replace(/\/$/, '');
   const model =
     process.env.LLM_MODEL_HIGH ??
     process.env.LLM_MODEL ??
