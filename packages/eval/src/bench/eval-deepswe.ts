@@ -52,7 +52,9 @@ async function gradeOne(
     toml = await fs.readFile(metaPath, 'utf8');
   } catch {
     // eslint-disable-next-line no-console
-    console.warn(`[deepswe-eval] skip ${instanceId}: task.toml not cached (run bench first)`);
+    console.warn(
+      `[deepswe-eval] skip ${instanceId}: task.toml not cached (run bench first)`,
+    );
     return 'error';
   }
 
@@ -60,7 +62,9 @@ async function gradeOne(
   const commit = parseTomlValue(toml, 'base_commit_hash');
   if (!image || !commit) {
     // eslint-disable-next-line no-console
-    console.warn(`[deepswe-eval] skip ${instanceId}: missing docker_image or base_commit`);
+    console.warn(
+      `[deepswe-eval] skip ${instanceId}: missing docker_image or base_commit`,
+    );
     return 'error';
   }
 
@@ -89,7 +93,16 @@ fi
   try {
     await execFileAsync(
       'docker',
-      ['run', '--rm', '-v', `${patchFile}:/model.patch:ro`, image, 'bash', '-lc', script],
+      [
+        'run',
+        '--rm',
+        '-v',
+        `${patchFile}:/model.patch:ro`,
+        image,
+        'bash',
+        '-lc',
+        script,
+      ],
       { timeout: 1_800_000 },
     );
     return 'resolved';

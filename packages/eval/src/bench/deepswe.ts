@@ -68,7 +68,9 @@ export async function loadDeepSweTask(taskId: string): Promise<BenchInstance> {
     parseTomlString(toml, 'base_commit_hash') ??
     parseTomlString(toml, 'base_commit');
   if (!repositoryUrl || !baseCommit) {
-    throw new Error(`task ${taskId}: missing repository_url or base_commit_hash`);
+    throw new Error(
+      `task ${taskId}: missing repository_url or base_commit_hash`,
+    );
   }
 
   const meta: DeepSweTaskMeta = {

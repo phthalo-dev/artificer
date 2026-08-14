@@ -132,12 +132,7 @@ test('runIdentityEval dispatches a suite and writes reusable result artifacts', 
     ) as Array<Record<string, unknown>>;
     assert.deepEqual(
       attempts.map((attempt) => attempt.instanceId),
-      [
-        'message-task',
-        'workstream-task',
-        'greenfield-task',
-        'repo-patch-task',
-      ],
+      ['message-task', 'workstream-task', 'greenfield-task', 'repo-patch-task'],
     );
     assert.equal(attempts[0]?.repo, 'identity');
     assert.equal(attempts[0]?.baseCommit, 'abc123');

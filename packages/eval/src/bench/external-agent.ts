@@ -8,8 +8,18 @@ import { BENCH_DIR, RESULTS_DIR, resolveSuitePath } from './config.js';
 import { extractPatch } from '../driver/extract-patch.js';
 import { sandboxGithubEnv } from './git-sandbox.js';
 import { buildTaskMessage } from './run-instance.js';
-import { loadSuiteInstances, readSuite, suiteKind, suiteName } from './suites.js';
-import type { AttemptOutcome, AttemptRecord, BenchInstance, Prediction } from './types.js';
+import {
+  loadSuiteInstances,
+  readSuite,
+  suiteKind,
+  suiteName,
+} from './suites.js';
+import type {
+  AttemptOutcome,
+  AttemptRecord,
+  BenchInstance,
+  Prediction,
+} from './types.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -29,7 +39,11 @@ interface AgentSpec {
   /** Binary name resolved via PATH. */
   command: string;
   /** Builds argv for a single-shot, fully autonomous (no human present) run. */
-  buildArgs(prompt: string, model: string | undefined, repoDir: string): string[];
+  buildArgs(
+    prompt: string,
+    model: string | undefined,
+    repoDir: string,
+  ): string[];
   /** Best-effort extraction of cost/token usage from the CLI's captured stdout. */
   parseUsage(stdout: string): ParsedUsage;
 }
@@ -49,7 +63,8 @@ const AGENTS: Record<string, AgentSpec> = {
       try {
         const j = JSON.parse(stdout.trim());
         return {
-          costUsd: typeof j.total_cost_usd === 'number' ? j.total_cost_usd : undefined,
+          costUsd:
+            typeof j.total_cost_usd === 'number' ? j.total_cost_usd : undefined,
           inputTokens: j.usage?.input_tokens,
           outputTokens: j.usage?.output_tokens,
           cacheCreationInputTokens: j.usage?.cache_creation_input_tokens,
@@ -112,7 +127,8 @@ const AGENTS: Record<string, AgentSpec> = {
           const event = JSON.parse(line);
           const part = event.part;
           if (part?.type === 'step-finish') {
-            if (typeof part.cost === 'number') costUsd = (costUsd ?? 0) + part.cost;
+            if (typeof part.cost === 'number')
+              costUsd = (costUsd ?? 0) + part.cost;
             if (part.tokens) {
               sawTokens = true;
               inputTokens += part.tokens.input ?? 0;
@@ -129,7 +145,9 @@ const AGENTS: Record<string, AgentSpec> = {
         costUsd,
         inputTokens: sawTokens ? inputTokens : undefined,
         outputTokens: sawTokens ? outputTokens : undefined,
-        cacheCreationInputTokens: sawTokens ? cacheCreationInputTokens : undefined,
+        cacheCreationInputTokens: sawTokens
+          ? cacheCreationInputTokens
+          : undefined,
         cacheReadInputTokens: sawTokens ? cacheReadInputTokens : undefined,
       };
     },
@@ -159,9 +177,18 @@ function runAgentProcess(
   return new Promise((resolve) => {
     let child: ChildProcess;
     try {
-      child = spawn(command, args, { cwd, env, stdio: ['ignore', 'pipe', 'pipe'] });
+      child = spawn(command, args, {
+        cwd,
+        env,
+        stdio: ['ignore', 'pipe', 'pipe'],
+      });
     } catch (err) {
-      resolve({ stdout: '', stderr: String(err), exitCode: null, timedOut: false });
+      resolve({
+        stdout: '',
+        stderr: String(err),
+        exitCode: null,
+        timedOut: false,
+      });
       return;
     }
     let stdout = '';
@@ -184,7 +211,12 @@ function runAgentProcess(
     });
     child.on('error', (err) => {
       clearTimeout(timer);
-      resolve({ stdout, stderr: stderr + String(err), exitCode: null, timedOut });
+      resolve({
+        stdout,
+        stderr: stderr + String(err),
+        exitCode: null,
+        timedOut,
+      });
     });
   });
 }
@@ -200,8 +232,15 @@ function stripWorkstreamHeader(message: string): string {
   return message.replace(/^-{3} WORKSTREAM -{3}\n[\s\S]*?\n-{3}\n\n/, '');
 }
 
-function emptyPrediction(instance: BenchInstance, modelName: string): Prediction {
-  return { instance_id: instance.instance_id, model_name_or_path: modelName, model_patch: '' };
+function emptyPrediction(
+  instance: BenchInstance,
+  modelName: string,
+): Prediction {
+  return {
+    instance_id: instance.instance_id,
+    model_name_or_path: modelName,
+    model_patch: '',
+  };
 }
 
 function runStep(
@@ -210,11 +249,18 @@ function runStep(
   env: NodeJS.ProcessEnv,
 ): Promise<void> {
   return new Promise((resolve, reject) => {
-    const child = spawn(command, args, { cwd: path.join(BENCH_DIR, '..'), env, stdio: 'inherit' });
+    const child = spawn(command, args, {
+      cwd: path.join(BENCH_DIR, '..'),
+      env,
+      stdio: 'inherit',
+    });
     child.on('error', reject);
     child.on('close', (code) => {
       if (code === 0) resolve();
-      else reject(new Error(`${command} ${args.join(' ')} exited with code ${code}`));
+      else
+        reject(
+          new Error(`${command} ${args.join(' ')} exited with code ${code}`),
+        );
     });
   });
 }
@@ -229,13 +275,24 @@ async function gradeAndReport(resultsDir: string, kind: string): Promise<void> {
     );
     return;
   }
-  const env: NodeJS.ProcessEnv = { ...process.env, BENCH_RESULTS_DIR: resultsDir };
+  const env: NodeJS.ProcessEnv = {
+    ...process.env,
+    BENCH_RESULTS_DIR: resultsDir,
+  };
   // eslint-disable-next-line no-console
   console.log('\n[external-agent] grading with the greenfield evaluator...');
-  await runStep('bash', [path.join(BENCH_DIR, 'eval', 'run-greenfield-eval.sh')], env);
+  await runStep(
+    'bash',
+    [path.join(BENCH_DIR, 'eval', 'run-greenfield-eval.sh')],
+    env,
+  );
   // eslint-disable-next-line no-console
   console.log('\n[external-agent] writing report...');
-  await runStep('pnpm', ['exec', 'tsx', path.join(BENCH_DIR, 'src', 'report.ts')], env);
+  await runStep(
+    'pnpm',
+    ['exec', 'tsx', path.join(BENCH_DIR, 'src', 'report.ts')],
+    env,
+  );
 }
 
 async function runOneInstance(
@@ -252,20 +309,31 @@ async function runOneInstance(
     path.join(os.tmpdir(), `artificer-bench-ext-${agentId}-${safeLabel}-`),
   );
   const repoDir = path.join(workspaceDir, 'repo');
-  const repoUrl = instance.repository_url ?? `https://github.com/${instance.repo}.git`;
+  const repoUrl =
+    instance.repository_url ?? `https://github.com/${instance.repo}.git`;
 
   try {
     await execFileAsync('git', ['clone', repoUrl, repoDir]);
     try {
-      await execFileAsync('git', ['cat-file', '-e', `${instance.base_commit}^{commit}`], {
-        cwd: repoDir,
-      });
+      await execFileAsync(
+        'git',
+        ['cat-file', '-e', `${instance.base_commit}^{commit}`],
+        {
+          cwd: repoDir,
+        },
+      );
     } catch {
-      await execFileAsync('git', ['fetch', '--depth', '1', 'origin', instance.base_commit], {
-        cwd: repoDir,
-      });
+      await execFileAsync(
+        'git',
+        ['fetch', '--depth', '1', 'origin', instance.base_commit],
+        {
+          cwd: repoDir,
+        },
+      );
     }
-    await execFileAsync('git', ['checkout', instance.base_commit], { cwd: repoDir });
+    await execFileAsync('git', ['checkout', instance.base_commit], {
+      cwd: repoDir,
+    });
   } catch (err) {
     await fs.rm(workspaceDir, { recursive: true, force: true }).catch(() => {});
     return {
@@ -282,12 +350,23 @@ async function runOneInstance(
     };
   }
 
-  const prompt = stripWorkstreamHeader(buildTaskMessage(instance, { preflight: true }));
+  const prompt = stripWorkstreamHeader(
+    buildTaskMessage(instance, { preflight: true }),
+  );
   const env = await sandboxGithubEnv(process.env, workspaceDir);
   const args = spec.buildArgs(prompt, model, repoDir);
-  const result = await runAgentProcess(spec.command, args, repoDir, env, timeoutMs);
+  const result = await runAgentProcess(
+    spec.command,
+    args,
+    repoDir,
+    env,
+    timeoutMs,
+  );
 
-  const { patch, warning } = await extractPatch(workspaceDir, instance.base_commit);
+  const { patch, warning } = await extractPatch(
+    workspaceDir,
+    instance.base_commit,
+  );
   const usage = spec.parseUsage(result.stdout);
   const durationMs = Date.now() - startedAt;
 
@@ -330,7 +409,11 @@ async function runOneInstance(
 
   return {
     attempt,
-    prediction: { instance_id: instance.instance_id, model_name_or_path: modelName, model_patch: patch },
+    prediction: {
+      instance_id: instance.instance_id,
+      model_name_or_path: modelName,
+      model_patch: patch,
+    },
   };
 }
 
@@ -346,23 +429,33 @@ async function main(): Promise<void> {
   }
   const spec = AGENTS[agentId];
 
-  const suitePath = resolveSuitePath(flag(argv, 'suite') ?? 'tasks/greenfield-mini.json');
+  const suitePath = resolveSuitePath(
+    flag(argv, 'suite') ?? 'tasks/greenfield-mini.json',
+  );
   const suite = await readSuite(suitePath);
   const suiteBase = path.basename(suitePath, '.json');
 
   const idsArg = flag(argv, 'instance-ids');
-  const ids = idsArg ? idsArg.split(',').map((s) => s.trim()).filter(Boolean) : suite.instanceIds;
+  const ids = idsArg
+    ? idsArg
+        .split(',')
+        .map((s) => s.trim())
+        .filter(Boolean)
+    : suite.instanceIds;
   const instances = await loadSuiteInstances(suite, ids);
   if (instances.length === 0) {
     // eslint-disable-next-line no-console
-    console.error('[external-agent] no instances to run (check the suite / instance ids)');
+    console.error(
+      '[external-agent] no instances to run (check the suite / instance ids)',
+    );
     process.exit(1);
   }
 
   const model = flag(argv, 'model');
   const timeoutMs = Number(flag(argv, 'timeout-ms') ?? 900_000);
   const resultsDir =
-    flag(argv, 'results-dir') ?? path.join(RESULTS_DIR, 'external', agentId, suiteBase);
+    flag(argv, 'results-dir') ??
+    path.join(RESULTS_DIR, 'external', agentId, suiteBase);
   await fs.mkdir(resultsDir, { recursive: true });
 
   // eslint-disable-next-line no-console
@@ -378,8 +471,16 @@ async function main(): Promise<void> {
   for (const instance of instances) {
     i += 1;
     // eslint-disable-next-line no-console
-    console.log(`\n[external-agent] (${i}/${instances.length}) ${instance.instance_id}`);
-    const { attempt, prediction } = await runOneInstance(agentId, spec, instance, model, timeoutMs);
+    console.log(
+      `\n[external-agent] (${i}/${instances.length}) ${instance.instance_id}`,
+    );
+    const { attempt, prediction } = await runOneInstance(
+      agentId,
+      spec,
+      instance,
+      model,
+      timeoutMs,
+    );
     attempts.push(attempt);
     predictions.push(prediction);
     // eslint-disable-next-line no-console

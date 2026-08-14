@@ -153,30 +153,28 @@ export function loadBenchConfig(
     // eslint-disable-next-line no-console
     console.warn(
       `[bench] unknown --gateway "${gatewayArg}"; valid values: ` +
-        [...Object.keys(GATEWAY_PROFILES), ...Object.keys(GATEWAY_ALIASES)].join(', '),
+        [
+          ...Object.keys(GATEWAY_PROFILES),
+          ...Object.keys(GATEWAY_ALIASES),
+        ].join(', '),
     );
   }
 
   // Preset: explicit flag wins, then env, then the gateway's recommended default.
   const presetArg = flag(argv, 'preset');
   const presetId =
-    presetArg ?? env.BENCH_PRESET ?? env.MODEL_PRESET ?? gatewayProfile?.defaultPreset;
-  const preset = (presetId ? getPreset(presetId) : null) ?? getPreset(DEFAULT_PRESET_ID)!;
+    presetArg ??
+    env.BENCH_PRESET ??
+    env.MODEL_PRESET ??
+    gatewayProfile?.defaultPreset;
+  const preset =
+    (presetId ? getPreset(presetId) : null) ?? getPreset(DEFAULT_PRESET_ID)!;
 
   // CLI model flags win; then preset tiers (reproducible bench runs); then env.
   const models = {
-    low:
-      flag(argv, 'model-low') ??
-      preset.tiers.low ??
-      env.LLM_MODEL_LOW,
-    medium:
-      flag(argv, 'model') ??
-      preset.tiers.medium ??
-      env.LLM_MODEL,
-    high:
-      flag(argv, 'model-high') ??
-      preset.tiers.high ??
-      env.LLM_MODEL_HIGH,
+    low: flag(argv, 'model-low') ?? preset.tiers.low ?? env.LLM_MODEL_LOW,
+    medium: flag(argv, 'model') ?? preset.tiers.medium ?? env.LLM_MODEL,
+    high: flag(argv, 'model-high') ?? preset.tiers.high ?? env.LLM_MODEL_HIGH,
   };
 
   const roleTiers = { ...preset.roleTiers } as Record<
@@ -200,7 +198,9 @@ export function loadBenchConfig(
   const explicitModelName = flag(argv, 'model-name') ?? env.BENCH_MODEL_NAME;
   const modelName =
     explicitModelName ??
-    (resolvedPresetId ? `${resolvedPresetId}/${suiteBase}` : 'artificer-runtime');
+    (resolvedPresetId
+      ? `${resolvedPresetId}/${suiteBase}`
+      : 'artificer-runtime');
 
   // Resolve gateway key/URL — falls back to LLM_* env vars (from .env) when no
   // --gateway flag is passed, so existing behaviour is unchanged.
@@ -219,9 +219,7 @@ export function loadBenchConfig(
       : undefined,
     limit: limitArg ? Number(limitArg) : undefined,
     runtimePort: Number(flag(argv, 'port') ?? env.BENCH_RUNTIME_PORT ?? 4111),
-    pollIntervalMs: Number(
-      flag(argv, 'poll-ms') ?? env.BENCH_POLL_MS ?? 5_000,
-    ),
+    pollIntervalMs: Number(flag(argv, 'poll-ms') ?? env.BENCH_POLL_MS ?? 5_000),
     instanceTimeoutMs: Number(
       flag(argv, 'timeout-ms') ?? env.BENCH_TIMEOUT_MS ?? 1_200_000,
     ),
@@ -236,12 +234,13 @@ export function loadBenchConfig(
     presetId: resolvedPresetId,
     modelName,
     keepData: boolFlag(argv, 'keep-data') || env.BENCH_KEEP_DATA === 'true',
-    resultsDir: flag(argv, 'results-dir') ?? env.BENCH_RESULTS_DIR ?? defaultResultsDir,
+    resultsDir:
+      flag(argv, 'results-dir') ?? env.BENCH_RESULTS_DIR ?? defaultResultsDir,
     liveProgress: !boolFlag(argv, 'quiet') && env.BENCH_QUIET !== 'true',
-    showTools: !boolFlag(argv, 'quiet-tools') && env.BENCH_QUIET_TOOLS !== 'true',
+    showTools:
+      !boolFlag(argv, 'quiet-tools') && env.BENCH_QUIET_TOOLS !== 'true',
     preflightClone:
-      boolFlag(argv, 'preflight-clone') ||
-      env.BENCH_PREFLIGHT_CLONE === 'true',
+      boolFlag(argv, 'preflight-clone') || env.BENCH_PREFLIGHT_CLONE === 'true',
     instanceDelayMs: Number(
       flag(argv, 'instance-delay-ms') ?? env.BENCH_INSTANCE_DELAY_MS ?? 0,
     ),

@@ -80,9 +80,7 @@ const defaultDependencies: RunIdentityEvalDependencies = {
 };
 
 export function llmJudgeEnabled(options: EvalRunOptions): boolean {
-  return (
-    options.llmJudge === true || process.env[LLM_JUDGE_ENV] === 'true'
-  );
+  return options.llmJudge === true || process.env[LLM_JUDGE_ENV] === 'true';
 }
 
 function assertLlmJudgeAllowed(

@@ -54,10 +54,7 @@ test('Baseten Model API slugs are in the catalog', () => {
 });
 
 test('inferPackage handles baseten-style slugs', () => {
-  assert.equal(
-    inferPackage('moonshotai/Kimi-K3'),
-    '@ai-sdk/openai-compatible',
-  );
+  assert.equal(inferPackage('moonshotai/Kimi-K3'), '@ai-sdk/openai-compatible');
   assert.equal(
     inferPackage('thinkingmachines/inkling'),
     '@ai-sdk/openai-compatible',

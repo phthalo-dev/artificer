@@ -116,7 +116,9 @@ function runtimeState(status: 'in_progress' | 'done'): RuntimeState {
 }
 
 test('grades greenfield with file-exists against the workspace repo', async () => {
-  const execDir = await fs.mkdtemp(path.join(os.tmpdir(), 'greenfield-exists-'));
+  const execDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'greenfield-exists-'),
+  );
   let stateCalls = 0;
 
   const client = {
@@ -174,4 +176,3 @@ test('grades greenfield with file-exists against the workspace repo', async () =
     await fs.rm(execDir, { recursive: true, force: true });
   }
 });
-

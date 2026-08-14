@@ -104,12 +104,7 @@ async function clonePinnedRepo(
   repo: EvalRepoPin,
   repoDir: string,
 ): Promise<void> {
-  await execFileAsync('git', [
-    'clone',
-    '--quiet',
-    repo.url,
-    repoDir,
-  ]);
+  await execFileAsync('git', ['clone', '--quiet', repo.url, repoDir]);
   await git(repoDir, ['config', 'user.email', 'eval@artificer.local']);
   await git(repoDir, ['config', 'user.name', 'artificer-eval']);
   try {
@@ -135,11 +130,9 @@ export async function applyIntroduceBugPatch(
     return false;
   }
 
-  await execFileAsync(
-    'git',
-    ['apply', '--whitespace=nowarn', patchPath],
-    { cwd: repoDir },
-  );
+  await execFileAsync('git', ['apply', '--whitespace=nowarn', patchPath], {
+    cwd: repoDir,
+  });
   await git(repoDir, ['add', '-A']);
   const status = (await git(repoDir, ['status', '--porcelain'])).trim();
   if (!status) return true;

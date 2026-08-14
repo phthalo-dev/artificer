@@ -1,4 +1,7 @@
-import { SWE_BENCH_LITE_30, SWE_BENCH_LITE_30_PACK_ID } from './swebench-lite-30.js';
+import {
+  SWE_BENCH_LITE_30,
+  SWE_BENCH_LITE_30_PACK_ID,
+} from './swebench-lite-30.js';
 
 export type EvalPackKind = 'swebench';
 

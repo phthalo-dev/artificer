@@ -22,7 +22,9 @@ export async function readSuite(suitePath: string): Promise<SuiteDefinition> {
   return JSON.parse(raw) as SuiteDefinition;
 }
 
-export function suiteKind(suite: SuiteDefinition): 'swebench' | 'deepswe' | 'greenfield' {
+export function suiteKind(
+  suite: SuiteDefinition,
+): 'swebench' | 'deepswe' | 'greenfield' {
   return suite.kind ?? 'swebench';
 }
 

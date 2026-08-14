@@ -32,7 +32,9 @@ const EMPTY: UsageSummary = {
 };
 
 /** Sums a set of usage summaries (e.g. suite totals across all instances). */
-export function sumUsage(summaries: (UsageSummary | undefined)[]): UsageSummary {
+export function sumUsage(
+  summaries: (UsageSummary | undefined)[],
+): UsageSummary {
   const out: UsageSummary = { ...EMPTY };
   for (const s of summaries) {
     if (!s) continue;

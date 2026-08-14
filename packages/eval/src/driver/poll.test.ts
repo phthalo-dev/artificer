@@ -21,19 +21,38 @@ function ws(status: string) {
 }
 
 test('done workstream -> terminal/submitted', () => {
-  const d = decidePoll(state({ busy: false, workstreams: [ws('done')] }), undefined, 1000, GRACE);
-  assert.deepEqual(d, { kind: 'terminal', outcome: 'submitted', workstreamStatus: 'done' });
+  const d = decidePoll(
+    state({ busy: false, workstreams: [ws('done')] }),
+    undefined,
+    1000,
+    GRACE,
+  );
+  assert.deepEqual(d, {
+    kind: 'terminal',
+    outcome: 'submitted',
+    workstreamStatus: 'done',
+  });
 });
 
 test('blocked workstream -> terminal/blocked', () => {
-  const d = decidePoll(state({ busy: false, workstreams: [ws('blocked')] }), undefined, 1000, GRACE);
+  const d = decidePoll(
+    state({ busy: false, workstreams: [ws('blocked')] }),
+    undefined,
+    1000,
+    GRACE,
+  );
   assert.equal(d.kind, 'terminal');
   assert.equal((d as { outcome: string }).outcome, 'blocked');
 });
 
 test('failed/cancelled workstream -> terminal/failed', () => {
   for (const s of ['failed', 'cancelled']) {
-    const d = decidePoll(state({ busy: false, workstreams: [ws(s)] }), undefined, 1000, GRACE);
+    const d = decidePoll(
+      state({ busy: false, workstreams: [ws(s)] }),
+      undefined,
+      1000,
+      GRACE,
+    );
     assert.equal((d as { outcome: string }).outcome, 'failed');
   }
 });

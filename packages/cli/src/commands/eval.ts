@@ -56,9 +56,8 @@ export async function evalRun(argv: string[]): Promise<void> {
 
 export async function evalList(_argv: string[]): Promise<void> {
   const identityDir = process.cwd();
-  const { listEvalSuites, listEvalTasks, listEvalPacks } = await import(
-    '@artificer-ai/eval'
-  );
+  const { listEvalSuites, listEvalTasks, listEvalPacks } =
+    await import('@artificer-ai/eval');
   const [suites, tasks, packs] = await Promise.all([
     listEvalSuites(identityDir),
     listEvalTasks(identityDir),
@@ -81,16 +80,12 @@ export async function evalList(_argv: string[]): Promise<void> {
 
 export async function evalCompare(argv: string[]): Promise<void> {
   const identityDir = process.cwd();
-  const execDir =
-    process.env.ARTIFICER_EXEC_DIR ?? defaultExecDir(identityDir);
+  const execDir = process.env.ARTIFICER_EXEC_DIR ?? defaultExecDir(identityDir);
   const writeSidecar = hasFlag(argv, 'write') || hasFlag(argv, 'sidecar');
   const positionals = positionalArgs(argv);
 
-  const {
-    compareEvalRuns,
-    formatCompareTable,
-    resolveCompareRunDirs,
-  } = await import('@artificer-ai/eval');
+  const { compareEvalRuns, formatCompareTable, resolveCompareRunDirs } =
+    await import('@artificer-ai/eval');
 
   const { baselineDir, candidateDir } = await resolveCompareRunDirs(
     execDir,

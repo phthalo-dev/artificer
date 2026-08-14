@@ -1,5 +1,9 @@
 import type { RuntimeState } from './client.js';
-import type { AttemptOutcome, AttemptRecord, WorkstreamStatus } from '../bench/types.js';
+import type {
+  AttemptOutcome,
+  AttemptRecord,
+  WorkstreamStatus,
+} from '../bench/types.js';
 
 /** Workstream statuses the harness treats as final. */
 export const TERMINAL = new Set<string>([

@@ -452,8 +452,11 @@ function writePackAEvals(dir: string): void {
   );
   fs.writeFileSync(
     path.join(helloDir, 'fixture', 'package.json'),
-    JSON.stringify({ name: 'hello-tool', type: 'module', private: true }, null, 2) +
-      '\n',
+    JSON.stringify(
+      { name: 'hello-tool', type: 'module', private: true },
+      null,
+      2,
+    ) + '\n',
   );
   fs.writeFileSync(
     path.join(helloDir, 'fixture', 'src', 'hello.js'),

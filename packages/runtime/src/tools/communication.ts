@@ -248,7 +248,7 @@ export function createCommunicatorTools(ctx: ToolContext): ToolDef[] {
         required: ['material'],
       },
       handler: async (input) => {
-        if (engine.config.evalMode) {
+        if (engine.config?.evalMode) {
           return 'Error: Identity writes are disabled during eval mode.';
         }
         const material = String(input.material);

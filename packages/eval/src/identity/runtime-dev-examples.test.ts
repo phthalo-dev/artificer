@@ -19,12 +19,7 @@ test('Pack B suite and task manifests parse', async () => {
   assert.ok(suite.taskIds.length >= 5);
 
   for (const taskId of suite.taskIds) {
-    const manifestPath = path.join(
-      examplesRoot,
-      'tasks',
-      taskId,
-      'eval.json',
-    );
+    const manifestPath = path.join(examplesRoot, 'tasks', taskId, 'eval.json');
     const raw = JSON.parse(await fs.readFile(manifestPath, 'utf8'));
     const manifest = parseEvalTaskManifest(raw);
     assert.equal(manifest.id, taskId);

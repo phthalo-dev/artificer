@@ -12,7 +12,10 @@ interface RowsResponse {
 }
 
 function cacheFile(dataset: string, split: string, config: string): string {
-  const slug = `${dataset}__${config}__${split}`.replace(/[^a-zA-Z0-9._-]/g, '_');
+  const slug = `${dataset}__${config}__${split}`.replace(
+    /[^a-zA-Z0-9._-]/g,
+    '_',
+  );
   return path.join(CACHE_DIR, `${slug}.json`);
 }
 
@@ -23,8 +26,10 @@ function toInstance(row: Record<string, unknown>): SweBenchInstance {
     base_commit: String(row.base_commit),
     problem_statement: String(row.problem_statement ?? ''),
     suite: 'swebench',
-    FAIL_TO_PASS: row.FAIL_TO_PASS != null ? String(row.FAIL_TO_PASS) : undefined,
-    PASS_TO_PASS: row.PASS_TO_PASS != null ? String(row.PASS_TO_PASS) : undefined,
+    FAIL_TO_PASS:
+      row.FAIL_TO_PASS != null ? String(row.FAIL_TO_PASS) : undefined,
+    PASS_TO_PASS:
+      row.PASS_TO_PASS != null ? String(row.PASS_TO_PASS) : undefined,
     version: row.version != null ? String(row.version) : undefined,
     environment_setup_commit:
       row.environment_setup_commit != null
@@ -34,7 +39,9 @@ function toInstance(row: Record<string, unknown>): SweBenchInstance {
 }
 
 /** Reads the cached full-split dump if present. */
-async function readCache(file: string): Promise<SweBenchInstance[] | undefined> {
+async function readCache(
+  file: string,
+): Promise<SweBenchInstance[] | undefined> {
   try {
     const raw = await fs.readFile(file, 'utf8');
     return JSON.parse(raw) as SweBenchInstance[];

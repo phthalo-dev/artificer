@@ -29,7 +29,10 @@ async function readEvalResolved(
   instanceIds: string[],
 ): Promise<{ resolved: number; resolveRate: number } | null> {
   try {
-    const raw = await fs.readFile(path.join(resultsDir, 'eval-report.json'), 'utf8');
+    const raw = await fs.readFile(
+      path.join(resultsDir, 'eval-report.json'),
+      'utf8',
+    );
     const report = JSON.parse(raw) as { resolved_ids?: string[] };
     if (!report.resolved_ids) return null;
     const resolvedSet = new Set(report.resolved_ids);
