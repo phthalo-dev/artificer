@@ -3,13 +3,13 @@ import os from 'node:os';
 import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { promisify } from 'node:util';
-import { RESULTS_DIR } from './config.js';
+import { CACHE_DIR, RESULTS_DIR } from './config.js';
 import {
   GREENFIELD_FIXTURES_DIR,
   copyDir,
   withGreenfieldCacheLock,
 } from './greenfield.js';
-import { CACHE_DIR } from './config.js';
+import { nodeTestCount } from '../identity/grade-greenfield.js';
 
 const execFileAsync = promisify(execFile);
 
@@ -89,14 +89,20 @@ async function gradeOne(instanceId: string, patch: string): Promise<Verdict> {
     // instructions, but not enforced) can't affect grading.
     await fs.rm(path.join(workdir, 'tests'), { recursive: true, force: true });
     await copyDir(path.join(fixtureDir, 'hidden'), workdir);
-    const { stdout } = await execFileAsync('sh', ['-c', meta.test_command], {
-      cwd: workdir,
-      timeout: 120_000,
-    });
-    const testsRun = /^ℹ tests (\d+)$/m.exec(stdout)?.[1];
-    if (!testsRun || Number(testsRun) === 0) {
+    const { NODE_TEST_CONTEXT: _nodeTestContext, ...env } = process.env;
+    const { stdout, stderr } = await execFileAsync(
+      'sh',
+      ['-c', meta.test_command],
+      {
+        cwd: workdir,
+        env,
+        timeout: 120_000,
+      },
+    );
+    const testsRun = nodeTestCount(`${stdout}\n${stderr}`);
+    if (testsRun === 0) {
       throw new Error(
-        `test_command ran zero tests (expected output line "ℹ tests N" with N>0): ${meta.test_command}`,
+        `test_command ran zero tests (expected "ℹ tests N" or TAP "# tests N" with N>0): ${meta.test_command}`,
       );
     }
     return 'resolved';

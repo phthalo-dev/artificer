@@ -49,8 +49,7 @@ export async function gradeGreenfieldPatch(
         maxBuffer: 64 * 1024 * 1024,
       },
     );
-    const testsRun = /^ℹ tests (\d+)$/m.exec(`${stdout}\n${stderr}`)?.[1];
-    return testsRun !== undefined && Number(testsRun) > 0;
+    return nodeTestCount(`${stdout}\n${stderr}`) > 0;
   } catch {
     return false;
   } finally {
@@ -66,4 +65,19 @@ function resolveGradeDir(repoDir: string, relativeCwd?: string): string {
     throw new Error(`shell grader cwd escapes fixture repo: ${relativeCwd}`);
   }
   return resolved;
+}
+
+/**
+ * Count tests reported by `node --test`. Spec reporter prints `ℹ tests N`;
+ * TAP (the default when stdout is not a TTY, e.g. GitHub Actions) prints
+ * `# tests N`.
+ */
+export function nodeTestCount(output: string): number {
+  const spec = /^ℹ tests (\d+)\s*$/m.exec(output);
+  if (spec) return Number(spec[1]);
+  const tap = /^# tests (\d+)\s*$/m.exec(output);
+  if (tap) return Number(tap[1]);
+  const plan = /^1\.\.(\d+)\s*$/m.exec(output);
+  if (plan) return Number(plan[1]);
+  return 0;
 }
