@@ -1,19 +1,28 @@
 /**
- * Reads the benchmarking harness output (packages/runtime/bench/results) and
- * exposes it over HTTP so the runtime UI can render a DeepSWE-style benchmark
- * run page. This is a pure file reader: the bench harness (bench/src) writes
- * the artifacts; this module only assembles them into UI-friendly responses.
+ * Reads the benchmarking / identity-eval harness output and exposes it over
+ * HTTP so the runtime UI can render a benchmark run page. This is a pure file
+ * reader: the harness writes the artifacts; this module only assembles them.
  */
-import fs from 'node:fs/promises';
+import fs from 'node:fs';
+import fsp from 'node:fs/promises';
 import path from 'node:path';
 import type { RunNode, UsageSummary } from '../engine/cost.js';
 
 /** Where the harness writes results; overridable for non-default layouts. */
 export function benchResultsDir(): string {
-  return (
-    process.env.BENCH_RESULTS_DIR ??
-    path.resolve(process.cwd(), 'bench/results')
-  );
+  if (process.env.BENCH_RESULTS_DIR) {
+    return path.resolve(process.env.BENCH_RESULTS_DIR);
+  }
+  const execDir = process.env.ARTIFICER_EXEC_DIR;
+  if (execDir) {
+    const latest = path.join(path.resolve(execDir), 'evals', 'latest');
+    try {
+      if (fs.statSync(latest).isDirectory()) return latest;
+    } catch {
+      // fall through
+    }
+  }
+  return path.resolve(process.cwd(), 'bench/results');
 }
 
 // --- Shapes mirrored from bench/src/types.ts (kept local to stay decoupled) ---
@@ -182,7 +191,7 @@ const EMPTY_USAGE: UsageSummary = {
 
 async function readJson<T>(file: string): Promise<T | undefined> {
   try {
-    return JSON.parse(await fs.readFile(file, 'utf8')) as T;
+    return JSON.parse(await fsp.readFile(file, 'utf8')) as T;
   } catch {
     return undefined;
   }
@@ -191,7 +200,7 @@ async function readJson<T>(file: string): Promise<T | undefined> {
 async function readPredictions(dir: string): Promise<Map<string, Prediction>> {
   const byId = new Map<string, Prediction>();
   try {
-    const raw = await fs.readFile(path.join(dir, 'predictions.jsonl'), 'utf8');
+    const raw = await fsp.readFile(path.join(dir, 'predictions.jsonl'), 'utf8');
     for (const line of raw.split('\n')) {
       const trimmed = line.trim();
       if (!trimmed) continue;
@@ -223,7 +232,7 @@ async function hasTrajectory(
   instanceId: string,
 ): Promise<boolean> {
   try {
-    await fs.access(path.join(dir, 'runs', `${instanceId}.json`));
+    await fsp.access(path.join(dir, 'runs', `${instanceId}.json`));
     return true;
   } catch {
     return false;
@@ -234,7 +243,7 @@ async function readHistory(dir: string): Promise<BenchHistorySnapshot[]> {
   const historyDir = path.join(dir, 'history');
   let files: string[];
   try {
-    files = (await fs.readdir(historyDir)).filter((f) => f.endsWith('.json'));
+    files = (await fsp.readdir(historyDir)).filter((f) => f.endsWith('.json'));
   } catch {
     return [];
   }
@@ -243,7 +252,7 @@ async function readHistory(dir: string): Promise<BenchHistorySnapshot[]> {
     try {
       out.push(
         JSON.parse(
-          await fs.readFile(path.join(historyDir, file), 'utf8'),
+          await fsp.readFile(path.join(historyDir, file), 'utf8'),
         ) as BenchHistorySnapshot,
       );
     } catch {
@@ -253,13 +262,18 @@ async function readHistory(dir: string): Promise<BenchHistorySnapshot[]> {
   return out.sort((a, b) => b.archivedAt.localeCompare(a.archivedAt));
 }
 
-const TASKS_DIR = path.resolve(process.cwd(), 'bench/tasks');
-
-/** Lists available benchmark suites for the UI catalog. */
+/** Lists available identity eval suites for the UI catalog. */
 export async function readBenchSuites(): Promise<BenchSuiteCatalogEntry[]> {
+  const identityDir = process.env.ARTIFICER_IDENTITY_DIR ?? process.cwd();
+  const suitesDir = path.join(
+    path.resolve(identityDir),
+    'agent',
+    'evals',
+    'suites',
+  );
   let files: string[];
   try {
-    files = (await fs.readdir(TASKS_DIR)).filter(
+    files = (await fsp.readdir(suitesDir)).filter(
       (f) => f.endsWith('.json') && !f.startsWith('.'),
     );
   } catch {
@@ -269,28 +283,21 @@ export async function readBenchSuites(): Promise<BenchSuiteCatalogEntry[]> {
   for (const file of files.sort()) {
     try {
       const suite = JSON.parse(
-        await fs.readFile(path.join(TASKS_DIR, file), 'utf8'),
+        await fsp.readFile(path.join(suitesDir, file), 'utf8'),
       ) as {
-        kind?: 'swebench' | 'deepswe' | 'greenfield';
         name?: string;
         description?: string;
-        instanceIds?: string[];
+        taskIds?: string[];
       };
-      const kind = suite.kind ?? 'swebench';
       const id = path.basename(file, '.json');
       entries.push({
         id,
-        kind,
+        kind: 'greenfield',
         name: suite.name ?? id,
         description: suite.description,
-        taskCount: suite.instanceIds?.length ?? 0,
-        runCommand: `pnpm bench --suite tasks/${file}`,
-        evalCommand:
-          kind === 'deepswe'
-            ? 'pnpm bench:eval:deepswe'
-            : kind === 'greenfield'
-              ? 'pnpm bench:eval:greenfield'
-              : 'pnpm bench:eval',
+        taskCount: suite.taskIds?.length ?? 0,
+        runCommand: `artificer eval run --suite ${id}`,
+        evalCommand: `artificer eval run --suite ${id}`,
       });
     } catch {
       // skip invalid suite files

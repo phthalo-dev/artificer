@@ -1,0 +1,12 @@
+diff --git a/src/state.js b/src/state.js
+index f907d20..74c8936 100644
+--- a/src/state.js
++++ b/src/state.js
+@@ -5,6 +5,6 @@ export function getState(workstreams = []) {
+   return {
+     status: 'ok',
+     workstreams,
+-    paused: workstreams.some((w) => w.status === 'paused'),
++    // Bug: omitted paused — clients cannot detect paused workstreams
+   };
+ }

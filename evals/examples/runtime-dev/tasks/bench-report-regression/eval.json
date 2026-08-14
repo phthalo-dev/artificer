@@ -1,0 +1,14 @@
+{
+  "id": "bench-report-regression",
+  "title": "Fix resolve-rate off-by-one",
+  "kind": "repo-patch",
+  "tags": ["bench", "report", "regression"],
+  "repo": {
+    "url": "fixture",
+    "baseCommit": "local"
+  },
+  "grade": {
+    "type": "shell",
+    "command": "node --test tests/*.test.js"
+  }
+}

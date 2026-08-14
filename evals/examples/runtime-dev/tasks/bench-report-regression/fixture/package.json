@@ -1,0 +1,5 @@
+{
+  "name": "bench-report-regression-fixture",
+  "type": "module",
+  "private": true
+}

@@ -88,6 +88,11 @@ export interface RuntimeConfig {
   executor?: ExecutorConfig;
   /** Quota windows, budgets, and failover routing. */
   quota?: QuotaConfig;
+  /**
+   * When true (RUNTIME_EVAL_MODE=true), the identity repo is read-only:
+   * no memory writes, learn/add_memory, identity git ops, or config persist.
+   */
+  evalMode?: boolean;
 }
 
 /** The agent's GitHub identity, used to clone, push, and open/comment on PRs. */
@@ -225,6 +230,7 @@ export function loadConfig(
     contextBorrowing,
     identityDir,
     apiAuthKey: env.ARTIFICER_API_KEY || undefined,
+    evalMode: env.RUNTIME_EVAL_MODE === 'true',
   };
 }
 

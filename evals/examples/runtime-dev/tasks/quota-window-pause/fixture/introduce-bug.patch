@@ -1,0 +1,12 @@
+diff --git a/src/quota.js b/src/quota.js
+index 45b6cf1..684ee38 100644
+--- a/src/quota.js
++++ b/src/quota.js
+@@ -4,5 +4,6 @@
+  */
+ export function shouldPauseWindow(usedTokens, windowLimit) {
+   if (windowLimit <= 0) return false;
+-  return usedTokens >= windowLimit;
++  // Bug: exclusive bound — at exact limit the window stays open
++  return usedTokens > windowLimit;
+ }

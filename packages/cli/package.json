@@ -30,6 +30,7 @@
     "types": "./dist/index.d.ts"
   },
   "dependencies": {
+    "@artificer-ai/eval": "workspace:*",
     "@artificer-ai/runtime": "workspace:*"
   },
   "devDependencies": {

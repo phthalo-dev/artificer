@@ -1,0 +1,14 @@
+{
+  "id": "quota-window-pause",
+  "title": "Fix quota window pause at limit",
+  "kind": "repo-patch",
+  "tags": ["runtime", "quota", "regression"],
+  "repo": {
+    "url": "fixture",
+    "baseCommit": "local"
+  },
+  "grade": {
+    "type": "shell",
+    "command": "node --test tests/*.test.js"
+  }
+}

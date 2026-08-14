@@ -4,7 +4,12 @@ import {
   materializeGreenfieldFixture,
   type MaterializedGreenfieldFixture,
 } from '../identity/greenfield-fixture.js';
+import { gradeFileExists } from '../identity/grade.js';
 import { gradeGreenfieldPatch } from '../identity/grade-greenfield.js';
+import {
+  gradeLlmJudge,
+  type LlmJudgeComplete,
+} from '../identity/grade-llm-judge.js';
 import type { RuntimeClient } from './client.js';
 import { extractPatch } from './extract-patch.js';
 import { TERMINAL } from './poll.js';
@@ -14,6 +19,7 @@ export interface GreenfieldTaskConfig {
   timeoutMs?: number;
   pollIntervalMs?: number;
   gradeTimeoutMs?: number;
+  llmJudgeComplete?: LlmJudgeComplete;
 }
 
 const DEFAULT_TIMEOUT_MS = 5 * 60_000;
@@ -34,12 +40,19 @@ export async function runGreenfieldTask(
   let fixture: MaterializedGreenfieldFixture | undefined;
 
   try {
+    if (task.manifest.kind !== 'greenfield' || !task.fixtureDir) {
+      return finish(result);
+    }
+
+    const grade = task.manifest.grade;
     if (
-      task.manifest.kind !== 'greenfield' ||
-      task.manifest.grade.type !== 'shell' ||
-      !task.fixtureDir ||
-      !task.hiddenDir
+      grade.type !== 'shell' &&
+      grade.type !== 'file-exists' &&
+      grade.type !== 'llm-judge'
     ) {
+      return finish(result);
+    }
+    if (grade.type === 'shell' && !task.hiddenDir) {
       return finish(result);
     }
 
@@ -70,7 +83,32 @@ export async function runGreenfieldTask(
       'workspace',
       created.workstreamId,
     );
+
     const extracted = await extractPatch(workspaceDir, fixture.baseCommit);
+    if (extracted.patch.trim()) result.patch = extracted.patch;
+
+    if (grade.type === 'file-exists') {
+      const checkDir = extracted.repoDir ?? workspaceDir;
+      result.resolved = await gradeFileExists(checkDir, grade.path);
+      result.outcome = result.resolved ? 'submitted' : 'failed';
+      return await withUsage(client, result);
+    }
+
+    if (grade.type === 'llm-judge') {
+      const complete = config.llmJudgeComplete;
+      if (!complete) {
+        result.outcome = 'error';
+        return await withUsage(client, result);
+      }
+      result.resolved = await gradeLlmJudge({
+        rubric: grade.rubric,
+        material: extracted.patch.trim() || '(empty patch)',
+        complete,
+      });
+      result.outcome = result.resolved ? 'submitted' : 'failed';
+      return await withUsage(client, result);
+    }
+
     if (!extracted.patch.trim()) {
       result.outcome = 'failed';
       result.resolved = false;
@@ -80,9 +118,9 @@ export async function runGreenfieldTask(
     result.resolved = await gradeGreenfieldPatch({
       repoDir: fixture.repoDir,
       patch: extracted.patch,
-      hiddenDir: task.hiddenDir,
-      command: task.manifest.test_command ?? task.manifest.grade.command,
-      cwd: task.manifest.grade.cwd,
+      hiddenDir: task.hiddenDir!,
+      command: task.manifest.test_command ?? grade.command,
+      cwd: grade.cwd,
       timeoutMs: config.gradeTimeoutMs,
     });
     result.outcome = result.resolved ? 'submitted' : 'failed';

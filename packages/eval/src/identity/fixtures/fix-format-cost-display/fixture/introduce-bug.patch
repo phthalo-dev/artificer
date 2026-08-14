@@ -1,0 +1,11 @@
+diff --git a/src/format.js b/src/format.js
+index 7c49429..b210a71 100644
+--- a/src/format.js
++++ b/src/format.js
+@@ -1,5 +1,5 @@
+ export function formatCost(usd) {
+   if (!usd) return '$0.00';
+-  if (usd < 0.01) return `$${usd.toFixed(4)}`;
++  // Bug: always rounds to 2 decimals, hiding sub-cent costs as $0.00
+   return `$${usd.toFixed(2)}`;
+ }
