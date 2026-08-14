@@ -10,7 +10,9 @@ export type EvalGrade =
   | { type: 'message-contains'; pattern: string }
   | { type: 'workstream-status'; expect: string[] }
   | { type: 'shell'; command: string; cwd?: string }
-  | { type: 'file-exists'; path: string };
+  | { type: 'file-exists'; path: string }
+  | { type: 'swebench' }
+  | { type: 'llm-judge'; rubric: string };
 
 /** Pinned repository for `repo-patch` (and optional workstream context). */
 export interface EvalRepoPin {
@@ -56,6 +58,15 @@ export interface EvalRunOptions {
   presetId?: string;
   resultsDir?: string;
   liveProgress?: boolean;
+  /** Named downloadable pack (e.g. `swebench-lite-30`). Mutually exclusive with suite/task. */
+  packId?: string;
+  /** Cap pack/suite tasks after load order. */
+  limit?: number;
+  /**
+   * Enable `llm-judge` graders. Also accepted via ARTIFICER_EVAL_LLM_JUDGE=true.
+   * Without this, any llm-judge task throws before the suite starts.
+   */
+  llmJudge?: boolean;
 }
 
 export interface EvalTaskResult {
@@ -66,6 +77,8 @@ export interface EvalTaskResult {
   outboundMessages: string[];
   usage?: UsageSummary;
   resolved?: boolean;
+  /** Extracted agent patch (SWE-bench predictions / llm-judge material). */
+  patch?: string;
 }
 
 const EVAL_TASK_KINDS = new Set<EvalTaskKind>([
@@ -167,6 +180,10 @@ function parseEvalGrade(raw: unknown): EvalGrade {
     }
     case 'file-exists':
       return { type, path: requireString(obj, 'path') };
+    case 'swebench':
+      return { type };
+    case 'llm-judge':
+      return { type, rubric: requireString(obj, 'rubric') };
     default:
       throw new Error(`Unknown eval grade type: ${type}`);
   }

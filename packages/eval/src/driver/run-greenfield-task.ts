@@ -6,6 +6,10 @@ import {
 } from '../identity/greenfield-fixture.js';
 import { gradeFileExists } from '../identity/grade.js';
 import { gradeGreenfieldPatch } from '../identity/grade-greenfield.js';
+import {
+  gradeLlmJudge,
+  type LlmJudgeComplete,
+} from '../identity/grade-llm-judge.js';
 import type { RuntimeClient } from './client.js';
 import { extractPatch } from './extract-patch.js';
 import { TERMINAL } from './poll.js';
@@ -15,6 +19,7 @@ export interface GreenfieldTaskConfig {
   timeoutMs?: number;
   pollIntervalMs?: number;
   gradeTimeoutMs?: number;
+  llmJudgeComplete?: LlmJudgeComplete;
 }
 
 const DEFAULT_TIMEOUT_MS = 5 * 60_000;
@@ -40,7 +45,11 @@ export async function runGreenfieldTask(
     }
 
     const grade = task.manifest.grade;
-    if (grade.type !== 'shell' && grade.type !== 'file-exists') {
+    if (
+      grade.type !== 'shell' &&
+      grade.type !== 'file-exists' &&
+      grade.type !== 'llm-judge'
+    ) {
       return finish(result);
     }
     if (grade.type === 'shell' && !task.hiddenDir) {
@@ -75,15 +84,31 @@ export async function runGreenfieldTask(
       created.workstreamId,
     );
 
+    const extracted = await extractPatch(workspaceDir, fixture.baseCommit);
+    if (extracted.patch.trim()) result.patch = extracted.patch;
+
     if (grade.type === 'file-exists') {
-      const extracted = await extractPatch(workspaceDir, fixture.baseCommit);
       const checkDir = extracted.repoDir ?? workspaceDir;
       result.resolved = await gradeFileExists(checkDir, grade.path);
       result.outcome = result.resolved ? 'submitted' : 'failed';
       return await withUsage(client, result);
     }
 
-    const extracted = await extractPatch(workspaceDir, fixture.baseCommit);
+    if (grade.type === 'llm-judge') {
+      const complete = config.llmJudgeComplete;
+      if (!complete) {
+        result.outcome = 'error';
+        return await withUsage(client, result);
+      }
+      result.resolved = await gradeLlmJudge({
+        rubric: grade.rubric,
+        material: extracted.patch.trim() || '(empty patch)',
+        complete,
+      });
+      result.outcome = result.resolved ? 'submitted' : 'failed';
+      return await withUsage(client, result);
+    }
+
     if (!extracted.patch.trim()) {
       result.outcome = 'failed';
       result.resolved = false;

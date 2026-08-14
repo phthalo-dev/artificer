@@ -1,11 +1,16 @@
 import type { LoadedEvalTask, EvalTaskResult } from '../types.js';
 import { gradeMessageContains } from '../identity/grade.js';
+import {
+  gradeLlmJudge,
+  type LlmJudgeComplete,
+} from '../identity/grade-llm-judge.js';
 import type { RuntimeClient } from './client.js';
 import { collectOutboundMessages } from './collect-outbound.js';
 
 export interface MessageTaskConfig {
   timeoutMs?: number;
   pollIntervalMs?: number;
+  llmJudgeComplete?: LlmJudgeComplete;
 }
 
 const DEFAULT_TIMEOUT_MS = 5 * 60_000;
@@ -60,14 +65,26 @@ export async function runMessageTask(
     if (!completed) {
       outcome = 'timeout';
       resolved = false;
-    } else if (task.manifest.grade.type !== 'message-contains') {
-      outcome = 'error';
-    } else {
+    } else if (task.manifest.grade.type === 'message-contains') {
       resolved = gradeMessageContains(
         outbound.messages,
         task.manifest.grade.pattern,
       );
       outcome = resolved ? 'submitted' : 'failed';
+    } else if (task.manifest.grade.type === 'llm-judge') {
+      const complete = config.llmJudgeComplete;
+      if (!complete) {
+        outcome = 'error';
+      } else {
+        resolved = await gradeLlmJudge({
+          rubric: task.manifest.grade.rubric,
+          material: outbound.messages.join('\n\n'),
+          complete,
+        });
+        outcome = resolved ? 'submitted' : 'failed';
+      }
+    } else {
+      outcome = 'error';
     }
   } catch {
     outcome = 'error';
