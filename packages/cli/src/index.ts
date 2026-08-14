@@ -42,6 +42,7 @@ switch (command) {
     console.log('Usage: artificer eval <run|list|compare> [args]');
     console.log('');
     console.log('  eval run [--suite smoke] [--task <id>] [--preset <id>]');
+    console.log('           [--pack swebench-lite-30] [--limit N] [--llm-judge]');
     console.log('  eval list');
     console.log('  eval compare [baseline] [candidate] [--write]');
     process.exit(sub ? 1 : 0);

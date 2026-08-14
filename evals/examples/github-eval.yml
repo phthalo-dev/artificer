@@ -1,0 +1,50 @@
+# Agent evals on pull requests
+#
+# Copy this file to `.github/workflows/eval.yml` in your agent identity repo.
+# It runs `artificer eval run --suite smoke` when `agent/` or the config changes.
+# Store the LLM key as a repository secret named LLM_API_KEY (and any other
+# keys your preset needs).
+#
+# This workflow is a recipe for agent owners — it is not the Artificer monorepo CI.
+
+name: Agent evals
+
+on:
+  pull_request:
+    paths:
+      - 'agent/**'
+      - 'artificer.config.json'
+
+concurrency:
+  group: eval-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  smoke:
+    name: Smoke evals
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+
+      - name: Install
+        run: npm install
+
+      - name: Run smoke evals
+        env:
+          LLM_API_KEY: ${{ secrets.LLM_API_KEY }}
+          ARTIFICER_EXEC_DIR: ${{ runner.temp }}/artificer-eval
+        run: npx artificer eval run --suite smoke
+
+      - name: Upload eval results
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: eval-results
+          path: ${{ runner.temp }}/artificer-eval/evals
+          if-no-files-found: ignore

@@ -56,6 +56,31 @@ test('parseEvalTaskManifest accepts file-exists grade', () => {
   assert.deepEqual(m.grade, { type: 'file-exists', path: 'plan.md' });
 });
 
+test('parseEvalTaskManifest accepts swebench and llm-judge grades', () => {
+  const swe = parseEvalTaskManifest({
+    id: 'pallets__flask-4045',
+    title: 'flask',
+    kind: 'repo-patch',
+    repo: {
+      url: 'https://github.com/pallets/flask.git',
+      baseCommit: 'abc',
+    },
+    grade: { type: 'swebench' },
+  });
+  assert.deepEqual(swe.grade, { type: 'swebench' });
+
+  const judge = parseEvalTaskManifest({
+    id: 'tone-check',
+    title: 'Tone',
+    kind: 'message',
+    grade: { type: 'llm-judge', rubric: 'Reply must mention the preset.' },
+  });
+  assert.deepEqual(judge.grade, {
+    type: 'llm-judge',
+    rubric: 'Reply must mention the preset.',
+  });
+});
+
 test('parseEvalSuite requires taskIds', () => {
   const s = parseEvalSuite({ name: 'Smoke', taskIds: ['a'] });
   assert.deepEqual(s.taskIds, ['a']);

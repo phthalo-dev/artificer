@@ -1,6 +1,10 @@
 import path from 'node:path';
 import type { EvalTaskResult, LoadedEvalTask } from '../types.js';
 import { gradeFileExists, gradeWorkstreamStatus } from '../identity/grade.js';
+import {
+  gradeLlmJudge,
+  type LlmJudgeComplete,
+} from '../identity/grade-llm-judge.js';
 import type { RuntimeClient } from './client.js';
 import { extractPatch } from './extract-patch.js';
 import { TERMINAL } from './poll.js';
@@ -9,6 +13,7 @@ export interface WorkstreamTaskConfig {
   execDir?: string;
   timeoutMs?: number;
   pollIntervalMs?: number;
+  llmJudgeComplete?: LlmJudgeComplete;
 }
 
 const DEFAULT_TIMEOUT_MS = 5 * 60_000;
@@ -29,7 +34,11 @@ export async function runWorkstreamTask(
 
   try {
     const grade = task.manifest.grade;
-    if (grade.type !== 'workstream-status' && grade.type !== 'file-exists') {
+    if (
+      grade.type !== 'workstream-status' &&
+      grade.type !== 'file-exists' &&
+      grade.type !== 'llm-judge'
+    ) {
       return finish(result);
     }
 
@@ -59,6 +68,18 @@ export async function runWorkstreamTask(
     } else if (grade.type === 'workstream-status') {
       result.resolved = gradeWorkstreamStatus(status, grade.expect);
       result.outcome = result.resolved ? 'submitted' : 'failed';
+    } else if (grade.type === 'llm-judge') {
+      const complete = config.llmJudgeComplete;
+      if (!complete) {
+        result.outcome = 'error';
+      } else {
+        result.resolved = await gradeLlmJudge({
+          rubric: grade.rubric,
+          material: `status=${status}`,
+          complete,
+        });
+        result.outcome = result.resolved ? 'submitted' : 'failed';
+      }
     } else {
       const execDir = config.execDir;
       if (!execDir) {

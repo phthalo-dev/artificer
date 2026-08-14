@@ -25,8 +25,14 @@ artificer eval run --task status-preset-query
 # Pin a model preset for reproducibility (overrides .env for this run only)
 artificer eval run --preset quality-first
 
-# List available suites and tasks
+# List available suites, tasks, and downloadable packs
 artificer eval list
+
+# Run the curated SWE-bench Lite pack (30 tasks; identity-aware)
+artificer eval run --pack swebench-lite-30
+
+# Smoke the pack with a single instance
+artificer eval run --pack swebench-lite-30 --limit 1
 ```
 
 Start the agent UI (`artificer dev` or `artificer start`), open **Benchmark** in the sidebar, and review pass/fail, cost, and per-task trajectories.
@@ -143,6 +149,8 @@ All graders run **after** the agent finishes, on the machine running `artificer 
 | `workstream-status` | Final workstream status is in `expect` (e.g. `["done"]`) | `workstream` |
 | `shell` | `command` exits 0 in a sandboxed workdir (patched fixture + hidden overlay) | `greenfield`, `repo-patch` |
 | `file-exists` | Path exists relative to the **workspace** (agent workdir / cloned repo), not the identity dir | `workstream`, `greenfield`, `repo-patch` |
+| `swebench` | Official SWE-bench harness over `predictions.jsonl` (Docker + `swebench` Python package). Without them, patches are recorded and tasks stay ungraded. | `--pack swebench-lite-30` |
+| `llm-judge` | An LLM grades material against `rubric`. **Opt-in:** `--llm-judge` or `ARTIFICER_EVAL_LLM_JUDGE=true`. | any kind |
 
 ### Examples
 
@@ -288,7 +296,7 @@ Artificer ships two related but distinct benchmarking paths:
 | | **Consumer evals** (`artificer eval`) | **Maintainer bench** (`pnpm bench`) |
 |---|--------------------------------------|--------------------------------------|
 | **Who** | Agent owners testing their identity | Artificer engine developers |
-| **Where tasks live** | `agent/evals/` in your identity repo | `packages/eval/bench/tasks/` in the monorepo |
+| **Where tasks live** | `agent/evals/` in your identity repo | `packages/runtime/bench/tasks/` in the monorepo |
 | **Identity loaded** | Your agent project (`ARTIFICER_IDENTITY_DIR`) | Bare runtime defaults (no customer identity) |
 | **Task suites** | Custom smoke/nightly suites you define | SWE-bench Lite, DeepSWE, greenfield hard tier |
 | **Results location** | `$ARTIFICER_EXEC_DIR/evals/` | `packages/runtime/bench/results/` |
@@ -336,6 +344,39 @@ Verify with `artificer eval list` — tasks appear when their directory contains
 - **Use greenfield for capability checks** — hidden tests ensure the agent actually implemented the spec
 - **Commit eval tasks with identity changes** — when you change instructions or tools, your eval suite travels with the diff
 - **Check `run-config.json`** — records the identity git SHA and preset used, so you can correlate results with commits
+
+---
+
+## Downloadable packs
+
+Packs are named suites shipped with `@artificer-ai/eval`. They do **not** write into your identity repo.
+
+```bash
+artificer eval run --pack swebench-lite-30
+artificer eval run --pack swebench-lite-30 --limit 1
+```
+
+`swebench-lite-30` is the curated 30-instance SWE-bench Lite subset (all 12 repos, includes the mini-suite's 6 tasks). Each instance is a `repo-patch` task against the pinned GitHub SHA. After the agent finishes, the driver writes `predictions.jsonl`. If Docker and the `swebench` Python package are available, it runs the official harness (same script as maintainer bench) and fills `eval-report.json`. Otherwise patches are kept and tasks stay ungraded.
+
+Maintainer equivalent: `pnpm bench --suite tasks/swebench-lite-curated-30.json` from `packages/runtime`.
+
+## LLM-as-judge (opt-in)
+
+`grade.type: "llm-judge"` with a `rubric` string asks a model to emit `PASS` or `FAIL`. It never runs unless you pass `--llm-judge` or set `ARTIFICER_EVAL_LLM_JUDGE=true`. Uses `LLM_API_KEY` / `LLM_BASE_URL` / `LLM_MODEL` (same as the runtime).
+
+```json
+{
+  "kind": "message",
+  "grade": {
+    "type": "llm-judge",
+    "rubric": "The reply must name the configured model preset."
+  }
+}
+```
+
+## CI on identity PRs
+
+Copy [`evals/examples/github-eval.yml`](../../evals/examples/github-eval.yml) to `.github/workflows/eval.yml` in the agent repo. It runs the smoke suite when `agent/` or `artificer.config.json` change. Store `LLM_API_KEY` as a GitHub Actions secret.
 
 ---
 

@@ -171,6 +171,7 @@ Two curated suites ship under `tasks/`:
 | File | Kind | Eval command |
 | --- | --- | --- |
 | `mini-suite.json` | SWE-bench Lite (6 instances) | `pnpm bench:eval` |
+| `swebench-lite-curated-30.json` | SWE-bench Lite curated (30 instances) | `pnpm bench:eval` |
 | `deepswe-mini-suite.json` | [DeepSWE](https://deepswe.datacurve.ai/) Harbor tasks (6 instances) | `pnpm bench:eval:deepswe` |
 | `deepswe-typescript-mini.json` | DeepSWE TS/JS subset (4 instances) for local debugging | `pnpm bench:eval:deepswe` |
 | `greenfield-mini.json` | Greenfield build tasks (6 instances), graded Docker-free against hidden acceptance tests | `pnpm bench:eval:greenfield` |

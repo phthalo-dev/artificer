@@ -60,3 +60,11 @@ git diff > fixture/introduce-bug.patch
 4. Re-run unit tests that apply the patch and grade a known fix to confirm the hunk still applies.
 
 For remote pins (`repo.url` is a git URL), keep `repo.baseCommit` fixed and refresh `introduce-bug.patch` the same way against that commit.
+
+## GitHub Action recipe
+
+Copy [`github-eval.yml`](./github-eval.yml) to `.github/workflows/eval.yml` in an identity repo to run `artificer eval run --suite smoke` on PRs that touch `agent/`.
+
+## Downloadable SWE-bench pack
+
+`artificer eval run --pack swebench-lite-30` uses the curated 30-instance Lite subset (also at `packages/runtime/bench/tasks/swebench-lite-curated-30.json` for `pnpm bench`).

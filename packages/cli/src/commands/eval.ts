@@ -36,14 +36,19 @@ export async function evalRun(argv: string[]): Promise<void> {
   const suite = flag(argv, 'suite') ?? 'smoke';
   const task = flag(argv, 'task');
   const preset = flag(argv, 'preset');
+  const pack = flag(argv, 'pack');
+  const limitRaw = flag(argv, 'limit');
   const identityDir = process.cwd();
   const { runIdentityEval } = await import('@artificer-ai/eval');
   const result = await runIdentityEval({
     identityDir,
     execDir: process.env.ARTIFICER_EXEC_DIR ?? defaultExecDir(identityDir),
-    suiteId: task ? undefined : suite,
-    taskId: task,
+    suiteId: pack || task ? undefined : suite,
+    taskId: pack ? undefined : task,
+    packId: pack,
     presetId: preset,
+    limit: limitRaw ? Number(limitRaw) : undefined,
+    llmJudge: hasFlag(argv, 'llm-judge'),
   });
 
   console.log(`Results: ${result.resultsDir}`);
@@ -51,10 +56,13 @@ export async function evalRun(argv: string[]): Promise<void> {
 
 export async function evalList(_argv: string[]): Promise<void> {
   const identityDir = process.cwd();
-  const { listEvalSuites, listEvalTasks } = await import('@artificer-ai/eval');
-  const [suites, tasks] = await Promise.all([
+  const { listEvalSuites, listEvalTasks, listEvalPacks } = await import(
+    '@artificer-ai/eval'
+  );
+  const [suites, tasks, packs] = await Promise.all([
     listEvalSuites(identityDir),
     listEvalTasks(identityDir),
+    Promise.resolve(listEvalPacks()),
   ]);
 
   console.log(`Suites (${suites.length}):`);
@@ -64,6 +72,10 @@ export async function evalList(_argv: string[]): Promise<void> {
   console.log(`Tasks (${tasks.length}):`);
   for (const task of tasks) {
     console.log(`  ${task}`);
+  }
+  console.log(`Packs (${packs.length}):`);
+  for (const pack of packs) {
+    console.log(`  ${pack.id}  ${pack.name}`);
   }
 }
 
