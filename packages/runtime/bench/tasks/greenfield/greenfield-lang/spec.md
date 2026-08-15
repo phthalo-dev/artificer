@@ -9,7 +9,27 @@ Build a tree-walking interpreter for a small dynamically-typed language in this 
 
 ### The language
 
-Source is a sequence of statements. Tokens: `NUMBER` (int or float literal), `STRING` (double-quoted; `\"` and `\\` are the only escapes), `IDENT`, keywords `let function if else while return true false nil` (each its own token type, not `IDENT`), operators/punctuation `( ) { } ; , + - * / = == != < <= > >= && || !`, and `EOF`. `//` starts a line comment; blank lines and comments produce no tokens.
+Source is a sequence of statements. `//` starts a line comment; blank lines and comments produce no tokens. Every token has a `type` field, and `tokenize`'s output is checked against these **exact** `type` strings — not the raw source text, and not any other naming scheme:
+
+| Source | `type` | Source | `type` | Source | `type` |
+| --- | --- | --- | --- | --- | --- |
+| (int/float literal) | `NUMBER` | `while` | `WHILE` | `,` | `COMMA` |
+| (double-quoted string) | `STRING` | `return` | `RETURN` | `+` | `PLUS` |
+| (identifier) | `IDENT` | `true` | `TRUE` | `-` | `MINUS` |
+| `let` | `LET` | `false` | `FALSE` | `*` | `STAR` |
+| `function` | `FUNCTION` | `nil` | `NIL` | `/` | `SLASH` |
+| `if` | `IF` | `(` | `LPAREN` | `=` | `EQ` |
+| `else` | `ELSE` | `)` | `RPAREN` | `==` | `EQEQ` |
+| | | `{` | `LBRACE` | `!=` | `BANGEQ` |
+| | | `}` | `RBRACE` | `<` | `LT` |
+| | | `;` | `SEMICOLON` | `<=` | `LTEQ` |
+| | | | | `>` | `GT` |
+| | | | | `>=` | `GTEQ` |
+| | | | | `&&` | `AND` |
+| | | | | `\|\|` | `OR` |
+| | | | | `!` | `BANG` |
+
+A keyword (`let`, `function`, `if`, `else`, `while`, `return`, `true`, `false`, `nil`) is its own token type per the table above — never `IDENT`. The end of input produces one final `{type: 'EOF'}` token.
 
 Grammar (statements):
 - `let IDENT = expression ;` — declares a new variable in the current scope.
