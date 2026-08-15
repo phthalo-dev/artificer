@@ -43,6 +43,17 @@ async function ensureDir(dir: string): Promise<void> {
 /** Per-target serialization so concurrent saveRun calls cannot collide on rename. */
 const writeChains = new Map<string, Promise<void>>();
 
+/**
+ * Per-file serialization for the *whole* read-modify-write cycle of a
+ * history-index upsert. `writeChains` (via `writeJson`) only serializes the
+ * final write to a given path — it does not guard the read that precedes it,
+ * so two concurrent upserts to the same file can both read a stale snapshot
+ * and the second write silently clobbers the first. Keyed by file path (like
+ * `writeChains`) so unrelated `Store` instances (different data dirs, e.g. in
+ * tests) never contend with each other.
+ */
+const historyIndexChains = new Map<string, Promise<void>>();
+
 async function writeJsonAtomic(file: string, data: unknown): Promise<void> {
   await ensureDir(path.dirname(file));
   const tmp = `${file}.${process.pid}.${randomUUID()}.tmp`;
@@ -614,13 +625,26 @@ export class Store {
     return rebuilt;
   }
 
+  /**
+   * Read-modify-write the history index for one run, serialized against any
+   * other concurrent call to this method for the same file (see
+   * `historyIndexChains`) so concurrent terminal `saveRun` calls (the
+   * scheduler runs up to `config.concurrency` runs in parallel) can never
+   * race each other's read and silently drop an entry.
+   */
   private async upsertHistoryIndexEntry(run: RunRecord): Promise<void> {
-    const index = await this.readHistoryIndex();
-    const entry = buildRunIndexEntry(run);
-    const i = index.findIndex((e) => e.id === entry.id);
-    if (i === -1) index.push(entry);
-    else index[i] = entry;
-    await writeJson(this.layout.historyIndexFile(), index);
+    const file = this.layout.historyIndexFile();
+    const prev = historyIndexChains.get(file) ?? Promise.resolve();
+    const next = prev.catch(() => {}).then(async () => {
+      const index = await this.readHistoryIndex();
+      const entry = buildRunIndexEntry(run);
+      const i = index.findIndex((e) => e.id === entry.id);
+      if (i === -1) index.push(entry);
+      else index[i] = entry;
+      await writeJson(file, index);
+    });
+    historyIndexChains.set(file, next);
+    await next;
   }
 
   // --- GitHub watch state ---
