@@ -164,3 +164,33 @@ test('a corrupt history/index.json is rebuilt from runs/ on the next terminal sa
   const ids = index.map((e: { id: string }) => e.id).sort();
   assert.deepEqual(ids, [newer.id, older.id].sort());
 });
+
+test('concurrent saveRun calls for different runs both land in history/index.json', async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-store-'));
+  const store = new Store(dataDir);
+  await store.init();
+
+  // Seed the index with a prior entry first, so the two concurrent upserts
+  // below go through the "parse existing index.json, modify, write" path
+  // rather than the ENOENT/ rebuild-from-runs/ self-heal path (which would
+  // independently reconstruct the full set from disk and mask a races in
+  // the read-modify-write cycle).
+  const seed = await store.createRun({ role: 'worker', task: 'Seed task' });
+  seed.status = 'done';
+  seed.output = 'seed output';
+  await store.saveRun(seed);
+
+  const runA = await store.createRun({ role: 'worker', task: 'Task A' });
+  runA.status = 'done';
+  runA.output = 'output A';
+
+  const runB = await store.createRun({ role: 'worker', task: 'Task B' });
+  runB.status = 'done';
+  runB.output = 'output B';
+
+  await Promise.all([store.saveRun(runA), store.saveRun(runB)]);
+
+  const index = JSON.parse(await fs.readFile(store.layout.historyIndexFile(), 'utf8'));
+  const ids = index.map((e: { id: string }) => e.id).sort();
+  assert.deepEqual(ids, [seed.id, runA.id, runB.id].sort());
+});
