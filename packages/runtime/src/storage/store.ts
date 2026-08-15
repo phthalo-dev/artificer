@@ -9,6 +9,10 @@ import {
   emptyScheduleRuntimeState,
   type ScheduleRuntimeState,
 } from '../engine/schedules.js';
+import {
+  buildRunIndexEntry,
+  type RunIndexEntry,
+} from './history-search.js';
 import { Layout } from './layout.js';
 import { rankMemories, type MemoryIndexEntry } from './memory-search.js';
 import {
@@ -376,6 +380,9 @@ export class Store {
 
   async saveRun(run: RunRecord): Promise<void> {
     await writeJson(this.layout.runFile(run.id), run);
+    if (run.status === 'done' || run.status === 'failed') {
+      await this.upsertHistoryIndexEntry(run);
+    }
   }
 
   async getRun(id: string): Promise<RunRecord | null> {
@@ -575,6 +582,45 @@ export class Store {
     );
     await writeJson(this.layout.memoryIndexFile(), rebuilt);
     return rebuilt;
+  }
+
+  /**
+   * Read history/index.json; rebuild it from terminal runs/ files if missing
+   * or unparseable. Unlike the memory index, no drift-count reconciliation is
+   * needed: runs/ is written exclusively by Store's own createRun/saveRun, so
+   * there is no external-mutation path that could cause the index to drift
+   * out from under a valid, parseable index.json.
+   */
+  private async readHistoryIndex(): Promise<RunIndexEntry[]> {
+    const file = this.layout.historyIndexFile();
+    let raw: string | null = null;
+    try {
+      raw = await fs.readFile(file, 'utf8');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    }
+    if (raw !== null) {
+      try {
+        return JSON.parse(raw) as RunIndexEntry[];
+      } catch {
+        // Corrupt index.json — fall through and rebuild from runs/.
+      }
+    }
+    const runs = await this.listRuns();
+    const rebuilt = runs
+      .filter((r) => r.status === 'done' || r.status === 'failed')
+      .map((r) => buildRunIndexEntry(r));
+    await writeJson(file, rebuilt);
+    return rebuilt;
+  }
+
+  private async upsertHistoryIndexEntry(run: RunRecord): Promise<void> {
+    const index = await this.readHistoryIndex();
+    const entry = buildRunIndexEntry(run);
+    const i = index.findIndex((e) => e.id === entry.id);
+    if (i === -1) index.push(entry);
+    else index[i] = entry;
+    await writeJson(this.layout.historyIndexFile(), index);
   }
 
   // --- GitHub watch state ---
