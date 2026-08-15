@@ -11,6 +11,7 @@ import {
 } from '../engine/schedules.js';
 import {
   buildRunIndexEntry,
+  rankRuns,
   type RunIndexEntry,
 } from './history-search.js';
 import { Layout } from './layout.js';
@@ -44,13 +45,16 @@ async function ensureDir(dir: string): Promise<void> {
 const writeChains = new Map<string, Promise<void>>();
 
 /**
- * Per-file serialization for the *whole* read-modify-write cycle of a
- * history-index upsert. `writeChains` (via `writeJson`) only serializes the
- * final write to a given path — it does not guard the read that precedes it,
- * so two concurrent upserts to the same file can both read a stale snapshot
- * and the second write silently clobbers the first. Keyed by file path (like
- * `writeChains`) so unrelated `Store` instances (different data dirs, e.g. in
- * tests) never contend with each other.
+ * Per-file serialization for every operation that touches
+ * `history/index.json` — both the read-modify-write cycle of an upsert and a
+ * bare read (which can itself trigger a self-heal rebuild-write). `writeChains`
+ * (via `writeJson`) only serializes the final write to a given path — it does
+ * not guard the read that precedes it, so two concurrent operations on the
+ * same file could both read a stale snapshot and the second write silently
+ * clobbers the first, or a search's rebuild-write could race an upsert's
+ * write. Keyed by file path (like `writeChains`) so unrelated `Store`
+ * instances (different data dirs, e.g. in tests) never contend with each
+ * other. See `Store.withHistoryIndexChain`.
  */
 const historyIndexChains = new Map<string, Promise<void>>();
 
@@ -512,6 +516,34 @@ export class Store {
     return out;
   }
 
+  /**
+   * Search terminal run history (done/failed calls) by task/output text,
+   * with optional role/workstream/status filters. Empty query returns the
+   * most recent matches in recency order, same convention as queryMemories.
+   */
+  async searchHistory(
+    query: string,
+    opts: {
+      role?: string;
+      workstreamId?: string;
+      status?: 'done' | 'failed';
+      limit?: number;
+    } = {},
+  ): Promise<RunIndexEntry[]> {
+    const limit = Math.max(1, Math.min(opts.limit ?? 5, 20));
+    let entries = await this.withHistoryIndexChain(() =>
+      this.readHistoryIndex(),
+    );
+    if (opts.role) entries = entries.filter((e) => e.role === opts.role);
+    if (opts.workstreamId) {
+      entries = entries.filter((e) => e.workstreamId === opts.workstreamId);
+    }
+    if (opts.status) entries = entries.filter((e) => e.status === opts.status);
+    return rankRuns(query, entries)
+      .slice(0, limit)
+      .map((r) => r.entry);
+  }
+
   /** Compact "you know things" hint for context (count + top tags); no content. */
   async memorySignpost(): Promise<string | null> {
     const entries = await this.readReconciledIndex();
@@ -626,25 +658,46 @@ export class Store {
   }
 
   /**
-   * Read-modify-write the history index for one run, serialized against any
-   * other concurrent call to this method for the same file (see
-   * `historyIndexChains`) so concurrent terminal `saveRun` calls (the
-   * scheduler runs up to `config.concurrency` runs in parallel) can never
-   * race each other's read and silently drop an entry.
+   * Serialize an operation against `history/index.json` behind the per-file
+   * chain in `historyIndexChains`, so it can never interleave with another
+   * concurrent operation on the same file. Every caller that touches the
+   * history index — including a bare read, since `readHistoryIndex()` can
+   * itself trigger a self-heal rebuild-write when the index is missing or
+   * corrupt — must route through this helper, not call `readHistoryIndex()`
+   * or `writeJson(historyIndexFile(), …)` directly. Otherwise a concurrent
+   * self-heal rebuild-write (triggered by a read, e.g. from `searchHistory`)
+   * could race a concurrent upsert's read-modify-write and silently drop an
+   * entry.
    */
-  private async upsertHistoryIndexEntry(run: RunRecord): Promise<void> {
+  private async withHistoryIndexChain<T>(fn: () => Promise<T>): Promise<T> {
     const file = this.layout.historyIndexFile();
     const prev = historyIndexChains.get(file) ?? Promise.resolve();
+    let result!: T;
     const next = prev.catch(() => {}).then(async () => {
+      result = await fn();
+    });
+    historyIndexChains.set(file, next);
+    await next;
+    return result;
+  }
+
+  /**
+   * Read-modify-write the history index for one run, serialized against any
+   * other concurrent operation on the same file (see `withHistoryIndexChain`)
+   * so concurrent terminal `saveRun` calls (the scheduler runs up to
+   * `config.concurrency` runs in parallel) — and concurrent `searchHistory`
+   * reads that might trigger a self-heal rebuild — can never race each
+   * other and silently drop an entry.
+   */
+  private async upsertHistoryIndexEntry(run: RunRecord): Promise<void> {
+    await this.withHistoryIndexChain(async () => {
       const index = await this.readHistoryIndex();
       const entry = buildRunIndexEntry(run);
       const i = index.findIndex((e) => e.id === entry.id);
       if (i === -1) index.push(entry);
       else index[i] = entry;
-      await writeJson(file, index);
+      await writeJson(this.layout.historyIndexFile(), index);
     });
-    historyIndexChains.set(file, next);
-    await next;
   }
 
   // --- GitHub watch state ---
