@@ -194,3 +194,143 @@ test('concurrent saveRun calls for different runs both land in history/index.jso
   const ids = index.map((e: { id: string }) => e.id).sort();
   assert.deepEqual(ids, [seed.id, runA.id, runB.id].sort());
 });
+
+test('searchHistory ranks by task/output text and respects limit', async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-store-'));
+  const store = new Store(dataDir);
+  await store.init();
+
+  const authRun = await store.createRun({ role: 'worker', task: 'Fix auth redirect loop' });
+  authRun.status = 'done';
+  authRun.output = 'Patched the session check.';
+  await store.saveRun(authRun);
+
+  const changelogRun = await store.createRun({ role: 'worker', task: 'Update changelog' });
+  changelogRun.status = 'done';
+  changelogRun.output = 'Added release notes.';
+  await store.saveRun(changelogRun);
+
+  const results = await store.searchHistory('auth redirect');
+  assert.equal(results.length, 1);
+  assert.equal(results[0].id, authRun.id);
+});
+
+test('searchHistory with an empty query returns recent runs, newest first', async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-store-'));
+  const store = new Store(dataDir);
+  await store.init();
+
+  const older = await store.createRun({ role: 'worker', task: 'older' });
+  older.status = 'done';
+  older.createdAt = '2026-01-01T00:00:00.000Z';
+  await store.saveRun(older);
+
+  const newer = await store.createRun({ role: 'worker', task: 'newer' });
+  newer.status = 'done';
+  newer.createdAt = '2026-01-02T00:00:00.000Z';
+  await store.saveRun(newer);
+
+  const results = await store.searchHistory('');
+  assert.deepEqual(
+    results.map((r) => r.id),
+    [newer.id, older.id],
+  );
+});
+
+test('searchHistory filters by role, workstreamId, and status', async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-store-'));
+  const store = new Store(dataDir);
+  await store.init();
+
+  const workerRun = await store.createRun({
+    role: 'worker',
+    task: 'shared task text',
+    workstreamId: 'ws_1',
+  });
+  workerRun.status = 'done';
+  await store.saveRun(workerRun);
+
+  const plannerRun = await store.createRun({
+    role: 'planner',
+    task: 'shared task text',
+    workstreamId: 'ws_2',
+  });
+  plannerRun.status = 'failed';
+  await store.saveRun(plannerRun);
+
+  const byRole = await store.searchHistory('', { role: 'planner' });
+  assert.deepEqual(byRole.map((r) => r.id), [plannerRun.id]);
+
+  const byWorkstream = await store.searchHistory('', { workstreamId: 'ws_1' });
+  assert.deepEqual(byWorkstream.map((r) => r.id), [workerRun.id]);
+
+  const byStatus = await store.searchHistory('', { status: 'failed' });
+  assert.deepEqual(byStatus.map((r) => r.id), [plannerRun.id]);
+});
+
+test('searchHistory returns an empty array when there is no run history yet', async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-store-'));
+  const store = new Store(dataDir);
+  await store.init();
+
+  const results = await store.searchHistory('anything');
+  assert.deepEqual(results, []);
+});
+
+test('searchHistory limit defaults to 5 and caps at 20', async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-store-'));
+  const store = new Store(dataDir);
+  await store.init();
+
+  for (let i = 0; i < 8; i++) {
+    const run = await store.createRun({ role: 'worker', task: `task ${i}` });
+    run.status = 'done';
+    run.createdAt = `2026-01-01T00:00:0${i}.000Z`;
+    await store.saveRun(run);
+  }
+
+  const defaultLimit = await store.searchHistory('');
+  assert.equal(defaultLimit.length, 5);
+
+  const capped = await store.searchHistory('', { limit: 999 });
+  assert.equal(capped.length, 8); // fewer than 20 exist, cap doesn't truncate below actual count
+});
+
+test('a concurrent searchHistory call does not race a concurrent saveRun call on a fresh store', async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-store-'));
+  const store = new Store(dataDir);
+  await store.init();
+
+  // Fresh store: history/index.json does not exist yet. The first operation
+  // (whichever of these wins the race) to touch it will hit
+  // readHistoryIndex()'s self-heal rebuild-from-runs/ path (ENOENT -> read
+  // runs/ -> write index.json) — the same path `searchHistory` exercises via
+  // a bare read and `saveRun`/`upsertHistoryIndexEntry` exercises as the
+  // first step of its read-modify-write. Racing them via Promise.all is
+  // exactly the scenario `withHistoryIndexChain` must serialize.
+  const runs = await Promise.all(
+    Array.from({ length: 40 }, (_, i) =>
+      store.createRun({ role: 'worker', task: `task ${i}` }),
+    ),
+  );
+  for (const r of runs) {
+    r.status = 'done';
+    r.output = `output for ${r.id}`;
+  }
+
+  await Promise.all([
+    ...runs.map((r) => store.saveRun(r)),
+    ...Array.from({ length: 10 }, () => store.searchHistory('')),
+    ...Array.from({ length: 10 }, () => store.searchHistory('task')),
+  ]);
+
+  const raw = await fs.readFile(store.layout.historyIndexFile(), 'utf8');
+  const index = JSON.parse(raw); // must not throw: index.json stays valid JSON
+  const ids = index.map((e: { id: string }) => e.id).sort();
+  assert.deepEqual(
+    ids,
+    runs.map((r) => r.id).sort(),
+    'every terminal run ends up indexed exactly once, none lost or duplicated',
+  );
+  assert.equal(new Set(ids).size, ids.length, 'no duplicate entries');
+});
