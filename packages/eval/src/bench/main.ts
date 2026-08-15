@@ -1,6 +1,7 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
 import {
   BENCH_DIR,
@@ -8,6 +9,9 @@ import {
   loadBenchConfig,
   RUNTIME_ROOT,
 } from './config.js';
+
+/** This driver's own source dir — report.ts is a sibling here, wherever this package lives. */
+const DRIVER_SRC_DIR = path.dirname(fileURLToPath(import.meta.url));
 import { formatUsd, sumUsage } from '../driver/cost.js';
 import { archiveBenchRun } from './history.js';
 import { runInstance } from './run-instance.js';
@@ -106,7 +110,7 @@ async function gradeAndReport(
   console.log(`\n[bench] writing report...`);
   await runStep(
     'pnpm',
-    ['exec', 'tsx', path.join(BENCH_DIR, 'src', 'report.ts')],
+    ['exec', 'tsx', path.join(DRIVER_SRC_DIR, 'report.ts')],
     env,
   );
 }

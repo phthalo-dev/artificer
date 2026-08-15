@@ -3,8 +3,12 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
+import { fileURLToPath } from 'node:url';
 import 'dotenv/config';
 import { BENCH_DIR, RESULTS_DIR, resolveSuitePath } from './config.js';
+
+/** This driver's own source dir — report.ts is a sibling here, wherever this package lives. */
+const DRIVER_SRC_DIR = path.dirname(fileURLToPath(import.meta.url));
 import { extractPatch } from '../driver/extract-patch.js';
 import { sandboxGithubEnv } from './git-sandbox.js';
 import { buildTaskMessage } from './run-instance.js';
@@ -290,7 +294,7 @@ async function gradeAndReport(resultsDir: string, kind: string): Promise<void> {
   console.log('\n[external-agent] writing report...');
   await runStep(
     'pnpm',
-    ['exec', 'tsx', path.join(BENCH_DIR, 'src', 'report.ts')],
+    ['exec', 'tsx', path.join(DRIVER_SRC_DIR, 'report.ts')],
     env,
   );
 }
