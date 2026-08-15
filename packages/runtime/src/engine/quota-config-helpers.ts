@@ -48,8 +48,10 @@ export function executorAccountId(
   if (!executor || executor === 'llm') return undefined;
   if (executor === 'cursor-agent') return 'cursor-agent';
   if (executor === 'claude-code') return 'claude-code';
+  if (executor === 'opencode') return 'opencode';
   if (executor.type === 'cursor-agent') return 'cursor-agent';
   if (executor.type === 'claude-code') return 'claude-code';
+  if (executor.type === 'opencode') return 'opencode';
   return undefined;
 }
 
