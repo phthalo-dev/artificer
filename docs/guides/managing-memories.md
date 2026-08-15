@@ -175,6 +175,18 @@ Results are capped at the requested limit (default 5 when called by the agent to
 
 Optional frontmatter `related` links memories with typed edges (`related`, `builds_on`, `contradicts`, `cites`, `categorized_under`). Unknown target ids are dropped on write with a warning.
 
+## Searching run history
+
+`query_memories` searches curated, agent-written long-term memory. `search_history` searches a different thing: the actual outcomes of past planner/worker/reviewer/librarian calls — "did we already try fixing this" or "what did the reviewer say about this file last time."
+
+Only terminal calls (finished or failed) are searchable, and only their task and output/error text — not their full tool-call trajectory. Available to `communicator`, `planner`, and `librarian`.
+
+```
+search_history(query?, { role?, workstreamId?, status?: "done" | "failed", limit? })
+```
+
+An empty query returns the most recent runs. Filter by `role` (e.g. `"worker"`), `workstreamId`, or `status` to narrow the search.
+
 ## Seeding initial memories
 
 You can pre-populate the agent's memory before it starts by adding markdown files to `identity/memories/`. This is the recommended way to give the agent standing context it should always have:
