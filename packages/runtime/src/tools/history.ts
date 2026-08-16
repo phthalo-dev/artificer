@@ -60,7 +60,8 @@ export function createHistoryTools(ctx: ToolContext): ToolDef[] {
             const location = r.workstreamId
               ? ` (workstream ${r.workstreamId}, ${r.status})`
               : ` (${r.status})`;
-            return `- [${r.role}] ${r.taskExcerpt}${location}\n  ${r.outputExcerpt}`;
+            const header = `- [${r.role}] ${r.taskExcerpt}${location}`;
+            return r.outputExcerpt ? `${header}\n  ${r.outputExcerpt}` : header;
           })
           .join('\n\n');
       },

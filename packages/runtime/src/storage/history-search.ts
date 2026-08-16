@@ -24,6 +24,34 @@ export interface RankedRunEntry {
 export const TASK_EXCERPT_MAX = 200;
 export const OUTPUT_EXCERPT_MAX = 300;
 
+/**
+ * Roles whose terminal runs are eligible for the search_history index — the
+ * four "work outcome" roles the design spec scopes recall to. `communicator`
+ * (whose task text is built from the chat transcript itself, so indexing it
+ * would just duplicate get_recent_messages) and `orchestrator` (pure
+ * routing/bookkeeping, not a work outcome) are deliberately excluded.
+ */
+export const INDEXABLE_RUN_ROLES: ReadonlySet<string> = new Set([
+  'planner',
+  'worker',
+  'reviewer',
+  'librarian',
+]);
+
+export function isIndexableRunRole(role: string): boolean {
+  return INDEXABLE_RUN_ROLES.has(role);
+}
+
+/**
+ * Slice text to `max` chars, appending an ellipsis + "(truncated)" marker
+ * (matching Store.queryMemories' convention) only when truncation actually
+ * happened — so the model can tell a complete short field from a cut-off one.
+ */
+function excerpt(text: string, max: number): string {
+  if (text.length <= max) return text;
+  return `${text.slice(0, max)}… (truncated)`;
+}
+
 /** Build the lightweight index entry for a terminal run. Never copies toolCalls/usage. */
 export function buildRunIndexEntry(run: RunRecord): RunIndexEntry {
   const status = run.status === 'failed' ? 'failed' : 'done';
@@ -32,8 +60,8 @@ export function buildRunIndexEntry(run: RunRecord): RunIndexEntry {
     id: run.id,
     role: run.role,
     status,
-    taskExcerpt: run.task.slice(0, TASK_EXCERPT_MAX),
-    outputExcerpt: outputSource.slice(0, OUTPUT_EXCERPT_MAX),
+    taskExcerpt: excerpt(run.task, TASK_EXCERPT_MAX),
+    outputExcerpt: excerpt(outputSource, OUTPUT_EXCERPT_MAX),
     createdAt: run.createdAt,
   };
   if (run.workstreamId) entry.workstreamId = run.workstreamId;
