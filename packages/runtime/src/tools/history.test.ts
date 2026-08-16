@@ -9,7 +9,9 @@ import type { RunRecord } from '../storage/types.js';
 import { createHistoryTools } from './history.js';
 
 async function freshStore(): Promise<Store> {
-  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-historytool-'));
+  const dir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'artificer-historytool-'),
+  );
   const store = new Store(dir);
   await store.init();
   return store;
@@ -45,7 +47,10 @@ test('search_history finds a matching terminal run and formats role/task/output'
   workerRun.output = 'Replaced the stale session check.';
   await store.saveRun(workerRun);
 
-  const callerRun = await store.createRun({ role: 'communicator', task: 'chat' });
+  const callerRun = await store.createRun({
+    role: 'communicator',
+    task: 'chat',
+  });
   const tools = createHistoryTools(ctxFor(store, callerRun));
   const searchHistory = tools.find((t) => t.name === 'search_history');
   assert.ok(searchHistory);
@@ -58,6 +63,28 @@ test('search_history finds a matching terminal run and formats role/task/output'
   assert.match(result, /Replaced the stale session check\./);
 });
 
+test('search_history formats a run with an empty outputExcerpt without a dangling second line', async () => {
+  const store = await freshStore();
+  const run = await store.createRun({
+    role: 'worker',
+    task: 'Task with no output',
+  });
+  run.status = 'done';
+  // No output and no error set -> outputExcerpt is ''.
+  await store.saveRun(run);
+
+  const callerRun = await store.createRun({
+    role: 'communicator',
+    task: 'chat',
+  });
+  const tools = createHistoryTools(ctxFor(store, callerRun));
+  const searchHistory = tools.find((t) => t.name === 'search_history');
+  assert.ok(searchHistory);
+
+  const result = await searchHistory.handler({ query: 'no output' });
+  assert.equal(result, '- [worker] Task with no output (done)');
+});
+
 test('search_history passes role/workstreamId/status/limit filters through to the store', async () => {
   const store = await freshStore();
   const done = await store.createRun({ role: 'worker', task: 'same text' });
@@ -68,7 +95,10 @@ test('search_history passes role/workstreamId/status/limit filters through to th
   failed.status = 'failed';
   await store.saveRun(failed);
 
-  const callerRun = await store.createRun({ role: 'communicator', task: 'chat' });
+  const callerRun = await store.createRun({
+    role: 'communicator',
+    task: 'chat',
+  });
   const tools = createHistoryTools(ctxFor(store, callerRun));
   const searchHistory = tools.find((t) => t.name === 'search_history');
   assert.ok(searchHistory);

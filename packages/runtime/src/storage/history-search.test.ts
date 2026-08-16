@@ -51,14 +51,30 @@ test('buildRunIndexEntry excerpts task and output, drops toolCalls/usage', () =>
   assert.ok(!('usage' in entry));
 });
 
-test('buildRunIndexEntry truncates long task/output to the excerpt max lengths', () => {
+test('buildRunIndexEntry truncates long task/output and appends a truncation marker', () => {
   const run = minimalRun({
     task: 'x'.repeat(500),
     output: 'y'.repeat(500),
   });
   const entry = buildRunIndexEntry(run);
-  assert.equal(entry.taskExcerpt.length, TASK_EXCERPT_MAX);
-  assert.equal(entry.outputExcerpt.length, OUTPUT_EXCERPT_MAX);
+  assert.equal(
+    entry.taskExcerpt,
+    `${'x'.repeat(TASK_EXCERPT_MAX)}… (truncated)`,
+  );
+  assert.equal(
+    entry.outputExcerpt,
+    `${'y'.repeat(OUTPUT_EXCERPT_MAX)}… (truncated)`,
+  );
+});
+
+test('buildRunIndexEntry does not append a truncation marker when text is exactly at the excerpt max', () => {
+  const run = minimalRun({
+    task: 'x'.repeat(TASK_EXCERPT_MAX),
+    output: 'y'.repeat(OUTPUT_EXCERPT_MAX),
+  });
+  const entry = buildRunIndexEntry(run);
+  assert.equal(entry.taskExcerpt, 'x'.repeat(TASK_EXCERPT_MAX));
+  assert.equal(entry.outputExcerpt, 'y'.repeat(OUTPUT_EXCERPT_MAX));
 });
 
 test('buildRunIndexEntry falls back to error when output is empty on a failed run', () => {
