@@ -94,14 +94,22 @@ test('saveRun indexes a run into history/index.json when it reaches a terminal s
   run.status = 'running';
   await store.saveRun(run);
 
-  const raw = await fs.readFile(store.layout.historyIndexFile(), 'utf8').catch(() => null);
-  assert.equal(raw, null, 'a running (non-terminal) save must not create the index');
+  const raw = await fs
+    .readFile(store.layout.historyIndexFile(), 'utf8')
+    .catch(() => null);
+  assert.equal(
+    raw,
+    null,
+    'a running (non-terminal) save must not create the index',
+  );
 
   run.status = 'done';
   run.output = 'Fixed it by adjusting the redirect.';
   await store.saveRun(run);
 
-  const index = JSON.parse(await fs.readFile(store.layout.historyIndexFile(), 'utf8'));
+  const index = JSON.parse(
+    await fs.readFile(store.layout.historyIndexFile(), 'utf8'),
+  );
   assert.equal(index.length, 1);
   assert.equal(index[0].id, run.id);
   assert.equal(index[0].status, 'done');
@@ -122,7 +130,9 @@ test('saveRun upserts (not duplicates) the same run id across multiple terminal 
   run.output = 'first pass, corrected';
   await store.saveRun(run);
 
-  const index = JSON.parse(await fs.readFile(store.layout.historyIndexFile(), 'utf8'));
+  const index = JSON.parse(
+    await fs.readFile(store.layout.historyIndexFile(), 'utf8'),
+  );
   assert.equal(index.length, 1);
   assert.equal(index[0].outputExcerpt, 'first pass, corrected');
 });
@@ -137,7 +147,9 @@ test('failed runs are indexed with status "failed" using the error as the output
   run.error = 'Tests did not pass.';
   await store.saveRun(run);
 
-  const index = JSON.parse(await fs.readFile(store.layout.historyIndexFile(), 'utf8'));
+  const index = JSON.parse(
+    await fs.readFile(store.layout.historyIndexFile(), 'utf8'),
+  );
   assert.equal(index[0].status, 'failed');
   assert.equal(index[0].outputExcerpt, 'Tests did not pass.');
 });
@@ -160,7 +172,9 @@ test('a corrupt history/index.json is rebuilt from runs/ on the next terminal sa
   newer.output = 'newer output';
   await store.saveRun(newer);
 
-  const index = JSON.parse(await fs.readFile(store.layout.historyIndexFile(), 'utf8'));
+  const index = JSON.parse(
+    await fs.readFile(store.layout.historyIndexFile(), 'utf8'),
+  );
   const ids = index.map((e: { id: string }) => e.id).sort();
   assert.deepEqual(ids, [newer.id, older.id].sort());
 });
@@ -190,7 +204,9 @@ test('concurrent saveRun calls for different runs both land in history/index.jso
 
   await Promise.all([store.saveRun(runA), store.saveRun(runB)]);
 
-  const index = JSON.parse(await fs.readFile(store.layout.historyIndexFile(), 'utf8'));
+  const index = JSON.parse(
+    await fs.readFile(store.layout.historyIndexFile(), 'utf8'),
+  );
   const ids = index.map((e: { id: string }) => e.id).sort();
   assert.deepEqual(ids, [seed.id, runA.id, runB.id].sort());
 });
@@ -200,12 +216,18 @@ test('searchHistory ranks by task/output text and respects limit', async () => {
   const store = new Store(dataDir);
   await store.init();
 
-  const authRun = await store.createRun({ role: 'worker', task: 'Fix auth redirect loop' });
+  const authRun = await store.createRun({
+    role: 'worker',
+    task: 'Fix auth redirect loop',
+  });
   authRun.status = 'done';
   authRun.output = 'Patched the session check.';
   await store.saveRun(authRun);
 
-  const changelogRun = await store.createRun({ role: 'worker', task: 'Update changelog' });
+  const changelogRun = await store.createRun({
+    role: 'worker',
+    task: 'Update changelog',
+  });
   changelogRun.status = 'done';
   changelogRun.output = 'Added release notes.';
   await store.saveRun(changelogRun);
@@ -259,13 +281,22 @@ test('searchHistory filters by role, workstreamId, and status', async () => {
   await store.saveRun(plannerRun);
 
   const byRole = await store.searchHistory('', { role: 'planner' });
-  assert.deepEqual(byRole.map((r) => r.id), [plannerRun.id]);
+  assert.deepEqual(
+    byRole.map((r) => r.id),
+    [plannerRun.id],
+  );
 
   const byWorkstream = await store.searchHistory('', { workstreamId: 'ws_1' });
-  assert.deepEqual(byWorkstream.map((r) => r.id), [workerRun.id]);
+  assert.deepEqual(
+    byWorkstream.map((r) => r.id),
+    [workerRun.id],
+  );
 
   const byStatus = await store.searchHistory('', { status: 'failed' });
-  assert.deepEqual(byStatus.map((r) => r.id), [plannerRun.id]);
+  assert.deepEqual(
+    byStatus.map((r) => r.id),
+    [plannerRun.id],
+  );
 });
 
 test('searchHistory returns an empty array when there is no run history yet', async () => {
@@ -294,6 +325,166 @@ test('searchHistory limit defaults to 5 and caps at 20', async () => {
 
   const capped = await store.searchHistory('', { limit: 999 });
   assert.equal(capped.length, 8); // fewer than 20 exist, cap doesn't truncate below actual count
+});
+
+test('saveRun succeeds and leaves the run status untouched even when the history-index write fails', async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-store-'));
+  const store = new Store(dataDir);
+  await store.init();
+
+  // Make history/index.json unwritable by occupying its parent directory
+  // path with a plain file instead of a directory: ensureDir('.../history')
+  // (inside writeJsonAtomic) and fs.readFile('.../history/index.json')
+  // (inside readHistoryIndex) both fail with ENOTDIR/ENOENT-adjacent errors
+  // against a real filesystem, without relying on chmod (less portable).
+  const historyDir = path.dirname(store.layout.historyIndexFile());
+  await fs.writeFile(historyDir, 'not a directory', 'utf8');
+
+  const run = await store.createRun({ role: 'worker', task: 'Fix the bug' });
+  run.status = 'done';
+  run.output = 'Fixed it by adjusting the redirect.';
+
+  await assert.doesNotReject(() => store.saveRun(run));
+
+  const saved = await store.getRun(run.id);
+  assert.equal(
+    saved?.status,
+    'done',
+    'the run record itself must still reflect success, not get overwritten as failed by an index-write error',
+  );
+  assert.equal(saved?.error, undefined);
+});
+
+test('saveRun does not index a terminal communicator run into history/index.json', async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-store-'));
+  const store = new Store(dataDir);
+  await store.init();
+
+  const run = await store.createRun({
+    role: 'communicator',
+    task: 'chat about widgets',
+  });
+  run.status = 'done';
+  run.output = 'Sure, here is the answer.';
+  await store.saveRun(run);
+
+  const raw = await fs
+    .readFile(store.layout.historyIndexFile(), 'utf8')
+    .catch(() => null);
+  assert.equal(
+    raw,
+    null,
+    'a terminal communicator run must not create the history index at all',
+  );
+});
+
+test('saveRun does not index a terminal orchestrator run into history/index.json', async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-store-'));
+  const store = new Store(dataDir);
+  await store.init();
+
+  const run = await store.createRun({
+    role: 'orchestrator',
+    task: 'route the next call',
+  });
+  run.status = 'done';
+  run.output = 'routed';
+  await store.saveRun(run);
+
+  const raw = await fs
+    .readFile(store.layout.historyIndexFile(), 'utf8')
+    .catch(() => null);
+  assert.equal(
+    raw,
+    null,
+    'a terminal orchestrator run must not create the history index at all',
+  );
+});
+
+for (const role of ['worker', 'planner', 'reviewer', 'librarian'] as const) {
+  test(`saveRun indexes a terminal ${role} run into history/index.json`, async () => {
+    const dataDir = await fs.mkdtemp(
+      path.join(os.tmpdir(), 'artificer-store-'),
+    );
+    const store = new Store(dataDir);
+    await store.init();
+
+    const run = await store.createRun({ role, task: `${role} task` });
+    run.status = 'done';
+    run.output = `${role} output`;
+    await store.saveRun(run);
+
+    const index = JSON.parse(
+      await fs.readFile(store.layout.historyIndexFile(), 'utf8'),
+    );
+    assert.equal(index.length, 1);
+    assert.equal(index[0].id, run.id);
+  });
+}
+
+test('a history/index.json containing valid JSON that is not an array triggers rebuild from runs/ (saveRun path)', async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-store-'));
+  const store = new Store(dataDir);
+  await store.init();
+
+  const existing = await store.createRun({
+    role: 'worker',
+    task: 'Existing task',
+  });
+  existing.status = 'done';
+  existing.output = 'existing output';
+  await store.saveRun(existing);
+
+  // Wrong-shape but valid JSON, written directly so it bypasses Store
+  // entirely (simulating an old format or external tampering).
+  await fs.writeFile(store.layout.historyIndexFile(), 'null', 'utf8');
+
+  // A fresh Store instance so its in-memory index cache starts cold and this
+  // save genuinely has to read the on-disk (wrong-shape) file.
+  const store2 = new Store(dataDir);
+  const newer = await store2.createRun({
+    role: 'planner',
+    task: 'Newer task',
+  });
+  newer.status = 'done';
+  newer.output = 'newer output';
+  await store2.saveRun(newer);
+
+  const index = JSON.parse(
+    await fs.readFile(store.layout.historyIndexFile(), 'utf8'),
+  );
+  const ids = index.map((e: { id: string }) => e.id).sort();
+  assert.deepEqual(ids, [existing.id, newer.id].sort());
+});
+
+test('a history/index.json containing valid JSON that is not an array triggers rebuild from runs/ (searchHistory path)', async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-store-'));
+  const store = new Store(dataDir);
+  await store.init();
+
+  const existing = await store.createRun({
+    role: 'worker',
+    task: 'Existing task about widgets',
+  });
+  existing.status = 'done';
+  existing.output = 'existing output';
+  await store.saveRun(existing);
+
+  await fs.writeFile(store.layout.historyIndexFile(), '{}', 'utf8');
+
+  // Fresh Store instance: cold cache, so searchHistory must read the
+  // on-disk (wrong-shape) file and self-heal instead of serving a cached
+  // (nonexistent, in this instance) array.
+  const store2 = new Store(dataDir);
+  const results = await store2.searchHistory('widgets');
+  assert.equal(results.length, 1);
+  assert.equal(results[0].id, existing.id);
+
+  const index = JSON.parse(
+    await fs.readFile(store.layout.historyIndexFile(), 'utf8'),
+  );
+  assert.equal(index.length, 1);
+  assert.equal(index[0].id, existing.id);
 });
 
 test('a concurrent searchHistory call does not race a concurrent saveRun call on a fresh store', async () => {
