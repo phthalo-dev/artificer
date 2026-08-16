@@ -219,4 +219,5 @@ If the CLI exits with a non-zero code, the run is marked failed and the stderr o
 ## Related docs
 
 - [Using Qwen Code as the Worker Executor](./qwen-code-executor.md) — a concrete walkthrough using the `cli` executor with Qwen Code
+- [Using opencode as the Worker Executor](./opencode-executor.md) — a dedicated (non-`cli`-type) executor, for CLIs whose MCP config doesn't fit this generic template
 - [Setting Up an Agent Identity Repo](./agent-identity-setup.md) — configure your agent project before adding an executor
