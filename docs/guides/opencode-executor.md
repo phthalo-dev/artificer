@@ -2,7 +2,7 @@
 
 This guide explains how to configure Artificer to use [opencode](https://opencode.ai) as its worker executor instead of the built-in LLM loop.
 
-When opencode is the executor, Artificer's planner and reviewer roles still run as normal LLM calls. Only the **worker** role is handed off — Artificer writes a task prompt and opencode runs it autonomously in the workspace.
+When opencode is the executor, every `WORK_ROLES` role — `planner`, `worker`, and `reviewer` — is handed off to it, not just the worker. Artificer writes a role-specific prompt and opencode runs it autonomously in the workspace for each of the three; only roles outside `WORK_ROLES` (e.g. `communicator`, `librarian`) still run through Artificer's internal LLM loop.
 
 ## Prerequisites
 
