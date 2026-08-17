@@ -68,3 +68,44 @@ test('invalid identity.pullInterval emits a warning', () => {
     ],
   ]);
 });
+
+test('RUNTIME_COMPACTION_PROFILE is unset by default (model-family auto)', () => {
+  const config = loadConfig({ LLM_API_KEY: 'test-key' });
+  assert.equal(config.contextBorrowing.compactionProfile, undefined);
+});
+
+test('RUNTIME_COMPACTION_PROFILE selects a named profile', () => {
+  const config = loadConfig({
+    LLM_API_KEY: 'test-key',
+    RUNTIME_COMPACTION_PROFILE: 'aggressive',
+  });
+  assert.equal(config.contextBorrowing.compactionProfile, 'aggressive');
+});
+
+test('RUNTIME_COMPACTION_PROFILE=auto leaves model-family detection in charge', () => {
+  const config = loadConfig({
+    LLM_API_KEY: 'test-key',
+    RUNTIME_COMPACTION_PROFILE: 'auto',
+  });
+  assert.equal(config.contextBorrowing.compactionProfile, undefined);
+});
+
+test('invalid RUNTIME_COMPACTION_PROFILE emits a warning and is ignored', () => {
+  const originalWarn = console.warn;
+  const warnings: unknown[][] = [];
+  console.warn = (...args: unknown[]) => warnings.push(args);
+  try {
+    const config = loadConfig({
+      LLM_API_KEY: 'test-key',
+      RUNTIME_COMPACTION_PROFILE: 'nope',
+    });
+    assert.equal(config.contextBorrowing.compactionProfile, undefined);
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.deepEqual(warnings, [
+    [
+      '[artificer] invalid RUNTIME_COMPACTION_PROFILE "nope"; using model-family detection.',
+    ],
+  ]);
+});

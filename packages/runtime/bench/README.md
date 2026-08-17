@@ -140,6 +140,7 @@ Context borrowing env vars (see `packages/runtime/.env.example`):
 | `RUNTIME_TOOL_RESULT_MAX_CHARS` | 12000 | Spill threshold per tool invocation |
 | `RUNTIME_TOOL_RESULT_MAX_PER_RUN_CHARS` | 80000 | Aggregate tool-result budget per run |
 | `RUNTIME_MICROCOMPACT_ENABLED` | true | Compact prior-run tool outputs in context |
+| `RUNTIME_COMPACTION_PROFILE` | auto | Force digest size (`aggressive`/`default`/`generous`) or leave model-family auto |
 | `RUNTIME_FILE_CACHE_MAX_ENTRIES` | 64 | Recently-read file hints per workstream |
 | `RUNTIME_REQUIRE_RG` | true | Require ripgrep for grep/glob tools |
 
