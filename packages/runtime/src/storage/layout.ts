@@ -118,4 +118,8 @@ export class Layout {
   quotaStateFile(): string {
     return path.join(this.root, 'quota-state.json');
   }
+
+  historyIndexFile(): string {
+    return path.join(this.root, 'history', 'index.json');
+  }
 }
