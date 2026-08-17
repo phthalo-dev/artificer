@@ -23,6 +23,16 @@ switch (command) {
     await start(args[0]);
     break;
   }
+  case 'import-history': {
+    const { importHistory } = await import('./commands/import-history.js');
+    try {
+      await importHistory(args);
+    } catch (err) {
+      console.error(err instanceof Error ? err.message : err);
+      process.exit(1);
+    }
+    break;
+  }
   case 'eval': {
     const sub = args[0];
     const rest = args.slice(1);
@@ -52,12 +62,15 @@ switch (command) {
     break;
   }
   default:
-    console.log('Usage: artificer <init|dev|start|eval> [args]');
+    console.log('Usage: artificer <init|dev|start|import-history|eval> [args]');
     console.log('');
     console.log('Commands:');
     console.log('  init <name>    Create a new agent project');
     console.log('  dev            Start in development mode');
     console.log('  start          Start in production mode');
+    console.log(
+      '  import-history  Seed preference memories from Claude Code, Cursor, Codex, or OpenCode sessions',
+    );
     console.log(
       '  eval run|list|compare  Run, list, or compare identity evals',
     );
