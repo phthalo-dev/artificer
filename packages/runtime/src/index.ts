@@ -71,6 +71,17 @@ export {
   verifySlackSignature,
   verifyDiscordSignature,
 } from './channels/adapters/verify.js';
+export {
+  applyHistoryImport,
+  planHistoryImport,
+  HISTORY_SOURCES,
+} from './import-history/index.js';
+export type {
+  HistoryImportPlan,
+  HistorySource,
+  MemoryDraft,
+  PlanHistoryImportOptions,
+} from './import-history/index.js';
 
 export async function startRuntime(): Promise<void> {
   const config = loadConfig();
