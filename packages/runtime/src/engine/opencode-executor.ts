@@ -46,6 +46,19 @@ export class OpencodeExecutor implements WorkerExecutor {
             enabled: true,
           },
         },
+        // Explicit allow-list instead of --dangerously-skip-permissions:
+        // that flag blanket-bypasses opencode's own external_directory
+        // guard, which is the only thing stopping opencode from acting on
+        // an absolute path mentioned in its prompt (e.g. the workstream's
+        // original repoUrl) instead of staying inside --dir. Key order is
+        // permission precedence (last match wins) — external_directory
+        // must stay after '*' to override it.
+        permission: {
+          '*': 'allow',
+          [`${MCP_SERVER_ID}_report_status`]: 'allow',
+          [`${MCP_SERVER_ID}_submit_review`]: 'allow',
+          external_directory: 'deny',
+        },
       }),
     );
 
@@ -53,13 +66,7 @@ export class OpencodeExecutor implements WorkerExecutor {
     fs.rmSync(statusFile, { force: true });
 
     return new Promise((resolve, reject) => {
-      const args = [
-        'run',
-        context,
-        '--dangerously-skip-permissions',
-        '--dir',
-        workspaceDir,
-      ];
+      const args = ['run', context, '--dir', workspaceDir];
       if (this.model) args.push('--model', this.model);
 
       const child = spawn('opencode', args, {
