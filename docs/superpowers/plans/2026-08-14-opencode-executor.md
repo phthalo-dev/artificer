@@ -658,3 +658,202 @@ Check specifically:
 - [ ] **Step 7: No commit for this task**
 
 The scratch identity lives outside the artificer repo and is not part of it. Report the outcome (pass/fail, and anything notable about opencode's behavior as a worker) back in conversation — this is the final validation deliverable for this plan, not a code change.
+
+---
+
+## Post-Task-4 addendum (added after live validation surfaced a security-relevant finding)
+
+Task 4's live validation (via `artificer dev` + `POST /api/workstreams`, since `artificer eval run` was found not to read `artificer.config.json` at all — a separate, pre-existing, out-of-scope bug filed as a follow-up, not fixed here) confirmed `OpencodeExecutor` correctly dispatches for all `WORK_ROLES` and round-trips MCP `report_status`/`submit_review` cleanly. It also surfaced two real problems, both addressed by the two tasks below:
+
+1. **Security-relevant**: `OpencodeExecutor` spawns opencode with `--dangerously-skip-permissions`, which blanket-bypasses opencode's own `external_directory` permission guard. The shared prompt-builder (`packages/runtime/src/engine/call.ts`'s `buildContext()`, used by every executor and the internal loop alike) includes a literal `Repository: ${ws.repoUrl}` line. Artificer's internal tools are hardcoded to the workspace directory regardless of this text, so it's inert for them — but opencode is a general filesystem-capable agent and, in the live test, read that literal absolute path, decided to operate there instead of its `--dir`-rooted workspace, hit its own `external_directory` guard, and had it silently auto-approved by the skip flag. Real, correct files were written to the *original* (non-sandboxed) repo path while Artificer's orchestration recorded the workstream `done`/`approved` via MCP with no signal the tracked workspace was untouched. Fixed by Task 5, scoped to `OpencodeExecutor` only (not touching the shared `buildContext()`/`call.ts`, which is broader and affects other executors too — deferred as a separate follow-up).
+2. **Docs accuracy**: `docs/guides/opencode-executor.md` (added in Task 3) claims "Only the worker role is handed off" — the live run showed all three `WORK_ROLES` (`planner`, `worker`, `reviewer`) route through the configured executor once one is set. Fixed by Task 6.
+
+---
+
+### Task 5: Replace `--dangerously-skip-permissions` with a scoped opencode permission config
+
+**Files:**
+- Modify: `packages/runtime/src/engine/opencode-executor.ts:39-62`
+
+**Interfaces:**
+- Consumes: nothing new — same `WorkerExecutor.execute()` signature from Task 1, unchanged.
+- Produces: no interface change; same `OpencodeExecutor` class, same public shape. Only the internal `opencode.json` content and spawn `args` change.
+
+Research confirmed the exact opencode permission schema (`packages/core/src/v1/config/permission.ts` in the opencode source repo at `/Users/danielbanks/dev/opencode`): a top-level `permission` object where each key is a permission category (known categories include `read`, `edit`, `glob`, `grep`, `list`, `bash`, `task`, `external_directory`, `todowrite`, `question`, `webfetch`, `websearch`, `lsp`, `doom_loop`, `skill`) or an exact MCP-tool permission key (format `<sanitizedServerName>_<sanitizedToolName>`, e.g. `artificer-status_report_status`), each mapped to `"allow" | "ask" | "deny"`. Rule evaluation is "last matching key wins" — JSON key insertion order is precedence order, so a later key overrides an earlier wildcard. A `"deny"` rule is enforced by the permission service itself *before* any `permission.asked` event fires, so it cannot be bypassed by `--dangerously-skip-permissions`/`--auto`/`--yolo` regardless of whether that flag is present. `external_directory` is evaluated once per operation that would touch a path outside the `--dir` root (`packages/opencode/src/tool/external-directory.ts` in the opencode source) — operations fully inside the workspace never trigger this permission check at all, so `"external_directory": "deny"` has zero effect on legitimate in-workspace work.
+
+- [ ] **Step 1: Update the MCP config write in `opencode-executor.ts`**
+
+Find (current content, written by Task 1):
+
+```ts
+    fs.writeFileSync(
+      mcpConfigFile,
+      JSON.stringify({
+        mcp: {
+          [MCP_SERVER_ID]: {
+            type: 'local',
+            command: [process.execPath, MCP_SERVER, statusFile],
+            enabled: true,
+          },
+        },
+      }),
+    );
+```
+
+Replace with:
+
+```ts
+    fs.writeFileSync(
+      mcpConfigFile,
+      JSON.stringify({
+        mcp: {
+          [MCP_SERVER_ID]: {
+            type: 'local',
+            command: [process.execPath, MCP_SERVER, statusFile],
+            enabled: true,
+          },
+        },
+        // Explicit allow-list instead of --dangerously-skip-permissions:
+        // that flag blanket-bypasses opencode's own external_directory
+        // guard, which is the only thing stopping opencode from acting on
+        // an absolute path mentioned in its prompt (e.g. the workstream's
+        // original repoUrl) instead of staying inside --dir. Key order is
+        // permission precedence (last match wins) — external_directory
+        // must stay after '*' to override it.
+        permission: {
+          '*': 'allow',
+          [`${MCP_SERVER_ID}_report_status`]: 'allow',
+          [`${MCP_SERVER_ID}_submit_review`]: 'allow',
+          external_directory: 'deny',
+        },
+      }),
+    );
+```
+
+- [ ] **Step 2: Remove `--dangerously-skip-permissions` from the spawn args**
+
+Find:
+
+```ts
+      const args = [
+        'run',
+        context,
+        '--dangerously-skip-permissions',
+        '--dir',
+        workspaceDir,
+      ];
+```
+
+Replace with:
+
+```ts
+      const args = ['run', context, '--dir', workspaceDir];
+```
+
+- [ ] **Step 3: Type-check and lint**
+
+Run: `pnpm --filter @artificer-ai/runtime type-check`
+Expected: PASS
+
+Run: `pnpm --filter @artificer-ai/runtime lint`
+Expected: PASS
+
+- [ ] **Step 4: Live re-validation — reproduce the exact leak scenario and confirm it's now blocked**
+
+This is a security fix; the acceptance test is reproducing the exact failure Task 4 found and confirming it no longer happens, not just a type-check pass.
+
+```bash
+mkdir -p "<scratchpad>/opencode-fix-target-repo"
+cd "<scratchpad>/opencode-fix-target-repo"
+git init -q
+echo '{"name":"opencode-fix-target","type":"module","private":true}' > package.json
+git add -A && git commit -q -m "initial commit"
+```
+
+Reuse the scratch identity from Task 4 (`<scratchpad>/opencode-worker-eval-identity`, `artificer.config.json` already has `"executor": {"type": "opencode", "model": "opencode/gpt-5.4-mini"}`) if it's still intact; otherwise recreate it per Task 4 Steps 1-3. Start `artificer dev` from it (same pattern as Task 4 Step 3), wait for the "listening on" log line, then:
+
+```bash
+curl -s -X POST http://localhost:<port>/api/workstreams \
+  -H 'Content-Type: application/json' \
+  -d '{"title":"Add reverseString utility",
+       "goal":"Add a function reverseString(str) to src/string-utils.ts that reverses a string, with a unit test in src/string-utils.test.ts using node:test and node:assert.",
+       "repoUrl":"<scratchpad>/opencode-fix-target-repo",
+       "autostart":true,
+       "submitPr":false}'
+```
+
+Poll `GET http://localhost:<port>/api/workstreams/<id>` until terminal status (same pattern as Task 4). Then check, in this order:
+
+1. `run.executor` on the worker role's run record is still `"opencode"` and MCP `report_status`/`submit_review` still round-trip correctly (proves the permission config didn't break the working parts — `'*': 'allow'` plus the two explicit MCP-tool allows should keep this working exactly as Task 4 validated).
+2. **The critical check**: `find <scratchpad>/opencode-fix-target-repo -iname '*string-utils*'` finds **nothing** (the original path is untouched this time), and the sandboxed workspace clone under the exec dir (`~/.artificer/opencode-worker-eval-identity/workspace/<workstreamId>/repo/`) **does** contain the new `string-utils.ts`/`string-utils.test.ts` files. This is the inverse of Task 4's finding — files must land in the sandboxed clone, not the original path.
+3. Check opencode's own log (`~/.local/share/opencode/log/opencode.log`, filtered to this run) for an `external_directory` permission entry with `action=deny` (or equivalent denial) when opencode attempted the original path — confirms the deny rule actually fired, not just that opencode happened not to try.
+
+Stop the backgrounded `artificer dev` process when done (`kill <pid>`), confirm no orphaned process remains, confirm `git status --short` in the worktree shows no unexpected changes (this step touches no artificer-repo files, only the worktree's already-modified `opencode-executor.ts` from Step 1-2 above).
+
+- [ ] **Step 5: Commit**
+
+```bash
+git add packages/runtime/src/engine/opencode-executor.ts
+git commit -m "$(cat <<'EOF'
+fix(runtime): scope OpencodeExecutor permissions instead of skipping them
+
+--dangerously-skip-permissions blanket-bypassed opencode's own
+external_directory guard, letting it act on the literal repoUrl path
+leaked into its prompt by the shared buildContext() instead of staying
+inside the --dir workspace. Replace it with an explicit permission
+config: allow everything needed for normal operation and the MCP status
+tools, deny external_directory outright (enforced before any
+permission.asked event, so it can't be silently auto-approved).
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+EOF
+)"
+```
+
+---
+
+### Task 6: Fix the "only worker role" claim in the docs
+
+**Files:**
+- Modify: `docs/guides/opencode-executor.md`
+
+**Interfaces:**
+- Consumes: nothing.
+- Produces: a documentation correction only.
+
+- [ ] **Step 1: Correct the role-scoping claim**
+
+Find:
+
+```markdown
+When opencode is the executor, Artificer's planner and reviewer roles still run as normal LLM calls. Only the **worker** role is handed off — Artificer writes a task prompt and opencode runs it autonomously in the workspace.
+```
+
+Replace with:
+
+```markdown
+When opencode is the executor, every `WORK_ROLES` role — `planner`, `worker`, and `reviewer` — is handed off to it, not just the worker. Artificer writes a role-specific prompt and opencode runs it autonomously in the workspace for each of the three; only roles outside `WORK_ROLES` (e.g. `communicator`, `librarian`) still run through Artificer's internal LLM loop.
+```
+
+- [ ] **Step 2: Verify no other part of the doc repeats the old claim**
+
+```bash
+grep -n "worker.*role.*handed off\|Only the.*worker" docs/guides/opencode-executor.md
+```
+
+Expected: no matches after Step 1's edit (confirms this was the only place the claim appeared).
+
+- [ ] **Step 3: Commit**
+
+```bash
+git add docs/guides/opencode-executor.md
+git commit -m "$(cat <<'EOF'
+docs: correct opencode executor role-scoping claim
+
+Live validation showed all WORK_ROLES (planner/worker/reviewer) route
+through a configured executor, not just worker.
+
+Co-Authored-By: Claude Sonnet 5 <noreply@anthropic.com>
+EOF
+)"
+```
