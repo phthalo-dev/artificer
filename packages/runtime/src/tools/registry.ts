@@ -13,6 +13,7 @@ import { createEditTool } from './edit.js';
 import { createFetchTools } from './fetch.js';
 import { createFileTools } from './files.js';
 import { createGitTools } from './git.js';
+import { createHistoryTools } from './history.js';
 import { createLearnBatchTools } from './learn-batches.js';
 import { createOrchestratorTools } from './orchestrator-tool.js';
 import { createSearchTools } from './search.js';
@@ -50,6 +51,7 @@ export function toolsForRole(
   const searchAll = createSearchTools(ctx);
   const searchGrepOnly = createSearchTools(ctx, { includeGlob: false });
   const schedules = createScheduleTools(ctx);
+  const history = createHistoryTools(ctx);
 
   let result: ToolDef[];
   switch (role) {
@@ -60,6 +62,7 @@ export function toolsForRole(
         ...messageHistory,
         ...providerConfig,
         ...schedules,
+        ...history,
         ...byName(orchestrator, ['get_status', 'query_memories', 'add_memory']),
       ];
       break;
@@ -84,6 +87,7 @@ export function toolsForRole(
         ...shell,
         ...git,
         ...byName(artifacts, ['write_plan', 'read_plan']),
+        ...history,
         ...byName(orchestrator, [
           'get_status',
           'query_memories',
@@ -132,6 +136,7 @@ export function toolsForRole(
       result = [
         ...fetchTools,
         ...reply,
+        ...history,
         ...byName(orchestrator, ['query_memories', 'add_memory']),
         ...createLearnBatchTools(ctx),
       ];

@@ -9,6 +9,12 @@ import {
   emptyScheduleRuntimeState,
   type ScheduleRuntimeState,
 } from '../engine/schedules.js';
+import {
+  buildRunIndexEntry,
+  isIndexableRunRole,
+  rankRuns,
+  type RunIndexEntry,
+} from './history-search.js';
 import { Layout } from './layout.js';
 import { rankMemories, type MemoryIndexEntry } from './memory-search.js';
 import {
@@ -38,6 +44,20 @@ async function ensureDir(dir: string): Promise<void> {
 
 /** Per-target serialization so concurrent saveRun calls cannot collide on rename. */
 const writeChains = new Map<string, Promise<void>>();
+
+/**
+ * Per-file serialization for every operation that touches
+ * `history/index.json` — both the read-modify-write cycle of an upsert and a
+ * bare read (which can itself trigger a self-heal rebuild-write). `writeChains`
+ * (via `writeJson`) only serializes the final write to a given path — it does
+ * not guard the read that precedes it, so two concurrent operations on the
+ * same file could both read a stale snapshot and the second write silently
+ * clobbers the first, or a search's rebuild-write could race an upsert's
+ * write. Keyed by file path (like `writeChains`) so unrelated `Store`
+ * instances (different data dirs, e.g. in tests) never contend with each
+ * other. See `Store.withHistoryIndexChain`.
+ */
+const historyIndexChains = new Map<string, Promise<void>>();
 
 async function writeJsonAtomic(file: string, data: unknown): Promise<void> {
   await ensureDir(path.dirname(file));
@@ -134,6 +154,18 @@ function normalizeFinding(
  */
 export class Store {
   readonly layout: Layout;
+
+  /**
+   * In-memory cache of the parsed history/index.json array. `Store` is the
+   * sole writer of this file within one process, and every access to it is
+   * already serialized through `withHistoryIndexChain`, so once populated
+   * this cache can never go stale from an external writer — it's kept in
+   * sync in place by every upsert instead of re-reading/re-parsing the
+   * (potentially multi-MB) file from disk on every terminal saveRun. Only a
+   * self-heal rebuild (missing/corrupt/wrong-shape index.json) repopulates
+   * it from scratch.
+   */
+  private historyIndexCache: RunIndexEntry[] | null = null;
 
   constructor(execDir: string) {
     this.layout = new Layout(execDir);
@@ -376,6 +408,26 @@ export class Store {
 
   async saveRun(run: RunRecord): Promise<void> {
     await writeJson(this.layout.runFile(run.id), run);
+    // Only planner/worker/reviewer/librarian runs are search_history
+    // candidates (see isIndexableRunRole) — communicator/orchestrator runs
+    // never touch the history-index machinery at all, so routine chat/
+    // routing traffic can't trigger a self-heal rebuild-write of
+    // history/index.json for content that would never be indexed anyway.
+    if (
+      (run.status === 'done' || run.status === 'failed') &&
+      isIndexableRunRole(run.role)
+    ) {
+      // Best-effort, fire-and-forget indexing (design constraint): an index
+      // write failure (corrupt index.json, disk error, ...) must never fail
+      // the run's own save or propagate up into the caller's error handling
+      // — which, in engine/call.ts's executeCall, would otherwise flip an
+      // already-successful run to 'failed' on its second saveRun call.
+      try {
+        await this.upsertHistoryIndexEntry(run);
+      } catch (err) {
+        console.error(`[history-index] failed to index run ${run.id}:`, err);
+      }
+    }
   }
 
   async getRun(id: string): Promise<RunRecord | null> {
@@ -494,6 +546,34 @@ export class Store {
     return out;
   }
 
+  /**
+   * Search terminal run history (done/failed calls) by task/output text,
+   * with optional role/workstream/status filters. Empty query returns the
+   * most recent matches in recency order, same convention as queryMemories.
+   */
+  async searchHistory(
+    query: string,
+    opts: {
+      role?: string;
+      workstreamId?: string;
+      status?: 'done' | 'failed';
+      limit?: number;
+    } = {},
+  ): Promise<RunIndexEntry[]> {
+    const limit = Math.max(1, Math.min(opts.limit ?? 5, 20));
+    let entries = await this.withHistoryIndexChain(() =>
+      this.readHistoryIndex(),
+    );
+    if (opts.role) entries = entries.filter((e) => e.role === opts.role);
+    if (opts.workstreamId) {
+      entries = entries.filter((e) => e.workstreamId === opts.workstreamId);
+    }
+    if (opts.status) entries = entries.filter((e) => e.status === opts.status);
+    return rankRuns(query, entries)
+      .slice(0, limit)
+      .map((r) => r.entry);
+  }
+
   /** Compact "you know things" hint for context (count + top tags); no content. */
   async memorySignpost(): Promise<string | null> {
     const entries = await this.readReconciledIndex();
@@ -575,6 +655,121 @@ export class Store {
     );
     await writeJson(this.layout.memoryIndexFile(), rebuilt);
     return rebuilt;
+  }
+
+  /**
+   * Read history/index.json; rebuild it from terminal runs/ files if missing,
+   * unparseable, or parses to something that isn't an array (e.g. `null` or
+   * `{}` — valid JSON but the wrong shape, which would otherwise silently
+   * produce a non-array and make every later index operation throw forever,
+   * since a *successful* parse never re-triggers this rebuild path on its
+   * own). Unlike the memory index, no drift-count reconciliation is needed:
+   * runs/ is written exclusively by Store's own createRun/saveRun, so there
+   * is no external-mutation path that could cause the index to drift out
+   * from under a valid, parseable index.json.
+   *
+   * Served from `historyIndexCache` once populated — see that field's doc
+   * comment for why that's safe. Only the rebuild path below repopulates it.
+   */
+  private async readHistoryIndex(): Promise<RunIndexEntry[]> {
+    if (this.historyIndexCache) return this.historyIndexCache;
+    const file = this.layout.historyIndexFile();
+    let raw: string | null = null;
+    try {
+      raw = await fs.readFile(file, 'utf8');
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') throw err;
+    }
+    if (raw !== null) {
+      try {
+        const parsed = JSON.parse(raw);
+        if (Array.isArray(parsed)) {
+          this.historyIndexCache = parsed as RunIndexEntry[];
+          return this.historyIndexCache;
+        }
+        // Valid JSON but the wrong shape — fall through and rebuild from
+        // runs/, same as a parse failure.
+      } catch {
+        // Corrupt index.json — fall through and rebuild from runs/.
+      }
+    }
+    const runs = await this.listRuns();
+    const rebuilt = runs
+      .filter(
+        (r) =>
+          (r.status === 'done' || r.status === 'failed') &&
+          isIndexableRunRole(r.role),
+      )
+      .map((r) => buildRunIndexEntry(r));
+    await writeJson(file, rebuilt);
+    this.historyIndexCache = rebuilt;
+    return rebuilt;
+  }
+
+  /**
+   * Serialize an operation against `history/index.json` behind the per-file
+   * chain in `historyIndexChains`, so it can never interleave with another
+   * concurrent operation on the same file. Every *external* entry point that
+   * touches the history index — including a bare read, since
+   * `readHistoryIndex()` can itself trigger a self-heal rebuild-write when
+   * the index is missing or corrupt — must route through this helper (see
+   * `searchHistory`, `upsertHistoryIndexEntry`). Otherwise a concurrent
+   * self-heal rebuild-write (triggered by a read, e.g. from `searchHistory`)
+   * could race a concurrent upsert's read-modify-write and silently drop an
+   * entry.
+   *
+   * This helper is NOT reentrant: it must not be called again from inside a
+   * callback it is already running, or the inner call would await a chain
+   * link that can only resolve after itself, deadlocking. That's exactly why
+   * `upsertHistoryIndexEntry` calls `readHistoryIndex()` directly instead of
+   * wrapping it in another `withHistoryIndexChain` call — it's already
+   * running inside one.
+   */
+  private async withHistoryIndexChain<T>(fn: () => Promise<T>): Promise<T> {
+    const file = this.layout.historyIndexFile();
+    const prev = historyIndexChains.get(file) ?? Promise.resolve();
+    let result!: T;
+    const next = prev
+      .catch(() => {})
+      .then(async () => {
+        result = await fn();
+      });
+    historyIndexChains.set(file, next);
+    await next;
+    return result;
+  }
+
+  /**
+   * Read-modify-write the history index for one run, serialized against any
+   * other concurrent operation on the same file (see `withHistoryIndexChain`)
+   * so concurrent terminal `saveRun` calls (the scheduler runs up to
+   * `config.concurrency` runs in parallel) — and concurrent `searchHistory`
+   * reads that might trigger a self-heal rebuild — can never race each
+   * other and silently drop an entry.
+   *
+   * Only `planner`/`worker`/`reviewer`/`librarian` runs are indexed (see
+   * `isIndexableRunRole`) — `communicator`/`orchestrator` runs are never
+   * work-outcome history, so a terminal run of one of those roles removes
+   * any existing entry instead (defensive; in practice one should never
+   * exist) rather than adding one.
+   */
+  private async upsertHistoryIndexEntry(run: RunRecord): Promise<void> {
+    await this.withHistoryIndexChain(async () => {
+      const index = await this.readHistoryIndex();
+      const i = index.findIndex((e) => e.id === run.id);
+      if (!isIndexableRunRole(run.role)) {
+        if (i === -1) return;
+        index.splice(i, 1);
+        await writeJson(this.layout.historyIndexFile(), index);
+        this.historyIndexCache = index;
+        return;
+      }
+      const entry = buildRunIndexEntry(run);
+      if (i === -1) index.push(entry);
+      else index[i] = entry;
+      await writeJson(this.layout.historyIndexFile(), index);
+      this.historyIndexCache = index;
+    });
   }
 
   // --- GitHub watch state ---
