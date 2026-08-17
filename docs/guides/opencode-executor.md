@@ -58,15 +58,30 @@ In your `artificer.config.json`, add an `executor` block:
 
 When Artificer runs a worker task, it:
 
-1. Writes `{ "mcp": { "artificer-status": { "type": "local", "command": [...], "enabled": true } } }` to `{workspaceDir}/opencode.json`. opencode discovers this automatically by walking up from its working directory — there's no `--mcp-config` flag to pass a path explicitly, unlike Claude Code.
-2. Spawns `opencode run "<task>" --dangerously-skip-permissions --dir <workspaceDir> [--model <model>]`.
-3. opencode reads the MCP config at startup and connects to the Artificer status server.
-4. When opencode calls `report_status` or `submit_review` via MCP, Artificer captures the result and advances the workstream state machine.
-5. On process exit, Artificer reads the result and continues orchestration as normal.
+1. Writes `{workspaceDir}/opencode.json` with two blocks:
+   - `mcp` — registers the local `artificer-status` MCP server (`{ "type": "local", "command": [...], "enabled": true }`). opencode discovers this file automatically by walking up from its working directory; there's no `--mcp-config` flag to pass a path explicitly, unlike Claude Code.
+   - `permission` — the sandbox policy described under [Sandboxing](#sandboxing) below: an explicit per-category allow-list, a `bash` allow-list that denies anything unlisted, explicit allows for the two MCP tools, and `external_directory: "deny"` last.
+2. Removes the `origin` remote from `{workspaceDir}/repo` if that clone exists, so nothing inside the sandbox can push back to the repo it was cloned from.
+3. Spawns `opencode run "<task>" --dir <workspaceDir> [--model <model>]`.
+4. opencode reads the MCP config at startup and connects to the Artificer status server.
+5. When opencode calls `report_status` or `submit_review` via MCP, Artificer captures the result and advances the workstream state machine.
+6. On process exit, Artificer reads the result and continues orchestration as normal.
 
-### The `--dangerously-skip-permissions` flag
+### Sandboxing
 
-opencode's non-interactive mode auto-*rejects* every tool-call permission prompt by default, including the `report_status`/`submit_review` MCP calls — unlike some other CLIs that default to allow. `--dangerously-skip-permissions` is required for unattended runs; without it, opencode will silently fail to call back into Artificer's status server.
+opencode's non-interactive mode auto-*rejects* every tool-call permission prompt it can't resolve from config — unlike some other CLIs that default to allow. Earlier versions of this executor handled that by passing `--dangerously-skip-permissions`, which approves *everything*, including opencode acting on an absolute path it read out of its own prompt. **Do not reintroduce that flag.** It is replaced by an explicit `permission` block:
+
+- **`external_directory: "deny"`** — opencode consults this permission whenever a path-bearing tool (`read`, `write`, `edit`, `glob`, `grep`, `list`, `lsp`) or one of its known file commands (`cat`, `cp`, `mv`, `rm`, `mkdir`, `touch`, …) is asked to touch a path outside `--dir`. Denying it is what stops opencode from editing the *original* repo at the absolute `repoUrl` path instead of its sandboxed clone.
+- **A `bash` allow-list** — `external_directory` is *never* consulted for arbitrary bash arguments, so bash needs its own policy. The config denies `bash` by default and allows a specific set of commands: read/inspect/search tools, workspace file manipulation, local git operations, and the common test/build runners. `git push`, `git remote`, `curl`, `wget`, `ssh`, `scp`, `rsync`, `sudo` and bare `sh -c` are all denied. opencode parses the command string and checks each parsed command separately, so `git status && curl …` is denied on the `curl` half.
+- **No `origin` remote** — defense in depth for the one bash vector that needs no path at all. The workspace clone's `origin` points at the real repo, so `git push origin HEAD` would write straight back to it. The executor removes the remote before opencode starts.
+
+**What this does not guarantee.** The allow-list closes opportunistic and naive escapes, including the exact failure mode this executor originally shipped with. It does *not* make escape impossible, and that is not a theoretical caveat:
+
+- opencode's own bash tool documents its command-argument path scan as "advisory only".
+- Shell redirection targets are not path-checked at all. Every allow-list entry accepts arguments, so any of them can carry `> /somewhere/outside`. This was confirmed empirically.
+- Allowing a project's tests to run means allowing `node`, `python` and `npm run` — arbitrary code execution by definition. An agent that is determined or prompt-injected can write a script inside the workspace and execute it.
+
+Treat the opencode executor as *reducing accident and opportunistic misbehaviour*, not as a security boundary. If you need a real boundary, run Artificer itself inside an OS-level sandbox or container.
 
 ### Timeout
 
@@ -81,6 +96,8 @@ Start Artificer and send a message that triggers a workstream. Check the run log
 - **No usage stats.** opencode's default (non-JSON) output doesn't surface token usage, so `usage` is always reported as `{ inputTokens: 0, outputTokens: 0 }` — cost tracking for opencode-executed work isn't currently possible.
 - **`opencode.json` is overwritten on every run.** Each workstream runs in a fresh cloned workspace, so this is normally harmless, but don't hand-edit MCP config into a workspace opencode will reuse across runs.
 - **Requires local opencode auth already configured** (`opencode auth`/`opencode providers`) — Artificer does not manage opencode's own provider credentials.
+- **The sandbox is not a security boundary.** See [Sandboxing](#sandboxing). It blocks writes to absolute paths outside the workspace via opencode's path-bearing tools, and blocks unlisted shell commands — but shell redirection from an allowed command, and any code run through an allowed test runner, can still reach the rest of the filesystem.
+- **A permissive global opencode config can widen the sandbox.** opencode merges your global `~/.config/opencode/opencode.json` before this executor's project-level config, and for a permission category present in both, this executor's value wins. But the merged key keeps the *global* config's position in the rule list, and opencode resolves permissions "last matching rule wins". So a global config that declares `permission.external_directory` **and then** a `permission."*"` wildcard will hoist this executor's `deny` above that wildcard and defeat it. Verified against opencode 1.17.3. If you use the opencode executor, don't put a `"*"` wildcard in your global opencode `permission` block.
 
 ## Related docs
 
