@@ -78,4 +78,5 @@ export interface ToolContext {
   run: RunRecord;
   /** Workspace directory scoped to this run's workstream (or a shared root). */
   workspaceDir: string;
+  onToolCall?: (invocation: ToolInvocation) => void;
 }
