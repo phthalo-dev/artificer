@@ -45,23 +45,40 @@ function applyOutputBudget(
   logs: string[],
   maxOutputBytes: number,
 ): { value: unknown; logs?: string[]; truncated?: true } {
-  const packed = JSON.stringify({ value, logs });
-  if (Buffer.byteLength(packed, 'utf8') <= maxOutputBytes) {
+  const encodedBytes = (candidateValue: unknown, candidateLogs: string[]) =>
+    Buffer.byteLength(
+      JSON.stringify({ value: candidateValue, logs: candidateLogs }),
+      'utf8',
+    );
+
+  if (encodedBytes(value, logs) <= maxOutputBytes) {
     return logs.length > 0 ? { value, logs } : { value };
   }
 
   const marker = '\n(truncated)';
-  const budget = Math.max(
-    0,
-    maxOutputBytes - Buffer.byteLength(marker, 'utf8'),
-  );
-  const serialized = JSON.stringify(value);
-  const sliced = Buffer.from(serialized, 'utf8')
-    .subarray(0, budget)
-    .toString('utf8');
+  const keptLogs: string[] = [];
+  for (const log of logs) {
+    const candidateLogs = [...keptLogs, log];
+    if (encodedBytes(marker, candidateLogs) > maxOutputBytes) break;
+    keptLogs.push(log);
+  }
+
+  const serialized = Array.from(JSON.stringify(value));
+  let low = 0;
+  let high = serialized.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    const candidate = serialized.slice(0, middle).join('') + marker;
+    if (encodedBytes(candidate, keptLogs) <= maxOutputBytes) {
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+
   return {
-    value: sliced + marker,
-    logs: logs.slice(0, 1),
+    value: serialized.slice(0, low).join('') + marker,
+    logs: keptLogs,
     truncated: true,
   };
 }
