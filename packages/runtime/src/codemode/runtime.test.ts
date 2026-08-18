@@ -144,6 +144,30 @@ test('oversize return is ok with truncated true', async () => {
   }
 });
 
+test('oversize failure is capped and remains a failure', async () => {
+  const maxOutputBytes = 120;
+  const result = await runCodemode({
+    code: `
+      console.log('l'.repeat(1000));
+      throw new Error('e'.repeat(1000));
+    `,
+    tools: [],
+    limits: { ...limits, maxOutputBytes },
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) {
+    assert.equal(result.truncated, true);
+    const encoded = Buffer.byteLength(
+      JSON.stringify({ error: result.error, logs: result.logs ?? [] }),
+      'utf8',
+    );
+    assert.ok(
+      encoded <= maxOutputBytes,
+      `expected at most ${maxOutputBytes} bytes, got ${encoded}`,
+    );
+  }
+});
+
 test('unknown tool is catchable; uncaught is ExecutionFailure', async () => {
   const caught = await runCodemode({
     code: `
@@ -166,6 +190,27 @@ test('unknown tool is catchable; uncaught is ExecutionFailure', async () => {
     assert.equal(uncaught.error.kind, 'ExecutionFailure');
     assert.match(uncaught.error.message, /nope/);
     assert.doesNotMatch(uncaught.error.message, /\/Users\//);
+  }
+});
+
+test('missing tool properties are undefined and tools is awaitable', async () => {
+  const result = await runCodemode({
+    code: `
+      const awaited = await tools;
+      return {
+        missingType: typeof tools.nope,
+        awaitedSameObject: awaited === tools,
+      };
+    `,
+    tools: [],
+    limits,
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.deepEqual(result.value, {
+      missingType: 'undefined',
+      awaitedSameObject: true,
+    });
   }
 });
 
@@ -212,6 +257,20 @@ test('guest has no process, require, or fs', async () => {
 test('returning a function is InvalidDataValue', async () => {
   const result = await runCodemode({
     code: 'return function () {};',
+    tools: [],
+    limits,
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.kind, 'InvalidDataValue');
+});
+
+test('returning a cycle is InvalidDataValue', async () => {
+  const result = await runCodemode({
+    code: `
+      const value = {};
+      value.self = value;
+      return value;
+    `,
     tools: [],
     limits,
   });

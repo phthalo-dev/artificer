@@ -95,6 +95,25 @@ test('execute siblings include custom tools and exclude execute', async () => {
   assert.equal(names.length, 1);
 });
 
+test('execute cannot call itself from a guest program', async () => {
+  const ctx = await freshCtx('worker');
+  const tools = toolsForRole('worker', ctx);
+  const execute = tools.find((t) => t.name === 'execute');
+  assert.ok(execute);
+
+  const raw = await execute.handler({
+    code: `return await tools.execute({ code: 'return 1;' });`,
+  });
+  const result = JSON.parse(raw) as {
+    ok: boolean;
+    error?: { kind: string; message: string };
+  };
+
+  assert.equal(result.ok, false);
+  assert.equal(result.error?.kind, 'ExecutionFailure');
+  assert.match(result.error?.message ?? '', /execute/);
+});
+
 test('custom tool named execute is skipped with a warning', async () => {
   const ctx = await freshCtx('worker');
   const registry = new ToolRegistry();

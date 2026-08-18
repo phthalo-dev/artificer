@@ -28,6 +28,23 @@ function guestMessage(vm: QuickJSContext, handle: QuickJSHandle): string {
   return String(dumped);
 }
 
+function nameUnknownTool(
+  message: string,
+  code: string,
+  tools: RunCodemodeOptions['tools'],
+): string {
+  if (message !== 'not a function') return message;
+  const installed = new Set(tools.map((tool) => tool.name));
+  const referenced = code.matchAll(
+    /\btools\.([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/g,
+  );
+  for (const match of referenced) {
+    const name = match[1];
+    if (name && !installed.has(name)) return `unknown tool: ${name}`;
+  }
+  return message;
+}
+
 function jsonSafe(value: unknown): unknown {
   if (value === undefined) return null;
   if (typeof value === 'function') {
@@ -38,6 +55,23 @@ function jsonSafe(value: unknown): unknown {
   } catch {
     throw new Error('result is not JSON-safe');
   }
+}
+
+function assertGuestJsonSafe(
+  vm: QuickJSContext,
+  value: QuickJSHandle,
+): void {
+  const json = vm.getProp(vm.global, 'JSON');
+  const stringify = vm.getProp(json, 'stringify');
+  const result = vm.callFunction(stringify, json, value);
+  stringify.dispose();
+  json.dispose();
+  if (result.error) {
+    const message = guestMessage(vm, result.error);
+    result.error.dispose();
+    throw new Error(message);
+  }
+  result.value.dispose();
 }
 
 function applyOutputBudget(
@@ -83,16 +117,80 @@ function applyOutputBudget(
   };
 }
 
+function applyFailureOutputBudget(
+  kind: DiagnosticKind,
+  message: string,
+  logs: string[],
+  maxOutputBytes: number,
+): {
+  error: { kind: DiagnosticKind; message: string };
+  logs?: string[];
+  truncated?: true;
+} {
+  const encodedBytes = (candidateMessage: string, candidateLogs: string[]) =>
+    Buffer.byteLength(
+      JSON.stringify({
+        error: { kind, message: candidateMessage },
+        logs: candidateLogs,
+      }),
+      'utf8',
+    );
+
+  if (encodedBytes(message, logs) <= maxOutputBytes) {
+    return logs.length > 0
+      ? { error: { kind, message }, logs }
+      : { error: { kind, message } };
+  }
+
+  const marker = '\n(truncated)';
+  const keptLogs: string[] = [];
+  for (const log of logs) {
+    const candidateLogs = [...keptLogs, log];
+    if (encodedBytes(marker, candidateLogs) > maxOutputBytes) break;
+    keptLogs.push(log);
+  }
+
+  const serialized = Array.from(message);
+  let low = 0;
+  let high = serialized.length;
+  while (low < high) {
+    const middle = Math.ceil((low + high) / 2);
+    const candidate = serialized.slice(0, middle).join('') + marker;
+    if (encodedBytes(candidate, keptLogs) <= maxOutputBytes) {
+      low = middle;
+    } else {
+      high = middle - 1;
+    }
+  }
+
+  return {
+    error: {
+      kind,
+      message: serialized.slice(0, low).join('') + marker,
+    },
+    logs: keptLogs,
+    truncated: true,
+  };
+}
+
 function failure(
   kind: DiagnosticKind,
   message: string,
   logs: string[],
   toolCalls: string[],
+  maxOutputBytes: number,
 ): CodemodeResult {
+  const capped = applyFailureOutputBudget(
+    kind,
+    message,
+    logs,
+    maxOutputBytes,
+  );
   return {
     ok: false,
-    error: { kind, message },
-    ...(logs.length > 0 ? { logs } : {}),
+    error: capped.error,
+    ...(capped.logs ? { logs: capped.logs } : {}),
+    ...(capped.truncated ? { truncated: true } : {}),
     toolCalls,
   };
 }
@@ -101,7 +199,13 @@ export async function runCodemode(
   opts: RunCodemodeOptions,
 ): Promise<CodemodeResult> {
   if (!opts.code.trim()) {
-    return failure('ParseError', 'code is empty', [], []);
+    return failure(
+      'ParseError',
+      'code is empty',
+      [],
+      [],
+      opts.limits.maxOutputBytes,
+    );
   }
 
   const QuickJS = await getQuickJS();
@@ -135,22 +239,6 @@ export async function runCodemode(
     const toolsHandle = installTools(vm, opts.tools, opts.limits, state);
     vm.setProp(vm.global, 'tools', toolsHandle);
     toolsHandle.dispose();
-    const proxyResult = vm.evalCode(`
-      tools = new Proxy(tools, {
-        get(target, name) {
-          if (name in target) return target[name];
-          return () => Promise.reject(
-            new Error('unknown tool: ' + String(name)),
-          );
-        },
-      });
-    `);
-    if (proxyResult.error) {
-      const message = guestMessage(vm, proxyResult.error);
-      proxyResult.error.dispose();
-      return failure('ExecutionFailure', message, logs, state.toolCalls);
-    }
-    proxyResult.value.dispose();
 
     const evalResult = vm.evalCode(`(async () => {\n${opts.code}\n})()`);
     if (evalResult.error) {
@@ -162,6 +250,7 @@ export async function runCodemode(
         interrupted ? 'timeoutMs exceeded' : message,
         logs,
         state.toolCalls,
+        opts.limits.maxOutputBytes,
       );
     }
 
@@ -179,6 +268,7 @@ export async function runCodemode(
         interrupted ? 'timeoutMs exceeded' : message,
         logs,
         state.toolCalls,
+        opts.limits.maxOutputBytes,
       );
     }
 
@@ -197,6 +287,7 @@ export async function runCodemode(
         'timeoutMs exceeded',
         logs,
         state.toolCalls,
+        opts.limits.maxOutputBytes,
       );
     }
 
@@ -206,16 +297,21 @@ export async function runCodemode(
       } else {
         resolved.value.dispose();
       }
-      return {
-        ok: false,
-        error: state.fatal,
-        ...(logs.length > 0 ? { logs } : {}),
-        toolCalls: state.toolCalls,
-      };
+      return failure(
+        state.fatal.kind,
+        state.fatal.message,
+        logs,
+        state.toolCalls,
+        opts.limits.maxOutputBytes,
+      );
     }
 
     if (resolved.error) {
-      const message = guestMessage(vm, resolved.error);
+      const message = nameUnknownTool(
+        guestMessage(vm, resolved.error),
+        opts.code,
+        opts.tools,
+      );
       resolved.error.dispose();
       const interrupted = /interrupted/i.test(message);
       return failure(
@@ -223,6 +319,7 @@ export async function runCodemode(
         interrupted ? 'timeoutMs exceeded' : message,
         logs,
         state.toolCalls,
+        opts.limits.maxOutputBytes,
       );
     }
 
@@ -233,6 +330,20 @@ export async function runCodemode(
         'result is not JSON-safe',
         logs,
         state.toolCalls,
+        opts.limits.maxOutputBytes,
+      );
+    }
+
+    try {
+      assertGuestJsonSafe(vm, resolved.value);
+    } catch {
+      resolved.value.dispose();
+      return failure(
+        'InvalidDataValue',
+        'result is not JSON-safe',
+        logs,
+        state.toolCalls,
+        opts.limits.maxOutputBytes,
       );
     }
 
@@ -247,6 +358,7 @@ export async function runCodemode(
         err instanceof Error ? err.message : String(err),
         logs,
         state.toolCalls,
+        opts.limits.maxOutputBytes,
       );
     }
 
@@ -268,6 +380,7 @@ export async function runCodemode(
       kind === 'TimeoutExceeded' ? 'timeoutMs exceeded' : message,
       logs,
       state.toolCalls,
+      opts.limits.maxOutputBytes,
     );
   } finally {
     state.disposed = true;
