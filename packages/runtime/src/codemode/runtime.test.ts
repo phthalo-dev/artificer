@@ -126,15 +126,21 @@ test('tight loop hits TimeoutExceeded', async () => {
 
 test('oversize return is ok with truncated true', async () => {
   const result = await runCodemode({
-    code: `return 'x'.repeat(1000);`,
+    code: `
+      console.log('y'.repeat(1000));
+      return 'x'.repeat(1000);
+    `,
     tools: [],
     limits: { ...limits, maxOutputBytes: 50 },
   });
   assert.equal(result.ok, true);
   if (result.ok) {
     assert.equal(result.truncated, true);
-    const encoded = Buffer.byteLength(JSON.stringify(result.value), 'utf8');
-    assert.ok(encoded <= 50 || typeof result.value === 'string');
+    const encoded = Buffer.byteLength(
+      JSON.stringify({ value: result.value, logs: result.logs ?? [] }),
+      'utf8',
+    );
+    assert.ok(encoded <= 50, `expected at most 50 bytes, got ${encoded}`);
   }
 });
 
