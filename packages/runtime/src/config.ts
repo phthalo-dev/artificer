@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type {
@@ -5,6 +6,7 @@ import type {
   ExecutorConfig,
   ResolvedIdentityConfig,
 } from './api/types.js';
+import { scanAgentDirectory } from './discover/discover.js';
 import type { DiagnosticsConfig } from './diagnostics/types.js';
 import {
   isModelTier,
@@ -289,6 +291,31 @@ export function loadConfig(
     evalMode: env.RUNTIME_EVAL_MODE === 'true',
     codemode: parseCodemodeLimits(env),
   };
+}
+
+export function loadConfigDefinition(
+  rootDir: string,
+): ArtificerConfig | undefined {
+  const manifest = scanAgentDirectory(rootDir);
+  if (!manifest.config) return undefined;
+
+  try {
+    return JSON.parse(
+      fs.readFileSync(manifest.config.path, 'utf-8'),
+    ) as ArtificerConfig;
+  } catch {
+    return undefined;
+  }
+}
+
+export function loadConfigWithIdentityDefinition(
+  env: NodeJS.ProcessEnv = process.env,
+  rootDir = env.ARTIFICER_IDENTITY_DIR
+    ? path.resolve(env.ARTIFICER_IDENTITY_DIR)
+    : path.resolve(process.cwd()),
+): RuntimeConfig {
+  const definition = loadConfigDefinition(rootDir);
+  return definition ? mergeWithDefinition(definition, env) : loadConfig(env);
 }
 
 export function parseDuration(s: string): number | undefined {

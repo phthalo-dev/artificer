@@ -142,6 +142,7 @@ const failoverTargetSchema = z.object({
       z.literal('llm'),
       z.literal('cursor-agent'),
       z.literal('claude-code'),
+      z.literal('opencode'),
     ])
     .optional(),
   onExhausted: z.enum(['wait', 'failover']).optional(),
@@ -162,6 +163,7 @@ const executionRouteSchema = z.object({
     z.literal('llm'),
     z.literal('cursor-agent'),
     z.literal('claude-code'),
+    z.literal('opencode'),
   ]),
   llm: z
     .object({
