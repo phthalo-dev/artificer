@@ -163,7 +163,7 @@ export function toolsForRole(
 
   if (role === 'worker' || role === 'orchestrator') {
     const limits = ctx.engine.config.codemode ?? DEFAULT_CODEMODE_LIMITS;
-    result.push(createExecuteTool(ctx, result, limits));
+    result.push(createExecuteTool(ctx, [...result], limits));
   }
 
   return result;
