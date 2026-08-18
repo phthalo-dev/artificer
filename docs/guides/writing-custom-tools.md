@@ -57,6 +57,8 @@ Each tool declares which roles are allowed to call it. The available roles are:
 
 Tip: most tools should be `['worker']` or `['worker', 'planner']`.
 
+Worker and orchestrator can also call custom tools from the `execute` program as `await tools.<name>(input)`. `execute` is a reserved name — a custom tool with that name is skipped.
+
 ## Adding secrets
 
 Tool-specific secrets (API keys, URLs) go in `.env` and are gitignored:
