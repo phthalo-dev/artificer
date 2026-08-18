@@ -101,11 +101,11 @@
       }
     },
     "executor": {
-      "description": "Worker executor backend for work roles (planner, worker, reviewer). Defaults to 'llm' (internal tool-use loop). Set to 'cursor-agent' or 'claude-code' to delegate work to those CLIs instead.",
+      "description": "Worker executor backend for work roles (planner, worker, reviewer). Defaults to 'llm' (internal tool-use loop). Set to 'cursor-agent', 'claude-code', or 'opencode' to delegate work to those CLIs instead.",
       "oneOf": [
         {
           "type": "string",
-          "enum": ["llm", "cursor-agent", "claude-code"]
+          "enum": ["llm", "cursor-agent", "claude-code", "opencode"]
         },
         {
           "type": "object",
@@ -114,7 +114,7 @@
           "properties": {
             "type": {
               "type": "string",
-              "enum": ["cursor-agent", "claude-code"]
+              "enum": ["cursor-agent", "claude-code", "opencode"]
             },
             "model": {
               "type": "string",
@@ -260,7 +260,7 @@
           "oneOf": [
             {
               "type": "string",
-              "enum": ["llm", "cursor-agent", "claude-code"]
+              "enum": ["llm", "cursor-agent", "claude-code", "opencode"]
             },
             { "type": "object" }
           ]
@@ -299,7 +299,7 @@
         },
         "execution": {
           "type": "string",
-          "enum": ["llm", "cursor-agent", "claude-code"]
+          "enum": ["llm", "cursor-agent", "claude-code", "opencode"]
         },
         "llm": {
           "type": "object",

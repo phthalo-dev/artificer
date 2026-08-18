@@ -266,7 +266,7 @@ export interface FailoverTargetConfig {
   accountId: string;
   roles?: string[];
   llm?: FailoverLlmConfig;
-  executor?: 'llm' | 'cursor-agent' | 'claude-code';
+  executor?: 'llm' | 'cursor-agent' | 'claude-code' | 'opencode';
   onExhausted?: 'wait' | 'failover';
 }
 
@@ -284,7 +284,7 @@ export interface ExecutionRouteConfig {
   accountId: string;
   mode: 'metered' | 'windowed' | 'opaque';
   windows: QuotaWindowConfig[];
-  execution: 'llm' | 'cursor-agent' | 'claude-code';
+  execution: 'llm' | 'cursor-agent' | 'claude-code' | 'opencode';
   llm?: {
     baseURL: string;
     apiKeyEnv?: string;
