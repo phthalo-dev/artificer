@@ -32,6 +32,27 @@ const MCP_SERVER_ID = 'artificer-status';
  * Deliberately absent: `git push` (see the origin-removal in `execute()`),
  * `git remote` (could re-add a push target), `curl`, `wget`, `ssh`, `scp`,
  * `rsync`, `nc`, `sudo`, and bare `sh`/`bash`/`zsh -c`.
+ *
+ * Also deliberately absent — programs whose *arguments* name another program
+ * to run, which would launch an unlisted binary under a listed pattern:
+ *   - `env`  — `env curl …` runs curl outright.
+ *   - `find` — `find . -exec curl … \;` / `-execdir` / `-ok` / `-okdir`.
+ *   - `fd`   — `fd -x curl …` / `--exec-batch`.
+ *   - `make` — recipes are arbitrary shell.
+ * These cannot be fixed with narrower patterns. opencode matches one pattern
+ * per parsed command node against its raw source text, and the pattern
+ * language has only `*` and `?` — so a deny rule like `'find * -exec*'` is
+ * evaded by `find . '-exec' curl …`, which still matches `'find *'` and is
+ * allowed. Verified 2026-08-17. Denying the command outright is the only
+ * reliable option; `grep`/`rg` and the `glob`/`list`/`grep` tools cover the
+ * legitimate search need.
+ *
+ * Note that "not in this list" is NOT the same as "cannot run". Several
+ * *listed* programs also have flags that invoke other programs — `git rebase
+ * -x`, `git config` writing `diff.external`/`core.pager` for a later git
+ * command to execute, `rg --pre`, `sort --compress-program`. They are kept
+ * because a coding worker needs them, and because the sandbox is not a
+ * security boundary in the first place (see `permissionConfig()` below).
  */
 const BASH_ALLOW: Record<string, 'allow'> = Object.fromEntries(
   [
@@ -43,7 +64,6 @@ const BASH_ALLOW: Record<string, 'allow'> = Object.fromEntries(
     'wc *',
     'file *',
     'stat *',
-    'find *',
     'tree *',
     'du *',
     'pwd *',
@@ -59,12 +79,10 @@ const BASH_ALLOW: Record<string, 'allow'> = Object.fromEntries(
     'tr *',
     'diff *',
     'date *',
-    'env *',
     'true *',
     'false *',
     'grep *',
     'rg *',
-    'fd *',
     'jq *',
     // --- workspace file manipulation ---------------------------------
     // `mkdir/touch/cp/mv/rm/cat` are in opencode's own FILES set, so their
@@ -125,7 +143,6 @@ const BASH_ALLOW: Record<string, 'allow'> = Object.fromEntries(
     'go *',
     'cargo *',
     'rustc *',
-    'make *',
     'ruby *',
     'rake *',
     'bundle *',
