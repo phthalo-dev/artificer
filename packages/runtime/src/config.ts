@@ -31,6 +31,61 @@ export interface ContextBorrowingConfig {
   toolResults: ToolResultConfig;
 }
 
+export interface CodemodeLimits {
+  timeoutMs: number;
+  maxToolCalls: number;
+  maxOutputBytes: number;
+}
+
+export const DEFAULT_CODEMODE_LIMITS: CodemodeLimits = {
+  timeoutMs: 120_000,
+  maxToolCalls: 32,
+  maxOutputBytes: 12_000,
+};
+
+function parseEnvInt(
+  env: NodeJS.ProcessEnv,
+  name: string,
+  fallback: number,
+  min: number,
+): number {
+  const raw = env[name];
+  if (raw === undefined || raw === '') return fallback;
+  const n = Number(raw);
+  if (!Number.isSafeInteger(n) || n < min) {
+    console.warn(
+      `[artificer] invalid ${name} "${raw}"; using default ${fallback}.`,
+    );
+    return fallback;
+  }
+  return n;
+}
+
+export function parseCodemodeLimits(
+  env: NodeJS.ProcessEnv,
+): CodemodeLimits {
+  return {
+    timeoutMs: parseEnvInt(
+      env,
+      'RUNTIME_CODEMODE_TIMEOUT_MS',
+      DEFAULT_CODEMODE_LIMITS.timeoutMs,
+      1,
+    ),
+    maxToolCalls: parseEnvInt(
+      env,
+      'RUNTIME_CODEMODE_MAX_TOOL_CALLS',
+      DEFAULT_CODEMODE_LIMITS.maxToolCalls,
+      0,
+    ),
+    maxOutputBytes: parseEnvInt(
+      env,
+      'RUNTIME_CODEMODE_MAX_OUTPUT_BYTES',
+      DEFAULT_CODEMODE_LIMITS.maxOutputBytes,
+      0,
+    ),
+  };
+}
+
 export interface RuntimeConfig {
   /** API key for the LLM gateway (an OpenCode Zen key, or a provider key). */
   apiKey: string;
@@ -93,6 +148,7 @@ export interface RuntimeConfig {
    * no memory writes, learn/add_memory, identity git ops, or config persist.
    */
   evalMode?: boolean;
+  codemode: CodemodeLimits;
 }
 
 /** The agent's GitHub identity, used to clone, push, and open/comment on PRs. */
@@ -231,6 +287,7 @@ export function loadConfig(
     identityDir,
     apiAuthKey: env.ARTIFICER_API_KEY || undefined,
     evalMode: env.RUNTIME_EVAL_MODE === 'true',
+    codemode: parseCodemodeLimits(env),
   };
 }
 
