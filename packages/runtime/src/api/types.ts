@@ -44,8 +44,10 @@ export type ExecutorConfig =
   | 'llm'
   | 'cursor-agent'
   | 'claude-code'
+  | 'opencode'
   | { type: 'cursor-agent'; model?: string }
   | { type: 'claude-code'; model?: string }
+  | { type: 'opencode'; model?: string }
   | {
       type: 'cli';
       command: string;

@@ -615,6 +615,12 @@ export function init(name: string, targetDir?: string): void {
   console.log(`  cd ${name}`);
   console.log('  cp .env.example .env     # add your API keys');
   console.log('  npm install');
+  console.log(
+    '  artificer import-history          # dry-run prefs from Claude Code / Cursor / Codex / OpenCode',
+  );
+  console.log(
+    '  artificer import-history --apply  # write them to identity/memories/',
+  );
   console.log('  artificer dev');
   console.log('');
   console.log(

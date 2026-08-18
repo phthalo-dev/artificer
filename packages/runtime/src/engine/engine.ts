@@ -31,6 +31,7 @@ import type { WorkerExecutor } from './executor.js';
 import type { ScheduleRunner } from './schedule-runner.js';
 import { CursorAgentExecutor } from './cursor-executor.js';
 import { ClaudeCodeExecutor } from './claude-code-executor.js';
+import { OpencodeExecutor } from './opencode-executor.js';
 import { CliExecutor } from './cli-executor.js';
 import { findGitRepo } from './git-repo.js';
 import { cloneRepoIntoWorkspace, hasUncommittedChanges } from './git-ops.js';
@@ -1407,10 +1408,12 @@ function buildExecutor(
   if (!config || config === 'llm') return undefined;
   if (config === 'cursor-agent') return new CursorAgentExecutor();
   if (config === 'claude-code') return new ClaudeCodeExecutor();
+  if (config === 'opencode') return new OpencodeExecutor();
   if (config.type === 'cursor-agent')
     return new CursorAgentExecutor(config.model);
   if (config.type === 'claude-code')
     return new ClaudeCodeExecutor(config.model);
+  if (config.type === 'opencode') return new OpencodeExecutor(config.model);
   if (config.type === 'cli') return new CliExecutor(config);
   return undefined;
 }
