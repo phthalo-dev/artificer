@@ -54,6 +54,11 @@ function runtime(overrides: Partial<RuntimeConfig> = {}): RuntimeConfig {
       requireRipgrep: true,
       toolResults: { maxCharsPerInvocation: 12_000, maxCharsPerRun: 80_000 },
     },
+    codemode: {
+      timeoutMs: 120_000,
+      maxToolCalls: 32,
+      maxOutputBytes: 12_000,
+    },
     identityDir: process.cwd(),
     ...overrides,
   };

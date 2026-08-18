@@ -68,3 +68,65 @@ test('invalid identity.pullInterval emits a warning', () => {
     ],
   ]);
 });
+
+test('codemode limits default to 120s / 32 calls / 12000 bytes', () => {
+  const config = loadConfig({ LLM_API_KEY: 'test-key' });
+  assert.deepEqual(config.codemode, {
+    timeoutMs: 120_000,
+    maxToolCalls: 32,
+    maxOutputBytes: 12_000,
+  });
+});
+
+test('RUNTIME_CODEMODE_* env vars override defaults', () => {
+  const config = loadConfig({
+    LLM_API_KEY: 'test-key',
+    RUNTIME_CODEMODE_TIMEOUT_MS: '5000',
+    RUNTIME_CODEMODE_MAX_TOOL_CALLS: '4',
+    RUNTIME_CODEMODE_MAX_OUTPUT_BYTES: '100',
+  });
+  assert.deepEqual(config.codemode, {
+    timeoutMs: 5_000,
+    maxToolCalls: 4,
+    maxOutputBytes: 100,
+  });
+});
+
+test('invalid RUNTIME_CODEMODE_* values warn and fall back to defaults', () => {
+  const originalWarn = console.warn;
+  const warnings: unknown[][] = [];
+  console.warn = (...args: unknown[]) => warnings.push(args);
+  try {
+    const config = loadConfig({
+      LLM_API_KEY: 'test-key',
+      RUNTIME_CODEMODE_TIMEOUT_MS: 'nope',
+      RUNTIME_CODEMODE_MAX_TOOL_CALLS: '-1',
+      RUNTIME_CODEMODE_MAX_OUTPUT_BYTES: '0.5',
+    });
+    assert.deepEqual(config.codemode, {
+      timeoutMs: 120_000,
+      maxToolCalls: 32,
+      maxOutputBytes: 12_000,
+    });
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.equal(warnings.length, 3);
+  assert.match(String(warnings[0][0]), /RUNTIME_CODEMODE_TIMEOUT_MS/);
+  assert.match(String(warnings[1][0]), /RUNTIME_CODEMODE_MAX_TOOL_CALLS/);
+  assert.match(String(warnings[2][0]), /RUNTIME_CODEMODE_MAX_OUTPUT_BYTES/);
+});
+
+test('timeoutMs of 0 is invalid and falls back', () => {
+  const originalWarn = console.warn;
+  console.warn = () => {};
+  try {
+    const config = loadConfig({
+      LLM_API_KEY: 'test-key',
+      RUNTIME_CODEMODE_TIMEOUT_MS: '0',
+    });
+    assert.equal(config.codemode.timeoutMs, 120_000);
+  } finally {
+    console.warn = originalWarn;
+  }
+});
