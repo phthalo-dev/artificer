@@ -170,6 +170,7 @@ function RouteCard({
             { value: 'llm', label: 'LLM (internal loop)' },
             { value: 'cursor-agent', label: 'Cursor agent' },
             { value: 'claude-code', label: 'Claude Code' },
+            { value: 'opencode', label: 'opencode' },
           ]}
           value={route.execution}
           onChange={(v) => {
