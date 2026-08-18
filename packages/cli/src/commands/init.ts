@@ -170,6 +170,9 @@ LLM_API_KEY=
 # RUNTIME_MAX_RUNS_PER_WORKSTREAM=60
 # RUNTIME_MAX_ITERATIONS=24                  # tool-use iterations per call
 # RUNTIME_RESUME_ON_STARTUP=true             # resume interrupted workstreams on restart
+# RUNTIME_CODEMODE_TIMEOUT_MS=120000         # execute program wall-clock cap
+# RUNTIME_CODEMODE_MAX_TOOL_CALLS=32         # inner tool calls per execute
+# RUNTIME_CODEMODE_MAX_OUTPUT_BYTES=12000    # execute JSON result cap
 
 # Quota & provider routes (defaults in artificer.config.json: Go primary → Zen failover)
 # QUOTA_DAILY_BUDGET_USD=10                  # Zen failover daily-budget window limit
