@@ -1,7 +1,7 @@
 # Codemode-style batched tool orchestration — Design
 
 **Date:** 2026-08-17
-**Status:** Proposed
+**Status:** Approved for planning
 **Component:** `packages/runtime`
 **Related:** [Artificer vs. opencode comparison](../../research/2026-08-14-opencode-comparison.md) (Tier 1 borrow #1)
 
