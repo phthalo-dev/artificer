@@ -1,6 +1,13 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import os from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
-import { loadConfig, mergeWithDefinition } from './config.js';
+import {
+  loadConfig,
+  loadConfigWithIdentityDefinition,
+  mergeWithDefinition,
+} from './config.js';
 
 test('github.watchIntervalMs is undefined by default even with a token configured', () => {
   const config = loadConfig({
@@ -67,4 +74,32 @@ test('invalid identity.pullInterval emits a warning', () => {
       '[artificer] invalid identity.pullInterval "later"; periodic pulling is disabled.',
     ],
   ]);
+});
+
+test('loadConfigWithIdentityDefinition reads executor and quota from artificer.config.json', (t) => {
+  const identityDir = fs.mkdtempSync(
+    path.join(os.tmpdir(), 'artificer-config-identity-'),
+  );
+  t.after(() => fs.rmSync(identityDir, { recursive: true, force: true }));
+  fs.writeFileSync(
+    path.join(identityDir, 'artificer.config.json'),
+    JSON.stringify({
+      name: 'ConfigBot',
+      executor: { type: 'opencode', model: 'opencode/gpt-5' },
+      quota: { reservePercent: 15 },
+    }),
+  );
+
+  const config = loadConfigWithIdentityDefinition({
+    LLM_API_KEY: 'test-key',
+    ARTIFICER_IDENTITY_DIR: identityDir,
+  });
+
+  assert.equal(config.agentName, 'ConfigBot');
+  assert.equal(config.identityDir, identityDir);
+  assert.deepEqual(config.executor, {
+    type: 'opencode',
+    model: 'opencode/gpt-5',
+  });
+  assert.deepEqual(config.quota, { reservePercent: 15 });
 });

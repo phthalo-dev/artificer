@@ -1,7 +1,7 @@
 import 'dotenv/config';
 import { serve } from '@hono/node-server';
 import { pathToFileURL } from 'node:url';
-import { loadConfig } from './config.js';
+import { loadConfigWithIdentityDefinition } from './config.js';
 import { Engine } from './engine/engine.js';
 import { runGithubWatchOnce } from './engine/github-watch-runner.js';
 import { runIdentityPullCycle } from './engine/identity-pull.js';
@@ -84,7 +84,7 @@ export type {
 } from './import-history/index.js';
 
 export async function startRuntime(): Promise<void> {
-  const config = loadConfig();
+  const config = loadConfigWithIdentityDefinition();
   const store = new Store(config.execDir);
   await store.init();
 
