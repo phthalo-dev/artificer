@@ -1,4 +1,5 @@
 import type { ToolRegistry } from '../api/tool-registry.js';
+import { DEFAULT_CODEMODE_LIMITS } from '../config.js';
 import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
 import type { RoleName } from '../storage/types.js';
@@ -10,6 +11,7 @@ import {
 } from './communication.js';
 import { createProviderConfigTools } from './config.js';
 import { createEditTool } from './edit.js';
+import { createExecuteTool } from './execute.js';
 import { createFetchTools } from './fetch.js';
 import { createFileTools } from './files.js';
 import { createGitTools } from './git.js';
@@ -147,10 +149,22 @@ export function toolsForRole(
   }
 
   if (customRegistry) {
-    const custom = customRegistry
-      .toolsForRole(role as RoleName)
-      .map((t) => t.toToolDef(ctx));
-    result.push(...custom);
+    const custom = customRegistry.toolsForRole(role as RoleName);
+    for (const t of custom) {
+      if (t.name === 'execute') {
+        console.warn(
+          '[artificer] custom tool "execute" is reserved and was skipped',
+        );
+        continue;
+      }
+      result.push(t.toToolDef(ctx));
+    }
   }
+
+  if (role === 'worker' || role === 'orchestrator') {
+    const limits = ctx.engine.config.codemode ?? DEFAULT_CODEMODE_LIMITS;
+    result.push(createExecuteTool(ctx, result, limits));
+  }
+
   return result;
 }

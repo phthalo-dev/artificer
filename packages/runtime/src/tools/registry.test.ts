@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
+import { defineTool } from '../api/define-tool.js';
+import { ToolRegistry } from '../api/tool-registry.js';
 import type { ToolContext } from '../context.js';
 import { Store } from '../storage/store.js';
 import type { RunRecord } from '../storage/types.js';
@@ -44,3 +46,78 @@ for (const role of ['worker', 'reviewer']) {
     );
   });
 }
+
+for (const role of ['worker', 'orchestrator'] as const) {
+  test(`toolsForRole('${role}') includes execute`, async () => {
+    const ctx = await freshCtx(role);
+    const tools = toolsForRole(role, ctx);
+    assert.ok(
+      tools.some((t) => t.name === 'execute'),
+      `${role} should have execute`,
+    );
+  });
+}
+
+for (const role of [
+  'planner',
+  'reviewer',
+  'communicator',
+  'librarian',
+] as const) {
+  test(`toolsForRole('${role}') does not include execute`, async () => {
+    const ctx = await freshCtx(role);
+    const tools = toolsForRole(role, ctx);
+    assert.ok(
+      !tools.some((t) => t.name === 'execute'),
+      `${role} should not have execute`,
+    );
+  });
+}
+
+test('execute siblings include custom tools and exclude execute', async () => {
+  const ctx = await freshCtx('worker');
+  const registry = new ToolRegistry();
+  registry.register(
+    defineTool({
+      name: 'custom_ping',
+      description: 'ping',
+      input: { type: 'object', properties: {}, required: [] },
+      roles: ['worker'],
+      execute: async () => 'pong',
+    }),
+  );
+  const tools = toolsForRole('worker', ctx, registry);
+  const execute = tools.find((t) => t.name === 'execute');
+  assert.ok(execute);
+  assert.match(execute.description, /tools\.custom_ping/);
+  assert.doesNotMatch(execute.description, /tools\.execute/);
+  const names = tools.filter((t) => t.name === 'execute');
+  assert.equal(names.length, 1);
+});
+
+test('custom tool named execute is skipped with a warning', async () => {
+  const ctx = await freshCtx('worker');
+  const registry = new ToolRegistry();
+  registry.register(
+    defineTool({
+      name: 'execute',
+      description: 'should not ship',
+      input: { type: 'object', properties: {}, required: [] },
+      roles: ['worker'],
+      execute: async () => 'nope',
+    }),
+  );
+  const warnings: unknown[][] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => warnings.push(args);
+  try {
+    const tools = toolsForRole('worker', ctx, registry);
+    const execute = tools.find((t) => t.name === 'execute');
+    assert.ok(execute);
+    assert.match(execute.description, /tools\./);
+    assert.doesNotMatch(execute.description, /should not ship/);
+  } finally {
+    console.warn = originalWarn;
+  }
+  assert.match(String(warnings[0]?.[0]), /reserved/);
+});
