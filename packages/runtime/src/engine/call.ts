@@ -10,7 +10,7 @@ import { formatCallError } from '../llm/errors.js';
 import { runToolLoop } from '../llm/loop.js';
 import type { Store } from '../storage/store.js';
 import type { IdentityStore } from '../storage/identity-store.js';
-import type { RunRecord } from '../storage/types.js';
+import type { RunRecord, ToolInvocation } from '../storage/types.js';
 import { emptyUsage } from '../storage/types.js';
 import { toolsForRole } from '../tools/registry.js';
 import { findGitRepo } from './git-repo.js';
@@ -240,7 +240,17 @@ export async function executeCall(
     ? store.layout.workstreamWorkspace(run.workstreamId)
     : store.layout.workspaceDir;
 
-  const ctx: ToolContext = { engine, run, workspaceDir };
+  const onToolCall = (invocation: ToolInvocation) => {
+    run.toolCalls.push(invocation);
+    engine.emit({
+      kind: 'tool',
+      at: invocation.at,
+      data: { ...invocation, runId: run.id },
+    });
+    void store.saveRun(run);
+  };
+
+  const ctx: ToolContext = { engine, run, workspaceDir, onToolCall };
   const roleDef = deps.registry.getRole(run.role);
   if (!roleDef) throw new Error(`Unknown role: '${run.role}'`);
   const effectiveBaseRole = roleDef.baseRole ?? run.role;
@@ -363,15 +373,7 @@ export async function executeCall(
             });
           },
         },
-        onToolCall: (invocation) => {
-          run.toolCalls.push(invocation);
-          engine.emit({
-            kind: 'tool',
-            at: invocation.at,
-            data: { ...invocation, runId: run.id },
-          });
-          void store.saveRun(run);
-        },
+        onToolCall,
       });
       resultText = result.text;
       resultUsage = result.usage;
