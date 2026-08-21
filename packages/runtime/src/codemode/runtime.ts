@@ -4,7 +4,11 @@ import {
   type QuickJSContext,
   type QuickJSHandle,
 } from 'quickjs-emscripten';
-import { installTools, type BridgeState } from './bridge.js';
+import {
+  installTools,
+  settlePendingDeferreds,
+  type BridgeState,
+} from './bridge.js';
 import {
   CODEMODE_MEMORY_BYTES,
   type CodemodeResult,
@@ -35,9 +39,7 @@ function nameUnknownTool(
 ): string {
   if (message !== 'not a function') return message;
   const installed = new Set(tools.map((tool) => tool.name));
-  const referenced = code.matchAll(
-    /\btools\.([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/g,
-  );
+  const referenced = code.matchAll(/\btools\.([A-Za-z_$][A-Za-z0-9_$]*)\s*\(/g);
   for (const match of referenced) {
     const name = match[1];
     if (name && !installed.has(name)) return `unknown tool: ${name}`;
@@ -57,10 +59,7 @@ function jsonSafe(value: unknown): unknown {
   }
 }
 
-function assertGuestJsonSafe(
-  vm: QuickJSContext,
-  value: QuickJSHandle,
-): void {
+function assertGuestJsonSafe(vm: QuickJSContext, value: QuickJSHandle): void {
   const json = vm.getProp(vm.global, 'JSON');
   const stringify = vm.getProp(json, 'stringify');
   const result = vm.callFunction(stringify, json, value);
@@ -173,6 +172,76 @@ function applyFailureOutputBudget(
   };
 }
 
+type GuestWait =
+  | { status: 'fulfilled'; value: QuickJSHandle }
+  | { status: 'rejected'; error: QuickJSHandle }
+  | { status: 'fail'; kind: DiagnosticKind; message: string };
+
+/**
+ * Wait for the guest async IIFE without `resolvePromise()`.
+ * That API creates a host Promise settled only by WASM `.then` callbacks; if we
+ * time out or interrupt and dispose the VM, Node's test runner reports
+ * "Promise resolution is still pending but the event loop has already resolved"
+ * and fails every subsequent test file in the same process.
+ */
+async function awaitGuestPromise(
+  vm: QuickJSContext,
+  promiseHandle: QuickJSHandle,
+  deadline: number,
+  state: BridgeState,
+): Promise<GuestWait> {
+  const runtime = vm.runtime;
+  let notify: (() => void) | undefined;
+  state.kick = () => notify?.();
+
+  const waitForHost = (ms: number) =>
+    new Promise<void>((resolve) => {
+      const timer = setTimeout(() => {
+        notify = undefined;
+        resolve();
+      }, ms);
+      notify = () => {
+        clearTimeout(timer);
+        notify = undefined;
+        resolve();
+      };
+    });
+
+  for (;;) {
+    const jobs = runtime.executePendingJobs();
+    if (jobs.error) {
+      const message = guestMessage(vm, jobs.error);
+      jobs.dispose();
+      const interrupted = /interrupted/i.test(message);
+      return {
+        status: 'fail',
+        kind: interrupted ? 'TimeoutExceeded' : 'ExecutionFailure',
+        message: interrupted ? 'timeoutMs exceeded' : message,
+      };
+    }
+    jobs.dispose();
+
+    const pstate = vm.getPromiseState(promiseHandle);
+    if (pstate.type === 'fulfilled') {
+      return { status: 'fulfilled', value: pstate.value };
+    }
+    if (pstate.type === 'rejected') {
+      return { status: 'rejected', error: pstate.error };
+    }
+
+    const remaining = deadline - Date.now();
+    if (remaining <= 0) {
+      return {
+        status: 'fail',
+        kind: 'TimeoutExceeded',
+        message: 'timeoutMs exceeded',
+      };
+    }
+    if (runtime.hasPendingJob()) continue;
+    await waitForHost(Math.min(10, remaining));
+  }
+}
+
 function failure(
   kind: DiagnosticKind,
   message: string,
@@ -180,12 +249,7 @@ function failure(
   toolCalls: string[],
   maxOutputBytes: number,
 ): CodemodeResult {
-  const capped = applyFailureOutputBudget(
-    kind,
-    message,
-    logs,
-    maxOutputBytes,
-  );
+  const capped = applyFailureOutputBudget(kind, message, logs, maxOutputBytes);
   return {
     ok: false,
     error: capped.error,
@@ -255,36 +319,18 @@ export async function runCodemode(
     }
 
     const promiseHandle = vm.unwrapResult(evalResult);
-    const resolution = vm.resolvePromise(promiseHandle);
+    const resolved = await awaitGuestPromise(
+      vm,
+      promiseHandle,
+      deadline,
+      state,
+    );
     promiseHandle.dispose();
 
-    const jobs = runtime.executePendingJobs();
-    if (jobs.error) {
-      const message = guestMessage(vm, jobs.error);
-      jobs.error.dispose();
-      const interrupted = /interrupted/i.test(message);
+    if (resolved.status === 'fail') {
       return failure(
-        interrupted ? 'TimeoutExceeded' : 'ExecutionFailure',
-        interrupted ? 'timeoutMs exceeded' : message,
-        logs,
-        state.toolCalls,
-        opts.limits.maxOutputBytes,
-      );
-    }
-
-    const timeout = Symbol('timeout');
-    const remaining = Math.max(0, deadline - Date.now());
-    let timer: NodeJS.Timeout | undefined;
-    const timeoutPromise = new Promise<typeof timeout>((resolve) => {
-      timer = setTimeout(() => resolve(timeout), remaining);
-    });
-    const resolved = await Promise.race([resolution, timeoutPromise]);
-    if (timer) clearTimeout(timer);
-
-    if (resolved === timeout) {
-      return failure(
-        'TimeoutExceeded',
-        'timeoutMs exceeded',
+        resolved.kind,
+        resolved.message,
         logs,
         state.toolCalls,
         opts.limits.maxOutputBytes,
@@ -292,7 +338,7 @@ export async function runCodemode(
     }
 
     if (state.fatal) {
-      if (resolved.error) {
+      if (resolved.status === 'rejected') {
         resolved.error.dispose();
       } else {
         resolved.value.dispose();
@@ -306,7 +352,7 @@ export async function runCodemode(
       );
     }
 
-    if (resolved.error) {
+    if (resolved.status === 'rejected') {
       const message = nameUnknownTool(
         guestMessage(vm, resolved.error),
         opts.code,
@@ -384,9 +430,8 @@ export async function runCodemode(
     );
   } finally {
     state.disposed = true;
-    for (const deferred of state.pending ?? []) {
-      deferred.dispose();
-    }
+    state.kick = undefined;
+    settlePendingDeferreds(vm, state);
     vm.dispose();
     runtime.dispose();
   }

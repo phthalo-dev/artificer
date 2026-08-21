@@ -7,7 +7,9 @@ import { createExecuteTool } from './execute.js';
 
 function ctx(): ToolContext {
   return {
-    engine: { config: { codemode: DEFAULT_CODEMODE_LIMITS } } as ToolContext['engine'],
+    engine: {
+      config: { codemode: DEFAULT_CODEMODE_LIMITS },
+    } as ToolContext['engine'],
     run: { id: 'run_1' } as ToolContext['run'],
     workspaceDir: '/tmp',
   };

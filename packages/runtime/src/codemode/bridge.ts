@@ -17,11 +17,17 @@ export interface BridgeState {
   fatal?: { kind: DiagnosticKind; message: string };
   onToolCall?: (invocation: ToolInvocation) => void;
   pending?: Set<QuickJSDeferredPromise>;
+  /** Wakes the host wait loop after a tool settles. */
+  kick?: () => void;
 }
 
 function executePendingJobs(vm: QuickJSContext): void {
-  const result = vm.runtime.executePendingJobs();
-  result.dispose();
+  if (!vm.runtime.alive) return;
+  try {
+    vm.runtime.executePendingJobs().dispose();
+  } catch {
+    // VM may already be tearing down.
+  }
 }
 
 function reject(
@@ -42,6 +48,28 @@ function resolve(
   const value = vm.newString(output);
   deferred.resolve(value);
   value.dispose();
+}
+
+/** Reject leftover guest promises so `deferred.settled` does not leak a pending host Promise. */
+export function settlePendingDeferreds(
+  vm: QuickJSContext,
+  state: BridgeState,
+): void {
+  const pending = state.pending;
+  if (!pending) return;
+  for (const deferred of [...pending]) {
+    try {
+      if (deferred.alive) reject(vm, deferred, 'codemode disposed');
+    } catch {
+      // VM may already be tearing down.
+    }
+    try {
+      deferred.dispose();
+    } catch {
+      // ignore
+    }
+  }
+  pending.clear();
 }
 
 export function installTools(
@@ -67,10 +95,13 @@ export function installTools(
 
   const track = (deferred: QuickJSDeferredPromise) => {
     pending.add(deferred);
-    void deferred.settled.then(() => {
-      pending.delete(deferred);
-      if (!state.disposed) executePendingJobs(vm);
-    });
+  };
+
+  const finish = (deferred: QuickJSDeferredPromise) => {
+    pending.delete(deferred);
+    inFlight -= 1;
+    pump();
+    state.kick?.();
   };
 
   for (const def of tools) {
@@ -115,6 +146,7 @@ export function installTools(
             state.onToolCall?.({ name: def.name, input, output, at });
             if (state.disposed) return;
             resolve(vm, deferred, output);
+            executePendingJobs(vm);
           })
           .catch((err) => {
             const message = err instanceof Error ? err.message : String(err);
@@ -127,10 +159,10 @@ export function installTools(
             });
             if (state.disposed) return;
             reject(vm, deferred, message);
+            executePendingJobs(vm);
           })
           .finally(() => {
-            inFlight -= 1;
-            pump();
+            finish(deferred);
           });
       };
 

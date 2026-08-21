@@ -136,6 +136,8 @@ test('timeoutMs of 0 is invalid and falls back', () => {
   } finally {
     console.warn = originalWarn;
   }
+});
+
 test('loadConfigWithIdentityDefinition reads executor and quota from artificer.config.json', (t) => {
   const identityDir = fs.mkdtempSync(
     path.join(os.tmpdir(), 'artificer-config-identity-'),
