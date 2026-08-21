@@ -122,9 +122,6 @@ export function installTools(
         return deferred.handle;
       }
 
-      state.admitted += 1;
-      state.toolCalls.push(def.name);
-
       let input: Record<string, unknown>;
       try {
         const dumped = argHandle ? vm.dump(argHandle) : {};
@@ -136,6 +133,9 @@ export function installTools(
         reject(vm, deferred, 'tool input is not JSON-safe');
         return deferred.handle;
       }
+
+      state.admitted += 1;
+      state.toolCalls.push(def.name);
 
       const run = () => {
         inFlight += 1;

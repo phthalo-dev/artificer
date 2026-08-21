@@ -114,10 +114,43 @@ test('exceeding maxToolCalls is ToolCallLimitExceeded', async () => {
   assert.deepEqual(result.toolCalls, ['n', 'n']);
 });
 
+test('unsafe tool input is catchable and does not count toward maxToolCalls', async () => {
+  const tools = [tool('n', async () => 'x')];
+  const result = await runCodemode({
+    code: `
+      try { await tools.n(1n); } catch (e) {}
+      await tools.n({});
+      await tools.n({});
+      return 1;
+    `,
+    tools,
+    limits: { ...limits, maxToolCalls: 2 },
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) assert.equal(result.value, 1);
+  assert.deepEqual(result.toolCalls, ['n', 'n']);
+});
+
 test('tight loop hits TimeoutExceeded', async () => {
   const result = await runCodemode({
     code: 'while (true) {}',
     tools: [],
+    limits: { ...limits, timeoutMs: 50 },
+  });
+  assert.equal(result.ok, false);
+  if (!result.ok) assert.equal(result.error.kind, 'TimeoutExceeded');
+});
+
+test('slow tool hits TimeoutExceeded', async () => {
+  const tools = [
+    tool(
+      'slow',
+      () => new Promise((resolve) => setTimeout(() => resolve('late'), 200)),
+    ),
+  ];
+  const result = await runCodemode({
+    code: 'return await tools.slow({});',
+    tools,
     limits: { ...limits, timeoutMs: 50 },
   });
   assert.equal(result.ok, false);
