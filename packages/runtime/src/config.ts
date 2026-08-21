@@ -63,9 +63,7 @@ function parseEnvInt(
   return n;
 }
 
-export function parseCodemodeLimits(
-  env: NodeJS.ProcessEnv,
-): CodemodeLimits {
+export function parseCodemodeLimits(env: NodeJS.ProcessEnv): CodemodeLimits {
   return {
     timeoutMs: parseEnvInt(
       env,
