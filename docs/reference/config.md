@@ -18,6 +18,16 @@
 | `port` | number | No | `4100` | HTTP port for the runtime server |
 | `execDir` | string | No | `~/.artificer/<name>` | Root directory where execution artifacts are persisted (runs, workstreams, workspace) |
 
+### Codemode (`execute` tool)
+
+Worker and orchestrator can call `execute` to run a small JavaScript program that sequences their other tools. Limits are env-only (not `artificer.config.json`):
+
+| Env | Default | Description |
+|---|---|---|
+| `RUNTIME_CODEMODE_TIMEOUT_MS` | `120000` | Wall-clock cap for one `execute` program (QuickJS interrupt). Does not SIGKILL in-flight `run_shell`. |
+| `RUNTIME_CODEMODE_MAX_TOOL_CALLS` | `32` | Max inner tool calls admitted during one `execute`. |
+| `RUNTIME_CODEMODE_MAX_OUTPUT_BYTES` | `12000` | UTF-8 cap on the JSON result (`value` + `logs`). Oversize returns `truncated: true`. |
+
 ### `models` block
 
 Override individual model tiers. All fields are optional; unset tiers fall back to the active preset.

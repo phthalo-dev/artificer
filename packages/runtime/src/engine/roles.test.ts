@@ -194,3 +194,18 @@ test('planner checks for standing preference memories before planning', () => {
     'expected planner guidance to query for tags: ["preference"]',
   );
 });
+
+test('worker prompt prefers execute for batched tool calls', () => {
+  const system = getRole('worker').system('TestAgent');
+  assert.match(system, /prefer the `execute` tool/i);
+});
+
+test('orchestrator prompt prefers execute for batched tool calls', () => {
+  const system = getRole('orchestrator').system('TestAgent');
+  assert.match(system, /prefer the `execute` tool/i);
+});
+
+test('planner prompt does not mention the execute tool', () => {
+  const system = getRole('planner').system('TestAgent');
+  assert.doesNotMatch(system, /prefer the `execute` tool/i);
+});

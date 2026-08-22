@@ -1,3 +1,4 @@
+import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import type {
@@ -5,6 +6,7 @@ import type {
   ExecutorConfig,
   ResolvedIdentityConfig,
 } from './api/types.js';
+import { scanAgentDirectory } from './discover/discover.js';
 import type { DiagnosticsConfig } from './diagnostics/types.js';
 import {
   isModelTier,
@@ -38,6 +40,59 @@ export interface ContextBorrowingConfig {
    * family (`aggressive` for GPT-5, `generous` for Gemini, else `default`).
    */
   compactionProfile?: CompactionProfileName;
+}
+
+export interface CodemodeLimits {
+  timeoutMs: number;
+  maxToolCalls: number;
+  maxOutputBytes: number;
+}
+
+export const DEFAULT_CODEMODE_LIMITS: CodemodeLimits = {
+  timeoutMs: 120_000,
+  maxToolCalls: 32,
+  maxOutputBytes: 12_000,
+};
+
+function parseEnvInt(
+  env: NodeJS.ProcessEnv,
+  name: string,
+  fallback: number,
+  min: number,
+): number {
+  const raw = env[name];
+  if (raw === undefined || raw === '') return fallback;
+  const n = Number(raw);
+  if (!Number.isSafeInteger(n) || n < min) {
+    console.warn(
+      `[artificer] invalid ${name} "${raw}"; using default ${fallback}.`,
+    );
+    return fallback;
+  }
+  return n;
+}
+
+export function parseCodemodeLimits(env: NodeJS.ProcessEnv): CodemodeLimits {
+  return {
+    timeoutMs: parseEnvInt(
+      env,
+      'RUNTIME_CODEMODE_TIMEOUT_MS',
+      DEFAULT_CODEMODE_LIMITS.timeoutMs,
+      1,
+    ),
+    maxToolCalls: parseEnvInt(
+      env,
+      'RUNTIME_CODEMODE_MAX_TOOL_CALLS',
+      DEFAULT_CODEMODE_LIMITS.maxToolCalls,
+      0,
+    ),
+    maxOutputBytes: parseEnvInt(
+      env,
+      'RUNTIME_CODEMODE_MAX_OUTPUT_BYTES',
+      DEFAULT_CODEMODE_LIMITS.maxOutputBytes,
+      0,
+    ),
+  };
 }
 
 export interface RuntimeConfig {
@@ -102,6 +157,7 @@ export interface RuntimeConfig {
    * no memory writes, learn/add_memory, identity git ops, or config persist.
    */
   evalMode?: boolean;
+  codemode: CodemodeLimits;
 }
 
 /** The agent's GitHub identity, used to clone, push, and open/comment on PRs. */
@@ -254,7 +310,33 @@ export function loadConfig(
     identityDir,
     apiAuthKey: env.ARTIFICER_API_KEY || undefined,
     evalMode: env.RUNTIME_EVAL_MODE === 'true',
+    codemode: parseCodemodeLimits(env),
   };
+}
+
+export function loadConfigDefinition(
+  rootDir: string,
+): ArtificerConfig | undefined {
+  const manifest = scanAgentDirectory(rootDir);
+  if (!manifest.config) return undefined;
+
+  try {
+    return JSON.parse(
+      fs.readFileSync(manifest.config.path, 'utf-8'),
+    ) as ArtificerConfig;
+  } catch {
+    return undefined;
+  }
+}
+
+export function loadConfigWithIdentityDefinition(
+  env: NodeJS.ProcessEnv = process.env,
+  rootDir = env.ARTIFICER_IDENTITY_DIR
+    ? path.resolve(env.ARTIFICER_IDENTITY_DIR)
+    : path.resolve(process.cwd()),
+): RuntimeConfig {
+  const definition = loadConfigDefinition(rootDir);
+  return definition ? mergeWithDefinition(definition, env) : loadConfig(env);
 }
 
 export function parseDuration(s: string): number | undefined {

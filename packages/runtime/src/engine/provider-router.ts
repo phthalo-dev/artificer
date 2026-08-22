@@ -8,6 +8,7 @@ import type { RoleName } from '../storage/types.js';
 import type { WorkerExecutor } from './executor.js';
 import { CursorAgentExecutor } from './cursor-executor.js';
 import { ClaudeCodeExecutor } from './claude-code-executor.js';
+import { OpencodeExecutor } from './opencode-executor.js';
 import { modelsForRoute, roleTiersForRoute } from './route-config.js';
 
 export interface ResolveRouteInput {
@@ -101,5 +102,6 @@ export function executorForRoute(
   if (route.profileId === 'primary') return globalExecutor;
   if (route.executorName === 'cursor-agent') return new CursorAgentExecutor();
   if (route.executorName === 'claude-code') return new ClaudeCodeExecutor();
+  if (route.executorName === 'opencode') return new OpencodeExecutor();
   return globalExecutor;
 }
