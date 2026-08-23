@@ -5,6 +5,7 @@ import type { LanguageModel } from 'ai';
 import type { RuntimeConfig } from '../config.js';
 import type { EngineApi, ToolContext } from '../context.js';
 import { buildPriorRunsDigest, clipDiff } from './context-compact.js';
+import { compactionProfileForModel } from './compaction-thresholds.js';
 import { FileCache } from './file-cache.js';
 import { formatCallError } from '../llm/errors.js';
 import { runToolLoop } from '../llm/loop.js';
@@ -163,11 +164,15 @@ async function buildContext(
       );
       if (changed) sections.push(changed);
 
+      const digestProfile = compactionProfileForModel(
+        run.model ?? config.model,
+        config.contextBorrowing.compactionProfile,
+      );
       const digest = await buildPriorRunsDigest(
         store,
         run.workstreamId,
         run.id,
-        8,
+        digestProfile.priorRunsToInclude,
         config.contextBorrowing.microcompactEnabled,
       );
       if (digest) sections.push(digest);

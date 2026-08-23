@@ -165,6 +165,73 @@ test('submit_review output preserved when not compactable', async () => {
   assert.ok(!COMPACTABLE_TOOLS.has('submit_review'));
 });
 
+test('microcompact enabled includes only maxRuns prior runs', async () => {
+  const runs: RunRecord[] = Array.from({ length: 4 }, (_, i) => ({
+    id: `run_${i}`,
+    role: 'worker' as const,
+    status: 'done' as const,
+    task: 't',
+    toolCalls: [
+      {
+        name: 'grep',
+        input: { pattern: `p${i}` },
+        output: `src/file.ts:1:p${i}`,
+        at: `2026-06-01T00:0${i}:00.000Z`,
+      },
+    ],
+    usage: emptyUsage(),
+    createdAt: `2026-06-01T00:0${i}:00.000Z`,
+    finishedAt: `2026-06-01T00:0${i}:30.000Z`,
+    workstreamId: 'ws_1',
+  }));
+  const digest = await buildPriorRunsDigest(
+    mockStore(runs),
+    'ws_1',
+    undefined,
+    1,
+    true,
+  );
+  assert.ok(digest);
+  assert.ok(!digest!.includes('run_0'));
+  assert.ok(!digest!.includes('run_1'));
+  assert.ok(!digest!.includes('run_2'));
+  assert.ok(digest!.includes('run_3'));
+});
+
+test('microcompact disabled respects maxRuns when it is below the two-run cap', async () => {
+  const runs: RunRecord[] = Array.from({ length: 4 }, (_, i) => ({
+    id: `run_${i}`,
+    role: 'worker' as const,
+    status: 'done' as const,
+    task: 't',
+    toolCalls: [
+      {
+        name: 'grep',
+        input: { pattern: `p${i}` },
+        output: `output-${i}`,
+        at: `2026-06-01T00:0${i}:00.000Z`,
+      },
+    ],
+    usage: emptyUsage(),
+    createdAt: `2026-06-01T00:0${i}:00.000Z`,
+    finishedAt: `2026-06-01T00:0${i}:30.000Z`,
+    workstreamId: 'ws_1',
+  }));
+  const digest = await buildPriorRunsDigest(
+    mockStore(runs),
+    'ws_1',
+    undefined,
+    1,
+    false,
+  );
+  assert.ok(digest);
+  assert.ok(!digest!.includes('run_0'));
+  assert.ok(!digest!.includes('run_1'));
+  assert.ok(!digest!.includes('run_2'));
+  assert.ok(digest!.includes('run_3'));
+  assert.ok(digest!.includes('output-3'));
+});
+
 test('microcompact disabled keeps last two runs with clipped outputs', async () => {
   const runs: RunRecord[] = Array.from({ length: 4 }, (_, i) => ({
     id: `run_${i}`,
