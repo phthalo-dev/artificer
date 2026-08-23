@@ -64,6 +64,7 @@ Post-edit diagnostics run language checkers after file edits and feed errors bac
 | Variable | Required | Default | Description |
 |---|---|---|---|
 | `RUNTIME_MICROCOMPACT_ENABLED` | No | `true` | Enable micro-compaction of tool results to save context; set to `false` to disable |
+| `RUNTIME_COMPACTION_PROFILE` | No | model-family auto | Force prior-run digest size: `aggressive` (1 run, GPT-5 default), `default` (8 runs), `generous` (12 runs, Gemini default), or `auto` |
 | `RUNTIME_FILE_CACHE_MAX_ENTRIES` | No | `64` | Max entries in the in-process file content cache |
 | `RUNTIME_REQUIRE_RG` | No | `true` | Require ripgrep (`rg`) for search; set to `false` to fall back to slower alternatives |
 | `RUNTIME_TOOL_RESULT_MAX_CHARS` | No | `12000` | Max characters per tool-use result before truncation |

@@ -106,9 +106,11 @@ export async function buildPriorRunsDigest(
   const completed = completedRuns(all, excludeRunId);
   if (completed.length === 0) return null;
 
+  // Uncompacted outputs are expensive; cap at 2 unless the profile asks for fewer
+  // (GPT-5 aggressive = 1). Microcompacted one-liners can afford the full window.
   const selected = microcompactEnabled
     ? completed.slice(-maxRuns)
-    : completed.slice(-2);
+    : completed.slice(-Math.min(2, maxRuns));
 
   const lines: string[] = ['Prior run tool activity (oldest first):'];
   for (const run of selected) {

@@ -19,6 +19,10 @@ import {
   getPreset,
 } from './engine/presets.js';
 import type { QuotaConfig } from './engine/quota-types.js';
+import {
+  parseCompactionProfileName,
+  type CompactionProfileName,
+} from './engine/compaction-thresholds.js';
 import type { RoleName } from './storage/types.js';
 
 export interface ToolResultConfig {
@@ -31,6 +35,11 @@ export interface ContextBorrowingConfig {
   fileCacheMaxEntries: number;
   requireRipgrep: boolean;
   toolResults: ToolResultConfig;
+  /**
+   * Force a named compaction profile. Unset means pick from the active model
+   * family (`aggressive` for GPT-5, `generous` for Gemini, else `default`).
+   */
+  compactionProfile?: CompactionProfileName;
 }
 
 export interface CodemodeLimits {
@@ -236,6 +245,19 @@ export function loadConfig(
       }
     : undefined;
 
+  const compactionProfileEnv = env.RUNTIME_COMPACTION_PROFILE;
+  const compactionProfile = parseCompactionProfileName(compactionProfileEnv);
+  if (
+    compactionProfileEnv &&
+    compactionProfileEnv.trim() !== '' &&
+    compactionProfile === undefined &&
+    compactionProfileEnv.trim().toLowerCase() !== 'auto'
+  ) {
+    console.warn(
+      `[artificer] invalid RUNTIME_COMPACTION_PROFILE "${compactionProfileEnv}"; using model-family detection.`,
+    );
+  }
+
   const contextBorrowing: ContextBorrowingConfig = {
     microcompactEnabled: env.RUNTIME_MICROCOMPACT_ENABLED !== 'false',
     fileCacheMaxEntries: env.RUNTIME_FILE_CACHE_MAX_ENTRIES
@@ -250,6 +272,7 @@ export function loadConfig(
         ? Number(env.RUNTIME_TOOL_RESULT_MAX_PER_RUN_CHARS)
         : 80_000,
     },
+    compactionProfile,
   };
 
   const identityDir = env.ARTIFICER_IDENTITY_DIR
