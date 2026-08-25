@@ -14,6 +14,14 @@ my-agent/
 
 The runtime auto-discovers all `.ts` files in `agent/tools/` at startup. No registration step.
 
+## How tools reach the agent
+
+At startup, the runtime scans `agent/tools/*.ts`, imports each file's default `defineTool()` export, and registers it in the tool registry. Invalid files are skipped with a warning; the process keeps running.
+
+When a role call runs (planner, worker, etc.), the runtime builds a **tool plan** once at call start: the full catalog of built-in and custom tools available to that role. That plan is **frozen for the life of the call** — the model, `execute` program siblings, and codemode cells all use the same snapshot. Adding or editing a tool file takes effect on the next process start; an in-flight call does not pick up changes mid-run.
+
+If you ship many custom tools (more than ~40), the runtime logs a soft warning suggesting deferred discovery (coming soon) to keep the always-on catalog lean.
+
 ## The `defineTool()` API
 
 ```ts
@@ -133,7 +141,7 @@ export default defineTool({
 
 ## Verify the tool loaded
 
-At startup, `artificer dev` lists the tools it found. Check the output for your tool name. If it's missing, check the file path and that it exports a default `defineTool()` call.
+At startup, `artificer dev` lists the tools it found and registers them for the live call path. Check the output for your tool name, then trigger a role call and confirm the model can invoke it. If it's missing at startup, check the file path and that it exports a default `defineTool()` call. If it appears at startup but not in a call, check that the tool's `roles` array includes the role you're testing.
 
 ## Tips
 
