@@ -151,9 +151,9 @@ export function toolsForRole(
   if (customRegistry) {
     const custom = customRegistry.toolsForRole(role as RoleName);
     for (const t of custom) {
-      if (t.name === 'execute') {
+      if (t.name === 'execute' || t.name === 'wait_execute') {
         console.warn(
-          '[artificer] custom tool "execute" is reserved and was skipped',
+          `[artificer] custom tool "${t.name}" is reserved and was skipped`,
         );
         continue;
       }

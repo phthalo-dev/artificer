@@ -16,12 +16,22 @@ function formatSibling(def: ToolDef): string {
   return `tools.${def.name}(input: ${body}): Promise<string>\n  ${def.description}`;
 }
 
+function resolveSiblings(ctx: ToolContext, siblings: ToolDef[]): ToolDef[] {
+  if (ctx.toolPlan) {
+    return ctx.toolPlan.alwaysOn.filter(
+      (t) => t.name !== 'execute' && t.name !== 'wait_execute',
+    );
+  }
+  return siblings;
+}
+
 export function createExecuteTool(
   ctx: ToolContext,
   siblings: ToolDef[],
   limits: CodemodeLimits,
 ): ToolDef {
-  const catalog = siblings.map(formatSibling).join('\n\n');
+  const catalogSiblings = resolveSiblings(ctx, siblings);
+  const catalog = catalogSiblings.map(formatSibling).join('\n\n');
   return {
     name: 'execute',
     description: `Run a small JavaScript program that calls this role's tools without a model round-trip per call. Write the body of an async function. \`return\` is the result. Call tools as \`await tools.read_file({ path: "..." })\`. Independent work: \`await Promise.all([...])\`. Missing tools throw (catchable). Nested execute is not available.
@@ -40,9 +50,10 @@ ${catalog}`,
       required: ['code'],
     } satisfies JsonSchema,
     handler: async (input) => {
+      const resolved = resolveSiblings(ctx, siblings);
       const result = await runCodemode({
         code: String(input.code ?? ''),
-        tools: siblings.map((s) => ({ name: s.name, handler: s.handler })),
+        tools: resolved.map((s) => ({ name: s.name, handler: s.handler })),
         limits,
         onToolCall: ctx.onToolCall,
       });

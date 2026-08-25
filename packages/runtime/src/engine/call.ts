@@ -13,10 +13,11 @@ import type { Store } from '../storage/store.js';
 import type { IdentityStore } from '../storage/identity-store.js';
 import type { RunRecord, ToolInvocation } from '../storage/types.js';
 import { emptyUsage } from '../storage/types.js';
-import { toolsForRole } from '../tools/registry.js';
+import { createToolPlan } from '../tools/tool-plan.js';
 import { findGitRepo } from './git-repo.js';
 import type { WorkerExecutor } from './executor.js';
 import { RoleRegistry } from './role-registry.js';
+import type { ToolRegistry } from '../api/tool-registry.js';
 
 const execAsync = promisify(exec);
 
@@ -113,6 +114,7 @@ export interface ExecuteCallDeps {
   engine: EngineApi;
   executor?: WorkerExecutor;
   registry: RoleRegistry;
+  customRegistry?: ToolRegistry;
   route?: import('./quota-types.js').DispatchRoute;
 }
 
@@ -259,7 +261,13 @@ export async function executeCall(
   const roleDef = deps.registry.getRole(run.role);
   if (!roleDef) throw new Error(`Unknown role: '${run.role}'`);
   const effectiveBaseRole = roleDef.baseRole ?? run.role;
-  const tools = toolsForRole(effectiveBaseRole, ctx);
+  const plan = createToolPlan({
+    role: effectiveBaseRole,
+    ctx,
+    customRegistry: deps.customRegistry,
+  });
+  ctx.toolPlan = plan;
+  const tools = [...plan.alwaysOn];
 
   run.status = 'running';
   run.startedAt = new Date().toISOString();
