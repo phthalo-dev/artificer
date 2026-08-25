@@ -19,7 +19,11 @@ async function fakeCtx(): Promise<ToolContext> {
     engine: {
       store,
       config: {
-        codemode: { timeoutMs: 120_000, maxToolCalls: 32, maxOutputBytes: 12_000 },
+        codemode: {
+          timeoutMs: 120_000,
+          maxToolCalls: 32,
+          maxOutputBytes: 12_000,
+        },
       },
     } as unknown as ToolContext['engine'],
     run,

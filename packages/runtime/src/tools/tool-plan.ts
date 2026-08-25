@@ -1,7 +1,10 @@
 import type { ToolRegistry } from '../api/tool-registry.js';
 import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
-import { emptyDeferredCatalog, type DeferredToolCatalog } from './deferred-catalog.js';
+import {
+  emptyDeferredCatalog,
+  type DeferredToolCatalog,
+} from './deferred-catalog.js';
 import { toolsForRole } from './registry.js';
 
 export type ToolPlan = {
