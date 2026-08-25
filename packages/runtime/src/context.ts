@@ -8,6 +8,7 @@ import type { ScheduleAction, ScheduleDefinition } from './engine/schedules.js';
 import type { Store } from './storage/store.js';
 import type { IdentityStore } from './storage/identity-store.js';
 import type { RunRecord, ToolInvocation, Workstream } from './storage/types.js';
+import type { ToolPlan } from './tools/tool-plan.js';
 
 export interface SpawnCallInput {
   role: string;
@@ -79,4 +80,6 @@ export interface ToolContext {
   /** Workspace directory scoped to this run's workstream (or a shared root). */
   workspaceDir: string;
   onToolCall?: (invocation: ToolInvocation) => void;
+  /** Frozen tool catalog for this call; set once by executeCall. */
+  toolPlan?: ToolPlan;
 }

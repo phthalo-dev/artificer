@@ -23,6 +23,7 @@ import {
   loadInstructionsFromDisk,
   loadRolesFromDisk,
   loadChannelsFromDisk,
+  loadToolsFromDisk,
 } from '../discover/loader.js';
 import { RoleRegistry } from '../engine/role-registry.js';
 import type {
@@ -103,6 +104,9 @@ export async function createRuntime(
   await identity.init();
 
   const tools = new ToolRegistry();
+  for (const t of await loadToolsFromDisk(manifest.tools)) {
+    tools.register(t);
+  }
 
   const channels = await loadChannelsFromDisk(manifest.channels);
 
@@ -111,7 +115,14 @@ export async function createRuntime(
     store,
     Boolean(config.evalMode),
   );
-  const engine = new Engine(config, store, memoryService, registry, identity);
+  const engine = new Engine(
+    config,
+    store,
+    memoryService,
+    registry,
+    identity,
+    tools,
+  );
   const scheduleRunner = createScheduleRunnerForEngine(engine);
   const app = createApp(engine, { identity, channels });
 

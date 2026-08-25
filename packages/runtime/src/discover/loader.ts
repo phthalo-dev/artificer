@@ -1,6 +1,10 @@
 import fs from 'node:fs';
 import { pathToFileURL } from 'node:url';
-import type { ArtificerChannel, ArtificerSkill } from '../api/types.js';
+import type {
+  ArtificerChannel,
+  ArtificerSkill,
+  ArtificerTool,
+} from '../api/types.js';
 import {
   validateScheduleFields,
   type ScheduleDefinition,
@@ -14,6 +18,17 @@ function isArtificerChannel(value: unknown): value is ArtificerChannel {
     typeof channel.name === 'string' &&
     typeof channel.receive === 'function' &&
     typeof channel.format === 'function'
+  );
+}
+
+function isArtificerTool(value: unknown): value is ArtificerTool {
+  if (!value || typeof value !== 'object') return false;
+  const tool = value as ArtificerTool;
+  return (
+    typeof tool.name === 'string' &&
+    typeof tool.toToolDef === 'function' &&
+    tool.definition != null &&
+    typeof tool.definition === 'object'
   );
 }
 
@@ -39,6 +54,30 @@ export async function loadChannelsFromDisk(
   }
 
   return channels;
+}
+
+export async function loadToolsFromDisk(
+  refs: ModuleRef[],
+): Promise<ArtificerTool[]> {
+  const tools: ArtificerTool[] = [];
+
+  for (const ref of refs) {
+    try {
+      const mod = await import(pathToFileURL(ref.path).href);
+      const tool = mod.default;
+      if (!isArtificerTool(tool)) {
+        console.warn(
+          `[artificer] tool "${ref.name}": default export must be an ArtificerTool`,
+        );
+        continue;
+      }
+      tools.push(tool);
+    } catch (err) {
+      console.warn(`[artificer] failed to load tool "${ref.path}":`, err);
+    }
+  }
+
+  return tools;
 }
 
 export function loadSkillsFromDisk(refs: ModuleRef[]): ArtificerSkill[] {
