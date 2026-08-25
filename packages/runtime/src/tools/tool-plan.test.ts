@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
+import { defineTool } from '../api/define-tool.js';
+import { ToolRegistry } from '../api/tool-registry.js';
 import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
 import { Store } from '../storage/store.js';
@@ -41,4 +43,23 @@ test('createToolPlan freezes alwaysOn and lists names', async () => {
     });
   });
   assert.equal(plan.deferred.size, 0);
+});
+
+test('createToolPlan includes custom registry tools for worker', async () => {
+  const registry = new ToolRegistry();
+  registry.register(
+    defineTool({
+      name: 'echo_custom',
+      description: 'echo',
+      input: { type: 'object', properties: {} },
+      roles: ['worker'],
+      execute: async () => 'ok',
+    }),
+  );
+  const plan = createToolPlan({
+    role: 'worker',
+    ctx: await fakeCtx(),
+    customRegistry: registry,
+  });
+  assert.ok(plan.alwaysOnNames.includes('echo_custom'));
 });

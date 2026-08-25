@@ -9,6 +9,7 @@ import {
   loadRolesFromDisk,
   loadChannelsFromDisk,
   loadSchedulesFromDisk,
+  loadToolsFromDisk,
 } from './loader.js';
 
 describe('loadSkillsFromDisk', () => {
@@ -159,6 +160,48 @@ describe('loadChannelsFromDisk', () => {
       { name: 'missing', path: '/nonexistent/channel.ts' },
     ]);
     assert.equal(channels.length, 0);
+  });
+});
+
+describe('loadToolsFromDisk', () => {
+  let tmpDir: string;
+
+  beforeEach(() => {
+    tmpDir = fs.mkdtempSync(path.join(os.tmpdir(), 'artificer-tools-'));
+  });
+  afterEach(() => {
+    fs.rmSync(tmpDir, { recursive: true, force: true });
+  });
+
+  it('loadToolsFromDisk registers defineTool default exports', async () => {
+    const toolPath = path.join(tmpDir, 'echo.ts');
+    fs.writeFileSync(
+      toolPath,
+      `import { defineTool } from ${JSON.stringify(
+        path.join(import.meta.dirname, '../api/define-tool.ts'),
+      )};
+
+export default defineTool({
+  name: 'echo',
+  description: 'Echo input',
+  input: { type: 'object', properties: { text: { type: 'string' } } },
+  roles: ['worker'],
+  execute: async (input) => String(input.text ?? ''),
+});
+`,
+    );
+
+    const tools = await loadToolsFromDisk([{ name: 'echo', path: toolPath }]);
+
+    assert.equal(tools.length, 1);
+    assert.equal(tools[0].name, 'echo');
+  });
+
+  it('skips modules without a valid ArtificerTool export', async () => {
+    const tools = await loadToolsFromDisk([
+      { name: 'missing', path: '/nonexistent/tool.ts' },
+    ]);
+    assert.equal(tools.length, 0);
   });
 });
 
