@@ -76,6 +76,7 @@ import {
 } from './provider-router.js';
 import type { DispatchRoute } from './quota-types.js';
 import type { RoleName } from '../storage/types.js';
+import type { ToolRegistry } from '../api/tool-registry.js';
 
 interface ActiveRun {
   runId: string;
@@ -109,6 +110,7 @@ export class Engine implements EngineApi {
   private readonly memoryService?: WorkstreamMemoryService;
   private readonly executor?: WorkerExecutor;
   private readonly registry: RoleRegistry;
+  private readonly customRegistry?: ToolRegistry;
   private scheduleRunner?: ScheduleRunner;
   private quotaLedger?: QuotaLedger;
   private providerRouter?: ProviderRouter;
@@ -124,12 +126,14 @@ export class Engine implements EngineApi {
     memoryService?: WorkstreamMemoryService,
     registry?: RoleRegistry,
     identity?: IdentityStore,
+    customRegistry?: ToolRegistry,
   ) {
     this.config = config;
     this.store = store;
     this.identity = identity;
     this.memoryService = memoryService;
     this.registry = registry ?? new RoleRegistry();
+    this.customRegistry = customRegistry;
     this.executor = buildExecutor(config.executor);
     this.reinitializeQuota();
     if (this.quotaLedger) {
@@ -879,6 +883,7 @@ export class Engine implements EngineApi {
           ? executorForRoute(route, buildExecutor, this.executor)
           : this.executor,
         registry: this.registry,
+        customRegistry: this.customRegistry,
         route,
       });
       this.runRoutes.delete(runId);
