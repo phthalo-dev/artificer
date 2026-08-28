@@ -12,6 +12,7 @@ import {
 import { createProviderConfigTools } from './config.js';
 import { createEditTool } from './edit.js';
 import { createExecuteTool } from './execute.js';
+import { createWaitExecuteTool } from './wait-execute.js';
 import { createFetchTools } from './fetch.js';
 import { createFileTools } from './files.js';
 import { createGitTools } from './git.js';
@@ -164,6 +165,7 @@ export function toolsForRole(
   if (role === 'worker' || role === 'orchestrator') {
     const limits = ctx.engine.config.codemode ?? DEFAULT_CODEMODE_LIMITS;
     result.push(createExecuteTool(ctx, [...result], limits));
+    result.push(createWaitExecuteTool(ctx));
   }
 
   return result;

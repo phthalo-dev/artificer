@@ -58,6 +58,17 @@ for (const role of ['worker', 'orchestrator'] as const) {
   });
 }
 
+for (const role of ['worker', 'orchestrator'] as const) {
+  test(`toolsForRole('${role}') includes wait_execute`, async () => {
+    const ctx = await freshCtx(role);
+    const tools = toolsForRole(role, ctx);
+    assert.ok(
+      tools.some((t) => t.name === 'wait_execute'),
+      `${role} should have wait_execute`,
+    );
+  });
+}
+
 for (const role of [
   'planner',
   'reviewer',
@@ -70,6 +81,22 @@ for (const role of [
     assert.ok(
       !tools.some((t) => t.name === 'execute'),
       `${role} should not have execute`,
+    );
+  });
+}
+
+for (const role of [
+  'planner',
+  'reviewer',
+  'communicator',
+  'librarian',
+] as const) {
+  test(`toolsForRole('${role}') does not include wait_execute`, async () => {
+    const ctx = await freshCtx(role);
+    const tools = toolsForRole(role, ctx);
+    assert.ok(
+      !tools.some((t) => t.name === 'wait_execute'),
+      `${role} should not have wait_execute`,
     );
   });
 }
@@ -91,6 +118,7 @@ test('execute siblings include custom tools and exclude execute', async () => {
   assert.ok(execute);
   assert.match(execute.description, /tools\.custom_ping/);
   assert.doesNotMatch(execute.description, /tools\.execute/);
+  assert.doesNotMatch(execute.description, /tools\.wait_execute/);
   const names = tools.filter((t) => t.name === 'execute');
   assert.equal(names.length, 1);
 });

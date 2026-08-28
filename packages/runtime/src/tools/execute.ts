@@ -1,7 +1,7 @@
+import { runCodemode, startCodemodeCell } from '../codemode/runtime.js';
 import type { CodemodeLimits } from '../config.js';
 import type { ToolContext } from '../context.js';
 import type { JsonSchema, ToolDef } from '../llm/types.js';
-import { runCodemode } from '../codemode/runtime.js';
 
 function formatSibling(def: ToolDef): string {
   const props = def.inputSchema.properties ?? {};
@@ -51,9 +51,22 @@ ${catalog}`,
     } satisfies JsonSchema,
     handler: async (input) => {
       const resolved = resolveSiblings(ctx, siblings);
+      const tools = resolved.map((s) => ({ name: s.name, handler: s.handler }));
+      const code = String(input.code ?? '');
+      if (ctx.codemodeCells) {
+        const result = await startCodemodeCell({
+          code,
+          tools,
+          limits,
+          store: ctx.codemodeCells,
+          runId: ctx.run.id,
+          onToolCall: ctx.onToolCall,
+        });
+        return JSON.stringify(result);
+      }
       const result = await runCodemode({
-        code: String(input.code ?? ''),
-        tools: resolved.map((s) => ({ name: s.name, handler: s.handler })),
+        code,
+        tools,
         limits,
         onToolCall: ctx.onToolCall,
       });
