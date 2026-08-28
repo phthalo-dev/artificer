@@ -19,6 +19,20 @@ export interface BridgeState {
   pending?: Set<QuickJSDeferredPromise>;
   /** Wakes the host wait loop after a tool settles. */
   kick?: () => void;
+  /** Set by `yield_control()`; cleared when the host starts the next segment. */
+  yieldRequested?: boolean;
+  /** Set by `exit()`; the host completes the cell with a null value. */
+  exitRequested?: boolean;
+  /** Guest promises that pause the turn, resolved when the cell resumes. */
+  resumeDeferreds?: QuickJSDeferredPromise[];
+}
+
+/** Host-side state the additive guest globals read and write. */
+export interface GuestGlobals {
+  /** Run-scoped KV behind `store` / `load`, shared by every cell in the run. */
+  kv: Map<string, unknown>;
+  /** Cell-local sink behind `notify`. */
+  notifications: string[];
 }
 
 function executePendingJobs(vm: QuickJSContext): void {
@@ -55,6 +69,7 @@ export function settlePendingDeferreds(
   vm: QuickJSContext,
   state: BridgeState,
 ): void {
+  state.resumeDeferreds?.splice(0);
   const pending = state.pending;
   if (!pending) return;
   for (const deferred of [...pending]) {
@@ -70,6 +85,141 @@ export function settlePendingDeferreds(
     }
   }
   pending.clear();
+}
+
+/**
+ * Resolve the promises `yield_control()` handed the guest so the paused turn
+ * continues in the next segment.
+ */
+export function resolveResumeDeferreds(state: BridgeState): void {
+  const deferreds = state.resumeDeferreds;
+  if (!deferreds || deferreds.length === 0) return;
+  for (const deferred of deferreds.splice(0)) {
+    state.pending?.delete(deferred);
+    try {
+      if (deferred.alive) deferred.resolve();
+    } catch {
+      // VM may already be tearing down.
+    }
+    try {
+      deferred.dispose();
+    } catch {
+      // ignore
+    }
+  }
+}
+
+/** JSON round-trip a guest value through the guest's own `JSON.stringify`. */
+function guestJsonCopy(vm: QuickJSContext, handle: QuickJSHandle): unknown {
+  const type = vm.typeof(handle);
+  if (type === 'undefined') return null;
+  if (type === 'function') throw new Error('value is not JSON-safe');
+
+  const json = vm.getProp(vm.global, 'JSON');
+  const stringify = vm.getProp(json, 'stringify');
+  const result = vm.callFunction(stringify, json, handle);
+  stringify.dispose();
+  json.dispose();
+  if (result.error) {
+    result.error.dispose();
+    throw new Error('value is not JSON-safe');
+  }
+  if (vm.typeof(result.value) !== 'string') {
+    result.value.dispose();
+    throw new Error('value is not JSON-safe');
+  }
+  const text = vm.getString(result.value);
+  result.value.dispose();
+  return JSON.parse(text) as unknown;
+}
+
+/** Copy a host JSON value into the guest via the guest's own `JSON.parse`. */
+function guestJsonPaste(vm: QuickJSContext, value: unknown): QuickJSHandle {
+  const text = value === undefined ? undefined : JSON.stringify(value);
+  if (text === undefined) return vm.undefined;
+
+  const json = vm.getProp(vm.global, 'JSON');
+  const parse = vm.getProp(json, 'parse');
+  const arg = vm.newString(text);
+  const result = vm.callFunction(parse, json, arg);
+  arg.dispose();
+  parse.dispose();
+  json.dispose();
+  if (result.error) {
+    result.error.dispose();
+    return vm.undefined;
+  }
+  return result.value;
+}
+
+/**
+ * Install `yield_control`, `exit`, `store`, `load`, and `notify` on the guest
+ * global. `yield_control` / `exit` hand back a promise that only the host can
+ * settle, so the guest turn pauses without the isolate being disposed.
+ */
+export function installGuestGlobals(
+  vm: QuickJSContext,
+  state: BridgeState,
+  globals: GuestGlobals,
+): void {
+  const pending = (state.pending ??= new Set());
+  const resumeDeferreds = (state.resumeDeferreds ??= []);
+
+  const pauseGuest = (): QuickJSHandle => {
+    const deferred = vm.newPromise();
+    pending.add(deferred);
+    resumeDeferreds.push(deferred);
+    return deferred.handle;
+  };
+
+  const keyOf = (handle: QuickJSHandle | undefined): string =>
+    handle ? String(vm.dump(handle)) : 'undefined';
+
+  const define = (
+    name: string,
+    impl: (...args: QuickJSHandle[]) => QuickJSHandle,
+  ) => {
+    const fn = vm.newFunction(name, impl);
+    vm.setProp(vm.global, name, fn);
+    fn.dispose();
+  };
+
+  define('yield_control', () => {
+    state.yieldRequested = true;
+    state.kick?.();
+    return pauseGuest();
+  });
+
+  define('exit', () => {
+    state.exitRequested = true;
+    state.kick?.();
+    return pauseGuest();
+  });
+
+  define('store', (keyHandle, valueHandle) => {
+    const key = keyOf(keyHandle);
+    let copy: unknown;
+    try {
+      copy = valueHandle === undefined ? null : guestJsonCopy(vm, valueHandle);
+    } catch {
+      const message = `store("${key}") value is not JSON-safe`;
+      state.fatal = { kind: 'InvalidDataValue', message };
+      throw new Error(message);
+    }
+    globals.kv.set(key, copy);
+    return vm.undefined;
+  });
+
+  define('load', (keyHandle) =>
+    guestJsonPaste(vm, globals.kv.get(keyOf(keyHandle))),
+  );
+
+  define('notify', (...args) => {
+    globals.notifications.push(
+      args.map((handle) => String(vm.dump(handle))).join(' '),
+    );
+    return vm.undefined;
+  });
 }
 
 export function installTools(
