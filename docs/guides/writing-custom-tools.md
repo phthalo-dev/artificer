@@ -65,7 +65,7 @@ Each tool declares which roles are allowed to call it. The available roles are:
 
 Tip: most tools should be `['worker']` or `['worker', 'planner']`.
 
-Worker and orchestrator can also call custom tools from the `execute` program as `await tools.<name>(input)`. `execute` and `wait_execute` are reserved names — custom tools with those names are skipped. Long batches may yield via `yield_control()` or a first-line `// @exec: {"yield_time_ms": N}` pragma; resume with `wait_execute`.
+Worker and orchestrator can also call custom tools from the `execute` program as `await tools.<name>(input)`. `execute` and `wait_execute` are reserved names — custom tools with those names are skipped. Long batches may yield via `yield_control()` or a first-line `// @exec: {"yield_time_ms": N}` pragma; resume with `wait_execute`. Guest helpers also include `store(key, value)`, `load(key)`, `notify(...)`, and `exit()`.
 
 ## Adding secrets
 
