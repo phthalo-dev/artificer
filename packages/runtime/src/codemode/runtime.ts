@@ -479,16 +479,24 @@ function settleSegment(
   const fail = (kind: DiagnosticKind, message: string) =>
     failedSegment(kind, message, output, limits.maxOutputBytes, cell.id);
 
+  let result: CodemodeSegmentResult | undefined;
   try {
-    if (settled.status === 'fail') return fail(settled.kind, settled.message);
+    if (settled.status === 'fail') {
+      result = fail(settled.kind, settled.message);
+      return result;
+    }
 
     if (state.fatal) {
       if (settled.status === 'completed') settled.value.dispose();
       if (settled.status === 'rejected') settled.error.dispose();
-      return fail(state.fatal.kind, state.fatal.message);
+      result = fail(state.fatal.kind, state.fatal.message);
+      return result;
     }
 
-    if (settled.status === 'exited') return completedSegment(cell, null);
+    if (settled.status === 'exited') {
+      result = completedSegment(cell, null);
+      return result;
+    }
 
     if (settled.status === 'rejected') {
       const message = nameUnknownTool(
@@ -498,39 +506,50 @@ function settleSegment(
       );
       settled.error.dispose();
       if (/interrupted/i.test(message)) {
-        return fail('TimeoutExceeded', 'timeoutMs exceeded');
+        result = fail('TimeoutExceeded', 'timeoutMs exceeded');
+        return result;
       }
       // A JSON-safe boundary throw the guest chose not to catch keeps its own
       // diagnostic instead of collapsing into ExecutionFailure.
       const kind = state.dataViolations?.has(message)
         ? 'InvalidDataValue'
         : 'ExecutionFailure';
-      return fail(kind, message);
+      result = fail(kind, message);
+      return result;
     }
 
     if (vm.typeof(settled.value) === 'function') {
       settled.value.dispose();
-      return fail('InvalidDataValue', 'result is not JSON-safe');
+      result = fail('InvalidDataValue', 'result is not JSON-safe');
+      return result;
     }
     try {
       assertGuestJsonSafe(vm, settled.value);
     } catch {
       settled.value.dispose();
-      return fail('InvalidDataValue', 'result is not JSON-safe');
+      result = fail('InvalidDataValue', 'result is not JSON-safe');
+      return result;
     }
 
     const raw = vm.dump(settled.value);
     settled.value.dispose();
     try {
-      return completedSegment(cell, jsonSafe(raw));
+      result = completedSegment(cell, jsonSafe(raw));
+      return result;
     } catch (err) {
-      return fail(
+      result = fail(
         'InvalidDataValue',
         err instanceof Error ? err.message : String(err),
       );
+      return result;
     }
   } finally {
     store.disposeCell(cell.runId, cell.id);
+    // Isolate is gone (frees a maxCells slot) but a successful completion
+    // stays readable until disposeRun so a later wait is not CellNotFound.
+    if (result?.ok && result.running === false) {
+      store.cacheCompleted(cell.runId, cell.id, result);
+    }
   }
 }
 
@@ -759,6 +778,19 @@ export async function resumeCodemodeCell(
   const { store, runId, cellId } = opts;
   const cell = store.get(runId, cellId);
   if (!cell) {
+    const cached = store.getCompleted(runId, cellId);
+    if (cached) {
+      if (opts.terminate) {
+        store.forgetCompleted(runId, cellId);
+        return {
+          ok: true,
+          running: false,
+          value: null,
+          toolCalls: cached.toolCalls,
+        };
+      }
+      return cached;
+    }
     return failedSegment(
       'CellNotFound',
       `no live codemode cell ${cellId}`,

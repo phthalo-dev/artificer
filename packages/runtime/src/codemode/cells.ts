@@ -1,7 +1,7 @@
 import type { QuickJSContext, QuickJSHandle } from 'quickjs-emscripten';
 import type { CodemodeLimits } from '../config.js';
 import type { BridgeState } from './bridge.js';
-import type { CodemodeTool } from './types.js';
+import type { CodemodeSegmentResult, CodemodeTool } from './types.js';
 
 export type RunKv = Map<string, unknown>;
 
@@ -39,6 +39,11 @@ export interface CodemodeCell {
 interface RunState {
   kv: RunKv;
   cells: Map<string, CodemodeCell>;
+  /**
+   * Terminal payloads kept after the isolate is freed so a later wait still
+   * sees the result. These do not count toward maxCells.
+   */
+  completed: Map<string, CodemodeSegmentResult>;
 }
 
 export class CodemodeCellStore {
@@ -93,12 +98,38 @@ export class CodemodeCellStore {
     cell.dispose();
   }
 
+  /**
+   * Remember a terminal payload after the isolate is gone. No-op if the run
+   * has already been disposed (a concurrent `disposeRun`).
+   */
+  cacheCompleted(
+    runId: string,
+    cellId: string,
+    payload: CodemodeSegmentResult,
+  ): void {
+    const run = this.#runs.get(runId);
+    if (!run) return;
+    run.completed.set(cellId, payload);
+  }
+
+  getCompleted(
+    runId: string,
+    cellId: string,
+  ): CodemodeSegmentResult | undefined {
+    return this.#runs.get(runId)?.completed.get(cellId);
+  }
+
+  forgetCompleted(runId: string, cellId: string): void {
+    this.#runs.get(runId)?.completed.delete(cellId);
+  }
+
   disposeRun(runId: string): void {
     const run = this.#runs.get(runId);
     this.#runs.delete(runId);
     if (!run) return;
     for (const cell of run.cells.values()) cell.dispose();
     run.cells.clear();
+    run.completed.clear();
   }
 
   disposeExpired(now = Date.now()): void {
@@ -115,7 +146,7 @@ export class CodemodeCellStore {
   #ensure(runId: string): RunState {
     let run = this.#runs.get(runId);
     if (!run) {
-      run = { kv: new Map(), cells: new Map() };
+      run = { kv: new Map(), cells: new Map(), completed: new Map() };
       this.#runs.set(runId, run);
     }
     return run;
