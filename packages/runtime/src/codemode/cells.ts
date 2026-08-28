@@ -19,6 +19,12 @@ export interface CodemodeCell {
   code: string;
   tools: CodemodeTool[];
   limits: CodemodeLimits;
+  /**
+   * True while a host segment is driving this cell. The store hands out a
+   * resumable id, so this is the only mutual exclusion stopping two overlapping
+   * resumes from polling and disposing the same isolate.
+   */
+  busy: boolean;
   /** Cumulative for the cell's whole lifetime, not per segment. */
   logs: string[];
   notifications: string[];

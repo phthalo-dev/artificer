@@ -605,6 +605,99 @@ test('terminate completes with null and forgets the cell', async (t) => {
   if (!third.ok) assert.equal(third.error.kind, 'CellNotFound');
 });
 
+test('a second resume is refused while a segment is in flight', async (t) => {
+  const { store, runId } = cellFixture(t);
+  const tools = [
+    tool(
+      'slow',
+      () => new Promise<string>((r) => setTimeout(() => r('late'), 150)),
+    ),
+  ];
+  const first = await startCodemodeCell({
+    code: `await yield_control(); return await tools.slow({});`,
+    tools,
+    limits,
+    store,
+    runId,
+  });
+  const cellId = runningCellId(first);
+
+  const inFlight = resumeCodemodeCell({ store, runId, cellId });
+  const overlapping = await resumeCodemodeCell({ store, runId, cellId });
+  assert.equal(overlapping.ok, false);
+  if (!overlapping.ok) {
+    assert.equal(overlapping.error.kind, 'ExecutionFailure');
+    assert.match(overlapping.error.message, /already running a segment/);
+  }
+
+  const settled = await inFlight;
+  assert.equal(settled.ok, true);
+  if (settled.ok && !settled.running) assert.equal(settled.value, 'late');
+});
+
+test('terminate is refused while a segment is in flight', async (t) => {
+  const { store, runId } = cellFixture(t);
+  const tools = [
+    tool(
+      'slow',
+      () => new Promise<string>((r) => setTimeout(() => r('late'), 150)),
+    ),
+  ];
+  const first = await startCodemodeCell({
+    code: `await yield_control(); return await tools.slow({});`,
+    tools,
+    limits,
+    store,
+    runId,
+  });
+  const cellId = runningCellId(first);
+
+  const inFlight = resumeCodemodeCell({ store, runId, cellId });
+  const killed = await resumeCodemodeCell({
+    store,
+    runId,
+    cellId,
+    terminate: true,
+  });
+  assert.equal(killed.ok, false);
+  if (!killed.ok) assert.equal(killed.error.kind, 'ExecutionFailure');
+
+  const settled = await inFlight;
+  assert.equal(settled.ok, true);
+});
+
+test('disposing the run mid-segment fails the segment without rejecting', async (t) => {
+  const { store, runId } = cellFixture(t);
+  const tools = [
+    tool(
+      'slow',
+      () => new Promise<string>((r) => setTimeout(() => r('late'), 150)),
+    ),
+  ];
+  const first = await startCodemodeCell({
+    code: `await yield_control(); return await tools.slow({});`,
+    tools,
+    limits,
+    store,
+    runId,
+  });
+  const cellId = runningCellId(first);
+
+  const inFlight = resumeCodemodeCell({ store, runId, cellId });
+  store.disposeRun(runId);
+  const segment = await inFlight;
+
+  assert.equal(segment.ok, false);
+  if (!segment.ok) {
+    assert.ok(
+      segment.error.kind === 'ExecutionFailure' ||
+        segment.error.kind === 'TimeoutExceeded',
+      `unexpected kind ${segment.error.kind}`,
+    );
+  }
+  assert.equal(store.get(runId, cellId), undefined);
+});
+
 test('resuming an unknown cell is CellNotFound', async (t) => {
   const { store, runId } = cellFixture(t);
   const segment = await resumeCodemodeCell({
