@@ -117,12 +117,14 @@ test('invalid RUNTIME_COMPACTION_PROFILE emits a warning and is ignored', () => 
   ]);
 });
 
-test('codemode limits default to 120s / 32 calls / 12000 bytes', () => {
+test('codemode limits default to 120s / 32 calls / 12000 bytes / 4 cells', () => {
   const config = loadConfig({ LLM_API_KEY: 'test-key' });
   assert.deepEqual(config.codemode, {
     timeoutMs: 120_000,
     maxToolCalls: 32,
     maxOutputBytes: 12_000,
+    maxCells: 4,
+    cellTtlMs: 120_000,
   });
 });
 
@@ -132,12 +134,26 @@ test('RUNTIME_CODEMODE_* env vars override defaults', () => {
     RUNTIME_CODEMODE_TIMEOUT_MS: '5000',
     RUNTIME_CODEMODE_MAX_TOOL_CALLS: '4',
     RUNTIME_CODEMODE_MAX_OUTPUT_BYTES: '100',
+    RUNTIME_CODEMODE_MAX_CELLS: '8',
+    RUNTIME_CODEMODE_CELL_TTL_MS: '3000',
   });
   assert.deepEqual(config.codemode, {
     timeoutMs: 5_000,
     maxToolCalls: 4,
     maxOutputBytes: 100,
+    maxCells: 8,
+    cellTtlMs: 3_000,
   });
+});
+
+test('cellTtlMs defaults to the parsed timeoutMs when TTL env is unset', () => {
+  const config = loadConfig({
+    LLM_API_KEY: 'test-key',
+    RUNTIME_CODEMODE_TIMEOUT_MS: '5000',
+  });
+  assert.equal(config.codemode.timeoutMs, 5_000);
+  assert.equal(config.codemode.maxCells, 4);
+  assert.equal(config.codemode.cellTtlMs, 5_000);
 });
 
 test('invalid RUNTIME_CODEMODE_* values warn and fall back to defaults', () => {
@@ -150,19 +166,25 @@ test('invalid RUNTIME_CODEMODE_* values warn and fall back to defaults', () => {
       RUNTIME_CODEMODE_TIMEOUT_MS: 'nope',
       RUNTIME_CODEMODE_MAX_TOOL_CALLS: '-1',
       RUNTIME_CODEMODE_MAX_OUTPUT_BYTES: '0.5',
+      RUNTIME_CODEMODE_MAX_CELLS: '0',
+      RUNTIME_CODEMODE_CELL_TTL_MS: '-5',
     });
     assert.deepEqual(config.codemode, {
       timeoutMs: 120_000,
       maxToolCalls: 32,
       maxOutputBytes: 12_000,
+      maxCells: 4,
+      cellTtlMs: 120_000,
     });
   } finally {
     console.warn = originalWarn;
   }
-  assert.equal(warnings.length, 3);
+  assert.equal(warnings.length, 5);
   assert.match(String(warnings[0][0]), /RUNTIME_CODEMODE_TIMEOUT_MS/);
   assert.match(String(warnings[1][0]), /RUNTIME_CODEMODE_MAX_TOOL_CALLS/);
   assert.match(String(warnings[2][0]), /RUNTIME_CODEMODE_MAX_OUTPUT_BYTES/);
+  assert.match(String(warnings[3][0]), /RUNTIME_CODEMODE_MAX_CELLS/);
+  assert.match(String(warnings[4][0]), /RUNTIME_CODEMODE_CELL_TTL_MS/);
 });
 
 test('timeoutMs of 0 is invalid and falls back', () => {
