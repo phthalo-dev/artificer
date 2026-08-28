@@ -6,7 +6,9 @@ export type DiagnosticKind =
   | 'InvalidDataValue'
   | 'ToolCallLimitExceeded'
   | 'TimeoutExceeded'
-  | 'ExecutionFailure';
+  | 'ExecutionFailure'
+  | 'CellNotFound'
+  | 'CellLimitExceeded';
 
 export type CodemodeResult =
   | {
