@@ -25,12 +25,12 @@ Worker and orchestrator can call `execute` to run a small JavaScript program tha
 | Env | Default | Description |
 |---|---|---|
 | `RUNTIME_CODEMODE_TIMEOUT_MS` | `120000` | Hard wall-clock lifetime for a cell from its first `execute` admit (QuickJS interrupt). Not reset by `wait_execute`. Does not SIGKILL in-flight `run_shell`. |
-| `RUNTIME_CODEMODE_MAX_TOOL_CALLS` | `32` | Max inner tool calls admitted during one `execute`. |
+| `RUNTIME_CODEMODE_MAX_TOOL_CALLS` | `32` | Max inner tool calls admitted across the whole cell lifetime (yields do not reset the count). |
 | `RUNTIME_CODEMODE_MAX_OUTPUT_BYTES` | `12000` | UTF-8 cap on the JSON result (`value` + `logs`). Oversize returns `truncated: true`. |
 | `RUNTIME_CODEMODE_MAX_CELLS` | `4` | Max concurrent alive cells per run (started via `execute` and not yet disposed). |
-| `RUNTIME_CODEMODE_CELL_TTL_MS` | same as `RUNTIME_CODEMODE_TIMEOUT_MS` | Idle TTL for a yielded cell before the runtime disposes it. |
+| `RUNTIME_CODEMODE_CELL_TTL_MS` | same as `RUNTIME_CODEMODE_TIMEOUT_MS` | Max age from cell start before the runtime disposes it. |
 
-`yield_time_ms` (pragma or `wait_execute` input) is a soft segment budget for one execute/wait turn; the hard `timeoutMs` ceiling still applies to the whole cell from start.
+`yield_time_ms` (pragma or `wait_execute` input) is a soft segment budget for one execute/wait turn; the hard `timeoutMs` ceiling still applies to the whole cell from start. If `wait_execute` omits `yield_time_ms`, it defaults to 10 seconds.
 
 ### `models` block
 

@@ -33,6 +33,14 @@ test('execute runs sibling tools and returns JSON', async () => {
   assert.equal(tool.name, 'execute');
   assert.match(tool.description, /tools\.echo/);
   assert.match(tool.description, /Echo v/);
+  assert.match(tool.description, /yield_control\(\)/);
+  assert.match(tool.description, /store\(key, value\)/);
+  assert.match(tool.description, /load\(key\)/);
+  assert.match(tool.description, /notify\(/);
+  assert.match(tool.description, /exit\(\)/);
+  assert.match(tool.description, /@exec: \{"yield_time_ms": N\}/);
+  assert.match(tool.description, /running: true, cellId/);
+  assert.match(tool.description, /wait_execute/);
   const raw = await tool.handler({
     code: 'return await tools.echo({ v: "z" });',
   });
