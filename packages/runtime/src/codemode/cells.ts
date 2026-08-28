@@ -57,7 +57,7 @@ export class CodemodeCellStore {
     this.#cellTtlMs = opts.cellTtlMs;
   }
 
-  /** How long a cell may sit between segments before it is swept. */
+  /** Max age from cell start; busy cells are not swept until they go idle. */
   get cellTtlMs(): number {
     return this.#cellTtlMs;
   }
@@ -135,6 +135,7 @@ export class CodemodeCellStore {
   disposeExpired(now = Date.now()): void {
     for (const run of this.#runs.values()) {
       for (const [cellId, cell] of run.cells) {
+        if (cell.busy) continue;
         if (now - cell.createdAt >= this.#cellTtlMs) {
           run.cells.delete(cellId);
           cell.dispose();

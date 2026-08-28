@@ -666,6 +666,58 @@ test('terminate is refused while a segment is in flight', async (t) => {
   assert.equal(settled.ok, true);
 });
 
+test('TTL sweep does not dispose a cell that is driving a segment', async (t) => {
+  const ttl = 50;
+  const { store, runId } = cellFixture(t, { cellTtlMs: ttl });
+  const tools = [
+    tool(
+      'slow',
+      () => new Promise<string>((r) => setTimeout(() => r('late'), 150)),
+    ),
+  ];
+  const first = await startCodemodeCell({
+    code: `await yield_control(); return await tools.slow({});`,
+    tools,
+    limits,
+    store,
+    runId,
+  });
+  const cellId = runningCellId(first);
+  const cell = store.get(runId, cellId);
+  assert.ok(cell);
+
+  const inFlight = resumeCodemodeCell({ store, runId, cellId });
+  assert.equal(store.get(runId, cellId)?.busy, true);
+
+  // Parallel execute admits by sweeping first — the race Bugbot flagged.
+  store.admit(runId, cell.createdAt + ttl);
+  assert.equal(store.get(runId, cellId)?.vm.alive, true);
+
+  const settled = await inFlight;
+  assert.equal(settled.ok, true);
+  if (settled.ok && !settled.running) assert.equal(settled.value, 'late');
+});
+
+test('TTL sweep disposes an idle yielded cell past max age', async (t) => {
+  const ttl = 50;
+  const { store, runId } = cellFixture(t, { cellTtlMs: ttl });
+  const first = await startCodemodeCell({
+    code: `await yield_control(); return 1;`,
+    tools: [],
+    limits,
+    store,
+    runId,
+  });
+  const cellId = runningCellId(first);
+  const cell = store.get(runId, cellId);
+  assert.ok(cell);
+  assert.equal(cell.busy, false);
+
+  store.disposeExpired(cell.createdAt + ttl);
+  assert.equal(store.get(runId, cellId), undefined);
+  assert.equal(cell.vm.alive, false);
+});
+
 test('disposing the run mid-segment fails the segment without rejecting', async (t) => {
   const { store, runId } = cellFixture(t);
   const tools = [
