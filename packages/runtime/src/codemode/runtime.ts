@@ -467,8 +467,8 @@ function settleSegment(
 ): CodemodeSegmentResult {
   const { vm, limits, state } = cell;
 
-  // A fatal boundary violation leaves the cell unresumable, so a pause request
-  // must not hand a cellId back to the caller.
+  // A breached hard limit leaves the cell unresumable, so a pause request must
+  // not hand a cellId back to the caller.
   const settled: SegmentOutcome =
     outcome.status === 'yielded' && state.fatal
       ? { status: 'fail', ...state.fatal }
@@ -497,11 +497,15 @@ function settleSegment(
         cell.tools,
       );
       settled.error.dispose();
-      const interrupted = /interrupted/i.test(message);
-      return fail(
-        interrupted ? 'TimeoutExceeded' : 'ExecutionFailure',
-        interrupted ? 'timeoutMs exceeded' : message,
-      );
+      if (/interrupted/i.test(message)) {
+        return fail('TimeoutExceeded', 'timeoutMs exceeded');
+      }
+      // A JSON-safe boundary throw the guest chose not to catch keeps its own
+      // diagnostic instead of collapsing into ExecutionFailure.
+      const kind = state.dataViolations?.has(message)
+        ? 'InvalidDataValue'
+        : 'ExecutionFailure';
+      return fail(kind, message);
     }
 
     if (vm.typeof(settled.value) === 'function') {

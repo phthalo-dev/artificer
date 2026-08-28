@@ -25,6 +25,11 @@ export interface BridgeState {
   exitRequested?: boolean;
   /** Guest promises that pause the turn, resolved when the cell resumes. */
   resumeDeferreds?: QuickJSDeferredPromise[];
+  /**
+   * Messages thrown at the JSON-safe boundary. These throws are catchable, so
+   * this only classifies the diagnostic when one escapes the guest uncaught.
+   */
+  dataViolations?: Set<string>;
 }
 
 /** Host-side state the additive guest globals read and write. */
@@ -202,8 +207,9 @@ export function installGuestGlobals(
     try {
       copy = valueHandle === undefined ? null : guestJsonCopy(vm, valueHandle);
     } catch {
+      // Catchable: a guest that handles this may keep running, yield, or return.
       const message = `store("${key}") value is not JSON-safe`;
-      state.fatal = { kind: 'InvalidDataValue', message };
+      (state.dataViolations ??= new Set()).add(message);
       throw new Error(message);
     }
     globals.kv.set(key, copy);

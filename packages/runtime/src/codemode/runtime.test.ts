@@ -452,7 +452,7 @@ test('load returns undefined for a missing key', async (t) => {
   if (segment.ok && !segment.running) assert.equal(segment.value, 'undefined');
 });
 
-test('store rejects a value that is not JSON-safe', async (t) => {
+test('an uncaught store violation is InvalidDataValue', async (t) => {
   const { store, runId } = cellFixture(t);
   const segment = await startCodemodeCell({
     code: `store('k', function () {}); return 1;`,
@@ -465,21 +465,32 @@ test('store rejects a value that is not JSON-safe', async (t) => {
   if (!segment.ok) assert.equal(segment.error.kind, 'InvalidDataValue');
 });
 
-test('a caught store violation still fails instead of yielding', async (t) => {
+test('a caught store violation lets the cell yield and finish', async (t) => {
   const { store, runId } = cellFixture(t);
-  const segment = await startCodemodeCell({
+  const first = await startCodemodeCell({
     code: `
-      try { store('k', function () {}); } catch (e) {}
+      let caught = '';
+      try { store('bad', function () {}); } catch (e) { caught = e.message; }
+      store('ok', 1);
       await yield_control();
-      return 1;
+      return { caught, ok: load('ok'), bad: typeof load('bad') };
     `,
     tools: [],
     limits,
     store,
     runId,
   });
-  assert.equal(segment.ok, false);
-  if (!segment.ok) assert.equal(segment.error.kind, 'InvalidDataValue');
+  const cellId = runningCellId(first);
+
+  const second = await resumeCodemodeCell({ store, runId, cellId });
+  assert.equal(second.ok, true);
+  if (second.ok && !second.running) {
+    assert.deepEqual(second.value, {
+      caught: 'store("bad") value is not JSON-safe',
+      ok: 1,
+      bad: 'undefined',
+    });
+  }
 });
 
 test('run KV is shared by later cells in the same run', async (t) => {
