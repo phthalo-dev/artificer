@@ -534,6 +534,42 @@ function settleSegment(
   }
 }
 
+/**
+ * Run one segment and turn it into a payload, keeping the isolate accounted for
+ * even when the host throws.
+ *
+ * The reachable case is a run-end `store.disposeRun` landing while a segment is
+ * mid-flight: the cell is freed underneath us and the next
+ * `executePendingJobs` / `getPromiseState` is a use-after-free. Callers get a
+ * typed failure instead of a rejected Promise, and the cell is unregistered so
+ * a dead isolate cannot linger until the next `admit` sweeps it.
+ */
+async function driveSegment(
+  store: CodemodeCellStore,
+  cell: CodemodeCell,
+  yieldTimeMs?: number,
+): Promise<CodemodeSegmentResult> {
+  cell.busy = true;
+  try {
+    return settleSegment(store, cell, await runSegment(cell, yieldTimeMs));
+  } catch (err) {
+    // `settleSegment` disposes on every terminal outcome and must not dispose on
+    // a yield, so this catch is the only place left that can leak a cell.
+    store.disposeCell(cell.runId, cell.id);
+    const message = err instanceof Error ? err.message : String(err);
+    const interrupted = /interrupted/i.test(message);
+    return failedSegment(
+      interrupted ? 'TimeoutExceeded' : 'ExecutionFailure',
+      interrupted ? 'timeoutMs exceeded' : message,
+      outputOf(cell),
+      cell.limits.maxOutputBytes,
+      cell.id,
+    );
+  } finally {
+    cell.busy = false;
+  }
+}
+
 type CellInit =
   | { ok: true; cell: CodemodeCell }
   | {
@@ -626,6 +662,7 @@ function createCell(
       code: opts.code,
       tools: opts.tools,
       limits,
+      busy: false,
       logs,
       notifications,
       state,
@@ -706,13 +743,10 @@ export async function startCodemodeCell(
       limits.maxOutputBytes,
     );
   }
+  // `driveSegment` claims the cell before its first `await`, so registering it
+  // here cannot expose an unclaimed cell to a concurrent resume.
   store.register(init.cell);
-
-  return settleSegment(
-    store,
-    init.cell,
-    await runSegment(init.cell, pragma.pragma.yieldTimeMs),
-  );
+  return driveSegment(store, init.cell, pragma.pragma.yieldTimeMs);
 }
 
 /**
@@ -734,6 +768,18 @@ export async function resumeCodemodeCell(
   }
 
   const maxOutputBytes = cell.limits.maxOutputBytes;
+  // Terminating is refused too: disposing under a live segment is the same
+  // use-after-free, and the in-flight segment is already capped by `deadlineAt`.
+  if (cell.busy) {
+    return failedSegment(
+      'ExecutionFailure',
+      `codemode cell ${cellId} is already running a segment`,
+      outputOf(cell),
+      maxOutputBytes,
+      cellId,
+    );
+  }
+
   if (opts.terminate) {
     const payload = completedSegment(cell, null);
     store.disposeCell(runId, cellId);
@@ -764,7 +810,7 @@ export async function resumeCodemodeCell(
 
   cell.state.yieldRequested = false;
   resolveResumeDeferreds(cell.state);
-  return settleSegment(store, cell, await runSegment(cell, opts.yieldTimeMs));
+  return driveSegment(store, cell, opts.yieldTimeMs);
 }
 
 /** The fields a segment payload and a v1 result share verbatim. */
