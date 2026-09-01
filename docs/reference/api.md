@@ -298,7 +298,7 @@ Delete a memory by ID.
 
 ### Tool approval policy
 
-All policy routes use the `/api` bearer authentication described above. They manage the exec-directory policy; identity policy rules are loaded into the effective list but cannot be deleted through this API.
+All policy routes use the `/api` bearer authentication described above. Rules are agent-wide in v1 and have `scope: "agent"`; per-run and per-workstream scopes are not supported. These routes manage the exec-directory policy; identity policy rules are loaded into the effective list but cannot be deleted through this API. The runtime exposes no model-facing API or tool for policy mutation.
 
 #### `GET /api/policy/rules`
 
