@@ -28,6 +28,23 @@ Worker and orchestrator can call `execute` to run a small JavaScript program tha
 | `RUNTIME_CODEMODE_MAX_TOOL_CALLS` | `32` | Max inner tool calls admitted during one `execute`. |
 | `RUNTIME_CODEMODE_MAX_OUTPUT_BYTES` | `12000` | UTF-8 cap on the JSON result (`value` + `logs`). Oversize returns `truncated: true`. |
 
+### Tool approval policy
+
+Tools marked with `needsApproval` are deny-by-default: their handlers run only when a matching `allow` rule exists. A matching deny returns a structured `approval_denied` tool error; no matching rule returns `approval_required`. Approval does not pause a call to wait for a person—the policy must be updated and the tool call retried.
+
+In v1, all rules are agent-wide and use `scope: "agent"`. Per-run and per-workstream scopes are not supported.
+
+The runtime loads policy rules from:
+
+- `<execDir>/tool-policy.json`, resolved by `Layout.toolPolicyFile()`
+- Optional identity policy at `<identity-repo>/agent/tool-policy.json`
+
+Exec-directory rules override identity rules with the same tool and pattern. A missing or corrupt file is treated as an empty rule set and produces a warning, so approval-gated actions fail closed.
+
+The built-in `run_shell` tool gates dangerous commands. The built-in `fetch_url` schema is `GET`-only, so its requests remain ungated. A fetch-style tool named `fetch` or `fetch_url` with a non-`GET` method would require a matching allow rule. Hard shell-policy denies and URL/private-IP guards are separate and unchanged; an approval allow rule does not bypass them.
+
+The runtime exposes no model-facing API or tool for changing policy. Exec-directory policy mutations are available only through `POST /api/policy/rules` and `DELETE /api/policy/rules/:id`; this is an API boundary, not a claim that an OS sandbox prevents other filesystem access. Autonomous agents should ship useful identity-level allow rules in `agent/tool-policy.json` for their normal workflow. See the bearer-authenticated [policy API](./api.md#tool-approval-policy).
+
 ### `models` block
 
 Override individual model tiers. All fields are optional; unset tiers fall back to the active preset.

@@ -38,6 +38,7 @@ export default defineTool({
     required: ['query'],
   },
   roles: ['worker', 'planner'], // which roles can call this tool
+  needsApproval: true,          // require a matching allow rule
   async execute(input) {        // input is typed from your schema
     // ... do work ...
     return 'result as a string'; // must return a string
@@ -51,7 +52,14 @@ Each field:
 - **`description`** — shown to the LLM to decide when to call the tool. Be specific about what it returns, not just what it does.
 - **`input`** — a JSON Schema object describing the tool's input. The `execute` function receives a value typed from this schema.
 - **`roles`** — which agent roles can call this tool (see below).
+- **`needsApproval`** — optional boolean or `(input) => boolean`. When `true`, the tool runs only if an `allow` rule matches the call. A function can gate only selected inputs.
 - **`execute`** — the function that runs when the tool is called. Must return a string (or a `Promise<string>`).
+
+## Approval-gated tools
+
+Approval is deny-by-default. When `needsApproval` is `true` (or its function returns `true`), the runtime checks the tool policy before calling `execute`. With no matching rule, the handler does not run and the tool returns a structured JSON error with `kind: "approval_required"`; an explicit deny returns `kind: "approval_denied"`.
+
+Approval is policy-based, not an interactive pause: the runtime does not wait for a person in the middle of a tool call. Add an allow rule, then retry the call. The runtime exposes no model-facing API or tool for changing policy; policy mutations use the bearer-authenticated policy API. See [Tool approval policy](../reference/config.md#tool-approval-policy) for policy locations and management.
 
 ## The `roles` field
 

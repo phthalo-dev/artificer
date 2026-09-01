@@ -1,3 +1,4 @@
+import { randomUUID } from 'node:crypto';
 import { Hono } from 'hono';
 import { cors } from 'hono/cors';
 import { streamSSE } from 'hono/streaming';
@@ -31,9 +32,21 @@ import { resolveUiDistDir } from './ui-dist.js';
 import { mountChannels } from '../channels/mount.js';
 import type { ArtificerChannel } from '../api/types.js';
 import type { IdentityStore } from '../storage/identity-store.js';
+import {
+  loadEffectivePolicy,
+  saveExecPolicy,
+  type PolicyRule,
+} from '../tools/tool-policy.js';
 
 const sendMessageSchema = z.object({
   content: z.string().min(1, 'content is required'),
+});
+
+const createPolicyRuleSchema = z.object({
+  tool: z.string().min(1),
+  pattern: z.string().min(1),
+  effect: z.enum(['allow', 'deny']),
+  note: z.string().optional(),
 });
 
 const updateModelsSchema = z
@@ -255,6 +268,51 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
   api.get('/health', (c) =>
     c.json({ ok: true, agent: engine.config.agentName }),
   );
+
+  api.get('/policy/rules', (c) => {
+    const policy = loadEffectivePolicy({
+      execPath: engine.store.layout.toolPolicyFile(),
+      identityPath: engine.identity?.layout.agentToolPolicyFile(),
+    });
+    return c.json({ rules: policy.rules });
+  });
+
+  api.post('/policy/rules', async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = createPolicyRuleSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+
+    const execPath = engine.store.layout.toolPolicyFile();
+    const policy = loadEffectivePolicy({ execPath });
+    const rule: PolicyRule = {
+      id: randomUUID(),
+      ...parsed.data,
+      scope: 'agent',
+      createdAt: new Date().toISOString(),
+    };
+    saveExecPolicy(execPath, {
+      version: 1,
+      rules: [...policy.rules, rule],
+    });
+    return c.json({ rule }, 201);
+  });
+
+  api.delete('/policy/rules/:id', (c) => {
+    const execPath = engine.store.layout.toolPolicyFile();
+    const policy = loadEffectivePolicy({ execPath });
+    const id = c.req.param('id');
+    if (!policy.rules.some((rule) => rule.id === id)) {
+      return c.json({ error: 'not found' }, 404);
+    }
+
+    saveExecPolicy(execPath, {
+      version: 1,
+      rules: policy.rules.filter((rule) => rule.id !== id),
+    });
+    return c.json({ ok: true });
+  });
 
   api.get('/config/models', (c) => {
     const catalog = Object.values(MODEL_CATALOG).map((entry) => ({

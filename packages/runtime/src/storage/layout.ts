@@ -119,6 +119,10 @@ export class Layout {
     return path.join(this.root, 'quota-state.json');
   }
 
+  toolPolicyFile(): string {
+    return path.join(this.root, 'tool-policy.json');
+  }
+
   historyIndexFile(): string {
     return path.join(this.root, 'history', 'index.json');
   }

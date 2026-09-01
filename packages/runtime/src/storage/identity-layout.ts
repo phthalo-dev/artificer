@@ -33,6 +33,10 @@ export class IdentityLayout {
     return path.join(this.root, 'agent', 'tools');
   }
 
+  agentToolPolicyFile(): string {
+    return path.join(this.root, 'agent', 'tool-policy.json');
+  }
+
   get channelsDir(): string {
     return path.join(this.root, 'agent', 'channels');
   }

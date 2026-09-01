@@ -38,6 +38,12 @@ export async function dev(rootDir?: string): Promise<void> {
         }
         break;
       }
+      case 'approval': {
+        console.log(
+          `[artificer] approval ${event.data.tool} ${event.data.approvalKey}`,
+        );
+        break;
+      }
     }
   });
 }
