@@ -67,13 +67,34 @@ test('fetchApprovalKey uses an uppercase method and omits query and hash', () =>
   );
 });
 
+test('fetchApprovalKey returns a fallback for invalid or empty URLs', () => {
+  assert.equal(fetchApprovalKey('GET', ''), 'GET <invalid-url>');
+  assert.equal(fetchApprovalKey('post', 'not a url'), 'POST <invalid-url>');
+});
+
+test('shellApprovalKey keeps rm flags and path operands distinct', () => {
+  assert.equal(
+    shellApprovalKey('rm -rf ./node_modules'),
+    'rm -rf ./node_modules',
+  );
+  assert.equal(shellApprovalKey('rm -rf /'), 'rm -rf /');
+  assert.notEqual(
+    shellApprovalKey('rm -rf ./node_modules'),
+    shellApprovalKey('rm -rf /'),
+  );
+  assert.equal(shellApprovalKey('rmdir empty-dir'), 'rmdir empty-dir');
+});
+
 test('isDangerousShellCommand identifies dangerous and read-only commands', () => {
   const dangerous = [
     'rm -rf /',
     'rm -r -f build',
     'git push origin main',
+    'git push --force origin main',
     'git -C repo push origin main',
     'git reset --hard HEAD',
+    'git rebase main',
+    'git clean -fd',
     'curl -X POST https://example.com',
     'wget --post-data=x https://example.com',
     'ssh deploy@example.com',
@@ -91,6 +112,8 @@ test('isDangerousShellCommand identifies dangerous and read-only commands', () =
     'git show HEAD',
     'git add src/index.ts',
     'git commit -m "safe"',
+    'git checkout abc123',
+    'git checkout -b feature',
     'curl -f https://example.com',
     'wget --method=GET https://example.com',
     'terraform plan -out=apply',
@@ -115,10 +138,11 @@ test('loadEffectivePolicy returns an empty policy for missing files', () => {
     assert.deepEqual(
       loadEffectivePolicy({
         execPath: path.join(root, 'missing-exec.json'),
+        identityPath: path.join(root, 'missing-identity.json'),
       }),
       { version: 1, rules: [] },
     );
-    assert.equal(warnings.length, 1);
+    assert.equal(warnings.length, 0);
   } finally {
     console.warn = originalWarn;
     fs.rmSync(root, { recursive: true, force: true });

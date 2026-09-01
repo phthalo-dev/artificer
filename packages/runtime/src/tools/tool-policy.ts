@@ -19,23 +19,6 @@ export type ToolPolicyFile = {
 };
 
 const EMPTY_POLICY: ToolPolicyFile = { version: 1, rules: [] };
-const TWO_TOKEN_COMMANDS = new Set([
-  'npm',
-  'npx',
-  'pnpm',
-  'yarn',
-  'git',
-  'cargo',
-  'go',
-  'pip',
-  'pip3',
-  'poetry',
-  'uv',
-  'kubectl',
-  'terraform',
-  'make',
-  'brew',
-]);
 
 function shellTokens(command: string): string[] {
   return command.match(/"[^"]*"|'[^']*'|\S+/g) ?? [];
@@ -100,28 +83,35 @@ function redactShellTokens(tokens: string[]): string[] {
 
 /**
  * Produces a stable, non-secret command prefix for approval matching.
- * Package and command runners retain their operation; Docker Compose retains
- * its subcommand as a third token. Other commands use a two-token prefix.
+ * `rm`/`rmdir` keep flags and path operands so distinct targets do not
+ * collapse. Docker Compose retains its subcommand as a third token.
+ * Other commands use a two-token prefix.
  */
 export function shellApprovalKey(command: string): string {
   const tokens = redactShellTokens(shellTokens(command.trim()));
   if (tokens.length === 0) return '';
 
   const executable = tokens[0]!.toLowerCase();
+  if (executable === 'rm' || executable === 'rmdir') {
+    return tokens.join(' ');
+  }
+
   const arity =
     executable === 'docker-compose' ||
     (executable === 'docker' && tokens[1]?.toLowerCase() === 'compose')
       ? 3
-      : TWO_TOKEN_COMMANDS.has(executable)
-        ? 2
-        : 2;
+      : 2;
 
   return tokens.slice(0, arity).join(' ');
 }
 
 export function fetchApprovalKey(method: string, url: string): string {
-  const parsed = new URL(url);
-  return `${method.toUpperCase()} ${parsed.origin}${parsed.pathname}`;
+  try {
+    const parsed = new URL(url);
+    return `${method.toUpperCase()} ${parsed.origin}${parsed.pathname}`;
+  } catch {
+    return `${method.toUpperCase()} <invalid-url>`;
+  }
 }
 
 function hasDangerousRm(command: string): boolean {
@@ -161,9 +151,7 @@ function hasDangerousGitCommand(command: string): boolean {
       }
     }
 
-    return ['push', 'reset', 'rebase', 'checkout', 'clean'].includes(
-      tokens[index] ?? '',
-    );
+    return ['push', 'reset', 'rebase', 'clean'].includes(tokens[index] ?? '');
   });
 }
 
@@ -271,12 +259,18 @@ function isToolPolicyFile(value: unknown): value is ToolPolicyFile {
   );
 }
 
+function isMissingPathError(error: unknown): boolean {
+  return (
+    typeof error === 'object' &&
+    error !== null &&
+    'code' in error &&
+    (error as { code?: unknown }).code === 'ENOENT'
+  );
+}
+
 function loadPolicyFile(filePath: string | undefined): ToolPolicyFile {
   if (!filePath) return EMPTY_POLICY;
-  if (!fs.existsSync(filePath)) {
-    console.warn(`Could not load tool policy file ${filePath}: file not found`);
-    return EMPTY_POLICY;
-  }
+  if (!fs.existsSync(filePath)) return EMPTY_POLICY;
 
   try {
     const parsed: unknown = JSON.parse(fs.readFileSync(filePath, 'utf8'));
@@ -285,6 +279,7 @@ function loadPolicyFile(filePath: string | undefined): ToolPolicyFile {
     }
     return parsed;
   } catch (error) {
+    if (isMissingPathError(error)) return EMPTY_POLICY;
     const detail = error instanceof Error ? error.message : String(error);
     console.warn(`Could not load tool policy file ${filePath}: ${detail}`);
     return EMPTY_POLICY;
