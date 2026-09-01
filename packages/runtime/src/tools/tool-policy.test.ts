@@ -51,6 +51,12 @@ test('shellApprovalKey redacts secret environment assignments', () => {
   assert.doesNotMatch(key, /supersecret/);
 });
 
+test('shellApprovalKey redacts quoted token-like secrets', () => {
+  const key = shellApprovalKey('echo "ghp_abc123"');
+
+  assert.doesNotMatch(key, /ghp_/);
+});
+
 test('fetchApprovalKey uses an uppercase method and omits query and hash', () => {
   assert.equal(
     fetchApprovalKey(
@@ -72,7 +78,9 @@ test('isDangerousShellCommand identifies dangerous and read-only commands', () =
     'wget --post-data=x https://example.com',
     'ssh deploy@example.com',
     'kubectl apply -f deployment.yaml',
+    'kubectl --context prod apply -f deployment.yaml',
     'terraform apply',
+    'terraform -chdir=infra apply',
     'helm upgrade api chart',
   ];
   const safe = [
@@ -82,6 +90,7 @@ test('isDangerousShellCommand identifies dangerous and read-only commands', () =
     'git show HEAD',
     'git add src/index.ts',
     'git commit -m "safe"',
+    'curl -f https://example.com',
     'wget --method=GET https://example.com',
   ];
 
@@ -95,16 +104,20 @@ test('isDangerousShellCommand identifies dangerous and read-only commands', () =
 
 test('loadEffectivePolicy returns an empty policy for missing files', () => {
   const root = fs.mkdtempSync(path.join(os.tmpdir(), 'artificer-policy-'));
+  const warnings: unknown[][] = [];
+  const originalWarn = console.warn;
+  console.warn = (...args: unknown[]) => warnings.push(args);
 
   try {
     assert.deepEqual(
       loadEffectivePolicy({
         execPath: path.join(root, 'missing-exec.json'),
-        identityPath: path.join(root, 'missing-identity.json'),
       }),
       { version: 1, rules: [] },
     );
+    assert.equal(warnings.length, 1);
   } finally {
+    console.warn = originalWarn;
     fs.rmSync(root, { recursive: true, force: true });
   }
 });
