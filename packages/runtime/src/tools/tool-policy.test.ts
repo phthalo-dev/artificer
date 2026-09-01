@@ -85,16 +85,41 @@ test('shellApprovalKey keeps rm flags and path operands distinct', () => {
   assert.equal(shellApprovalKey('rmdir empty-dir'), 'rmdir empty-dir');
 });
 
+test('shellApprovalKey keys chained commands from each segment', () => {
+  assert.equal(
+    shellApprovalKey('git status && git push origin main'),
+    'git status && git push',
+  );
+  assert.notEqual(
+    shellApprovalKey('git status && git push origin main'),
+    'git status',
+  );
+  assert.equal(
+    shellApprovalKey('git status; git push origin main'),
+    'git status && git push',
+  );
+});
+
+test('shellApprovalKey and danger detection use the executable basename', () => {
+  assert.equal(shellApprovalKey('/usr/bin/git push origin main'), 'git push');
+  assert.equal(shellApprovalKey('/bin/rm -rf /'), 'rm -rf /');
+});
+
 test('isDangerousShellCommand identifies dangerous and read-only commands', () => {
   const dangerous = [
     'rm -rf /',
     'rm -r -f build',
+    '/bin/rm -rf /',
+    "'rm' -rf /",
     'git push origin main',
+    '/usr/bin/git push origin main',
     'git push --force origin main',
     'git -C repo push origin main',
     'git reset --hard HEAD',
     'git rebase main',
     'git clean -fd',
+    'git status && git push origin main',
+    'git status\ngit push origin main',
     'curl -X POST https://example.com',
     'wget --post-data=x https://example.com',
     'ssh deploy@example.com',
@@ -104,6 +129,8 @@ test('isDangerousShellCommand identifies dangerous and read-only commands', () =
     'terraform apply',
     'terraform -chdir=infra apply',
     'helm upgrade api chart',
+    'helm --namespace prod upgrade api chart',
+    'helm -n prod upgrade api chart',
   ];
   const safe = [
     'git status',
