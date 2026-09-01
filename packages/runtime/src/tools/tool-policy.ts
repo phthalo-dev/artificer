@@ -1,0 +1,282 @@
+import fs from 'node:fs';
+import path from 'node:path';
+
+export type PolicyEffect = 'allow' | 'deny';
+
+export type PolicyRule = {
+  id: string;
+  tool: string;
+  pattern: string;
+  effect: PolicyEffect;
+  scope: 'agent';
+  createdAt: string;
+  note?: string;
+};
+
+export type ToolPolicyFile = {
+  version: 1;
+  rules: PolicyRule[];
+};
+
+const EMPTY_POLICY: ToolPolicyFile = { version: 1, rules: [] };
+const TWO_TOKEN_COMMANDS = new Set([
+  'npm',
+  'npx',
+  'pnpm',
+  'yarn',
+  'git',
+  'cargo',
+  'go',
+  'pip',
+  'pip3',
+  'poetry',
+  'uv',
+  'kubectl',
+  'terraform',
+  'make',
+  'brew',
+]);
+
+function shellTokens(command: string): string[] {
+  return command.match(/"[^"]*"|'[^']*'|\S+/g) ?? [];
+}
+
+function isSecretValue(token: string): boolean {
+  return (
+    /^(?:gh[pousr]_[A-Za-z0-9]+|sk-[A-Za-z0-9_-]+)$/i.test(token) ||
+    /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token) ||
+    (token.length >= 24 &&
+      /^[A-Za-z0-9+/=_-]+$/.test(token) &&
+      /[A-Za-z]/.test(token) &&
+      /\d/.test(token))
+  );
+}
+
+function redactShellTokens(tokens: string[]): string[] {
+  const redacted: string[] = [];
+
+  for (let index = 0; index < tokens.length; index += 1) {
+    const token = tokens[index]!;
+    if (/^[A-Za-z_][A-Za-z0-9_]*=/.test(token) || isSecretValue(token)) {
+      continue;
+    }
+    if (
+      /^--?(?:token|secret|password|pass|api[-_]?key|auth|credential)=/i.test(
+        token,
+      )
+    ) {
+      continue;
+    }
+    if (
+      /^--?(?:token|secret|password|pass|api[-_]?key|auth|credential)$/i.test(
+        token,
+      )
+    ) {
+      index += 1;
+      continue;
+    }
+    if (/^bearer$/i.test(token) && index + 1 < tokens.length) {
+      index += 1;
+      continue;
+    }
+    redacted.push(token);
+  }
+
+  if (redacted[0] === 'env') {
+    redacted.shift();
+  }
+  return redacted;
+}
+
+/**
+ * Produces a stable, non-secret command prefix for approval matching.
+ * Package and command runners retain their operation; Docker Compose retains
+ * its subcommand as a third token. Other commands use a two-token prefix.
+ */
+export function shellApprovalKey(command: string): string {
+  const tokens = redactShellTokens(shellTokens(command.trim()));
+  if (tokens.length === 0) return '';
+
+  const executable = tokens[0]!.toLowerCase();
+  const arity =
+    executable === 'docker-compose' ||
+    (executable === 'docker' && tokens[1]?.toLowerCase() === 'compose')
+      ? 3
+      : TWO_TOKEN_COMMANDS.has(executable)
+        ? 2
+        : 2;
+
+  return tokens.slice(0, arity).join(' ');
+}
+
+export function fetchApprovalKey(method: string, url: string): string {
+  const parsed = new URL(url);
+  return `${method.toUpperCase()} ${parsed.origin}${parsed.pathname}`;
+}
+
+function hasDangerousRm(command: string): boolean {
+  return command.split(/[;&|]/).some((segment) => {
+    const tokens = shellTokens(segment.toLowerCase());
+    const rmIndex = tokens.indexOf('rm');
+    if (rmIndex < 0) return false;
+
+    const flags = tokens
+      .slice(rmIndex + 1)
+      .filter((token) => token.startsWith('-'));
+    const recursive = flags.some(
+      (flag) => flag === '--recursive' || /^-[^-]*r/.test(flag),
+    );
+    const force = flags.some(
+      (flag) => flag === '--force' || /^-[^-]*f/.test(flag),
+    );
+    return recursive && force;
+  });
+}
+
+function hasDangerousGitCommand(command: string): boolean {
+  return command.split(/[;&|]/).some((segment) => {
+    const tokens = shellTokens(segment.toLowerCase());
+    let index = tokens.indexOf('git');
+    if (index < 0) return false;
+    index += 1;
+
+    while (tokens[index]?.startsWith('-')) {
+      const option = tokens[index]!;
+      index += 1;
+      if (
+        !option.includes('=') &&
+        ['-c', '--git-dir', '--work-tree', '--namespace'].includes(option)
+      ) {
+        index += 1;
+      }
+    }
+
+    return ['push', 'reset', 'rebase', 'checkout', 'clean'].includes(
+      tokens[index] ?? '',
+    );
+  });
+}
+
+export function isDangerousShellCommand(command: string): boolean {
+  const normalized = command.toLowerCase();
+
+  if (hasDangerousRm(command) || hasDangerousGitCommand(command)) return true;
+
+  if (
+    /\bcurl\b[^;&|\n]*(?:\s-(?:x\s*(?:post|put|patch|delete)|d|f|t|o)(?:\s|$)|--(?:request(?:=|\s+)(?:post|put|patch|delete)|data(?:-[a-z-]+)?(?:=|\s)|form(?:=|\s)|upload-file(?:=|\s)|output(?:=|\s)))/i.test(
+      command,
+    )
+  ) {
+    return true;
+  }
+  if (
+    /\bwget\b[^;&|\n]*(?:--(?:post-data|post-file|output-document)(?:=|\s)|--method(?:=|\s+)(?:post|put|patch|delete)|\s-o(?:\s|$))/i.test(
+      command,
+    )
+  ) {
+    return true;
+  }
+
+  return (
+    /\bssh\b/.test(normalized) ||
+    /\bkubectl\s+apply\b/.test(normalized) ||
+    /\bterraform\s+apply\b/.test(normalized) ||
+    /\bhelm\s+upgrade\b/.test(normalized)
+  );
+}
+
+function isPolicyRule(value: unknown): value is PolicyRule {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    typeof candidate.id === 'string' &&
+    typeof candidate.tool === 'string' &&
+    typeof candidate.pattern === 'string' &&
+    (candidate.effect === 'allow' || candidate.effect === 'deny') &&
+    candidate.scope === 'agent' &&
+    typeof candidate.createdAt === 'string' &&
+    (candidate.note === undefined || typeof candidate.note === 'string')
+  );
+}
+
+function isToolPolicyFile(value: unknown): value is ToolPolicyFile {
+  if (typeof value !== 'object' || value === null) return false;
+  const candidate = value as Record<string, unknown>;
+  return (
+    candidate.version === 1 &&
+    Array.isArray(candidate.rules) &&
+    candidate.rules.every(isPolicyRule)
+  );
+}
+
+function loadPolicyFile(filePath: string | undefined): ToolPolicyFile {
+  if (!filePath || !fs.existsSync(filePath)) return EMPTY_POLICY;
+
+  try {
+    const parsed: unknown = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+    if (!isToolPolicyFile(parsed)) {
+      throw new Error('invalid policy file shape');
+    }
+    return parsed;
+  } catch (error) {
+    const detail = error instanceof Error ? error.message : String(error);
+    console.warn(`Could not load tool policy file ${filePath}: ${detail}`);
+    return EMPTY_POLICY;
+  }
+}
+
+export function loadEffectivePolicy(opts: {
+  execPath: string;
+  identityPath?: string;
+}): ToolPolicyFile {
+  const identity = loadPolicyFile(opts.identityPath);
+  const exec = loadPolicyFile(opts.execPath);
+  const overridden = new Set(
+    exec.rules.map((candidate) => `${candidate.tool}\0${candidate.pattern}`),
+  );
+
+  return {
+    version: 1,
+    rules: [
+      ...identity.rules.filter(
+        (candidate) =>
+          !overridden.has(`${candidate.tool}\0${candidate.pattern}`),
+      ),
+      ...exec.rules,
+    ],
+  };
+}
+
+function globMatches(pattern: string, value: string): boolean {
+  const expression = pattern
+    .split('*')
+    .map((part) => part.replace(/[\\^$.*+?()[\]{}|]/g, '\\$&'))
+    .join('.*');
+  return new RegExp(`^${expression}$`).test(value);
+}
+
+export function matchRule(
+  policy: ToolPolicyFile,
+  tool: string,
+  approvalKey: string,
+): PolicyRule | undefined {
+  let lastAllow: PolicyRule | undefined;
+
+  for (let index = policy.rules.length - 1; index >= 0; index -= 1) {
+    const candidate = policy.rules[index]!;
+    if (
+      (candidate.tool === tool || candidate.tool === '*') &&
+      globMatches(candidate.pattern, approvalKey)
+    ) {
+      if (candidate.effect === 'deny') return candidate;
+      lastAllow ??= candidate;
+    }
+  }
+
+  return lastAllow;
+}
+
+export function saveExecPolicy(execPath: string, file: ToolPolicyFile): void {
+  fs.mkdirSync(path.dirname(execPath), { recursive: true });
+  fs.writeFileSync(execPath, `${JSON.stringify(file, null, 2)}\n`, 'utf8');
+}
