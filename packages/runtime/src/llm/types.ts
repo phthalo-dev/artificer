@@ -17,6 +17,7 @@ export interface ToolDef {
   description: string;
   inputSchema: JsonSchema;
   handler: (input: Record<string, unknown>) => Promise<string>;
+  needsApproval?: boolean | ((input: Record<string, unknown>) => boolean);
 }
 
 export interface CallResult {

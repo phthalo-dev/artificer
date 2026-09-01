@@ -4,6 +4,9 @@ import type {
   QuickJSHandle,
 } from 'quickjs-emscripten';
 import type { ToolInvocation } from '../storage/types.js';
+import { enforceApproval } from '../tools/approval.js';
+import type { ToolPolicyFile } from '../tools/tool-policy.js';
+import type { RuntimeEvent } from '../context.js';
 import {
   CODEMODE_MAX_CONCURRENCY,
   type CodemodeTool,
@@ -19,6 +22,10 @@ export interface BridgeState {
   pending?: Set<QuickJSDeferredPromise>;
   /** Wakes the host wait loop after a tool settles. */
   kick?: () => void;
+  policy?: ToolPolicyFile;
+  emit?: (event: RuntimeEvent) => void;
+  runId?: string;
+  workstreamId?: string;
 }
 
 function executePendingJobs(vm: QuickJSContext): void {
@@ -140,8 +147,19 @@ export function installTools(
       const run = () => {
         inFlight += 1;
         const at = new Date().toISOString();
-        void def
-          .handler(input)
+        const policy = state.policy ?? { version: 1 as const, rules: [] };
+        const decision = enforceApproval({
+          tool: def,
+          input,
+          policy,
+          emit: state.emit,
+          runId: state.runId,
+          workstreamId: state.workstreamId,
+        });
+        const pendingResult = decision.allow
+          ? def.handler(input)
+          : Promise.resolve(decision.result);
+        void pendingResult
           .then((output) => {
             state.onToolCall?.({ name: def.name, input, output, at });
             if (state.disposed) return;

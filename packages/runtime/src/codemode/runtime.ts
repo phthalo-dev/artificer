@@ -281,6 +281,10 @@ export async function runCodemode(
     toolCalls: [],
     admitted: 0,
     onToolCall: opts.onToolCall,
+    policy: opts.policy,
+    emit: opts.emit,
+    runId: opts.runId,
+    workstreamId: opts.workstreamId,
   };
   const deadline = Date.now() + opts.limits.timeoutMs;
 

@@ -8,6 +8,7 @@ import {
   checkGitStash,
   checkReviewerWrite,
 } from './shell-policy.js';
+import { isDangerousShellCommand } from './tool-policy.js';
 import { buildGitEnv } from './git-env.js';
 
 const execAsync = promisify(exec);
@@ -93,6 +94,8 @@ export function createShellTool(ctx: ToolContext): ToolDef[] {
         },
         required: ['command'],
       },
+      needsApproval: (input) =>
+        isDangerousShellCommand(String(input.command ?? '')),
       handler: async (input) => {
         const cwd = input.cwd
           ? `${workspaceDir}/${String(input.cwd)}`

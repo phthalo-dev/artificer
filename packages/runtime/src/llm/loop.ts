@@ -11,7 +11,10 @@ import {
 import { emptyUsage, type ToolInvocation } from '../storage/types.js';
 import { applyResultBudget } from '../storage/tool-results.js';
 import type { ToolResultConfig } from '../config.js';
+import type { RuntimeEvent } from '../context.js';
 import type { Layout } from '../storage/layout.js';
+import { enforceApproval } from '../tools/approval.js';
+import type { ToolPolicyFile } from '../tools/tool-policy.js';
 import type { CallResult, ToolDef } from './types.js';
 import { mergeProviderOptions } from './reasoning-options.js';
 
@@ -45,6 +48,11 @@ export interface RunToolLoopOptions {
   onToolCall?: (invocation: ToolInvocation) => void;
   /** Spill large tool outputs to disk instead of feeding them to the model. */
   toolResultSpill?: ToolResultSpillContext;
+  /** Effective tool-approval policy for this call; empty rules fail closed. */
+  policy?: ToolPolicyFile;
+  emit?: (event: RuntimeEvent) => void;
+  runId?: string;
+  workstreamId?: string;
 }
 
 /** Cache-creation tokens live in provider metadata, not the normalized usage. */
@@ -77,6 +85,10 @@ export async function runToolLoop(
     maxTokens = 4096,
     onToolCall,
     toolResultSpill,
+    policy = { version: 1 as const, rules: [] },
+    emit,
+    runId,
+    workstreamId,
   } = opts;
 
   const toolCalls: ToolInvocation[] = [];
@@ -95,7 +107,17 @@ export async function runToolLoop(
         const args = (input ?? {}) as Record<string, unknown>;
         const at = new Date().toISOString();
         try {
-          const rawOutput = await def.handler(args);
+          const decision = enforceApproval({
+            tool: def,
+            input: args,
+            policy,
+            emit,
+            runId,
+            workstreamId,
+          });
+          const rawOutput = decision.allow
+            ? await def.handler(args)
+            : decision.result;
           let output = rawOutput || '(no output)';
           let spillPath: string | undefined;
 

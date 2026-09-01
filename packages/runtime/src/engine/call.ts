@@ -14,6 +14,7 @@ import type { IdentityStore } from '../storage/identity-store.js';
 import type { RunRecord, ToolInvocation } from '../storage/types.js';
 import { emptyUsage } from '../storage/types.js';
 import { createToolPlan } from '../tools/tool-plan.js';
+import { loadEffectivePolicy } from '../tools/tool-policy.js';
 import { findGitRepo } from './git-repo.js';
 import type { WorkerExecutor } from './executor.js';
 import { RoleRegistry } from './role-registry.js';
@@ -363,6 +364,13 @@ export async function executeCall(
         // The planner may emit a long plan in one response; give it room so the
         // plan isn't truncated mid-write.
         maxTokens: effectiveBaseRole === 'planner' ? 8192 : 4096,
+        policy: loadEffectivePolicy({
+          execPath: store.layout.toolPolicyFile(),
+          identityPath: engine.identity?.layout.agentToolPolicyFile(),
+        }),
+        emit: (event) => engine.emit(event),
+        runId: run.id,
+        workstreamId: run.workstreamId,
         toolResultSpill: {
           layout: store.layout,
           runId: run.id,
