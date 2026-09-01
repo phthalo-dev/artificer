@@ -1,5 +1,7 @@
 import type { CodemodeLimits } from '../config.js';
 import type { ToolInvocation } from '../storage/types.js';
+import type { RuntimeEvent } from '../context.js';
+import type { ToolPolicyFile } from '../tools/tool-policy.js';
 
 export type DiagnosticKind =
   | 'ParseError'
@@ -27,6 +29,7 @@ export type CodemodeResult =
 export interface CodemodeTool {
   name: string;
   handler: (input: Record<string, unknown>) => Promise<string>;
+  needsApproval?: boolean | ((input: Record<string, unknown>) => boolean);
 }
 
 export const CODEMODE_MAX_CONCURRENCY = 8;
@@ -37,4 +40,8 @@ export interface RunCodemodeOptions {
   tools: CodemodeTool[];
   limits: CodemodeLimits;
   onToolCall?: (invocation: ToolInvocation) => void;
+  policy?: ToolPolicyFile;
+  emit?: (event: RuntimeEvent) => void;
+  runId?: string;
+  workstreamId?: string;
 }

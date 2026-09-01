@@ -39,3 +39,32 @@ test('execute runs sibling tools and returns JSON', async () => {
   assert.equal(parsed.ok, true);
   assert.equal(parsed.value, 'z');
 });
+
+test('execute blocks sibling tools that need approval', async () => {
+  let called = false;
+  const siblings: ToolDef[] = [
+    {
+      name: 'echo',
+      description: 'Echo v',
+      inputSchema: {
+        type: 'object',
+        properties: { v: { type: 'string' } },
+        required: ['v'],
+      },
+      needsApproval: true,
+      handler: async () => {
+        called = true;
+        return 'should-not-run';
+      },
+    },
+  ];
+  const tool = createExecuteTool(ctx(), siblings, DEFAULT_CODEMODE_LIMITS);
+  const raw = await tool.handler({
+    code: 'return await tools.echo({ v: "z" });',
+  });
+  const parsed = JSON.parse(raw) as { ok: boolean; value: unknown };
+  assert.equal(parsed.ok, true);
+  assert.equal(called, false);
+  const payload = JSON.parse(String(parsed.value)) as { kind: string };
+  assert.equal(payload.kind, 'approval_required');
+});

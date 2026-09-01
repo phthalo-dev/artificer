@@ -2,6 +2,7 @@ import type { CodemodeLimits } from '../config.js';
 import type { ToolContext } from '../context.js';
 import type { JsonSchema, ToolDef } from '../llm/types.js';
 import { runCodemode } from '../codemode/runtime.js';
+import { loadEffectivePolicy } from './tool-policy.js';
 
 function formatSibling(def: ToolDef): string {
   const props = def.inputSchema.properties ?? {};
@@ -51,11 +52,26 @@ ${catalog}`,
     } satisfies JsonSchema,
     handler: async (input) => {
       const resolved = resolveSiblings(ctx, siblings);
+      const execPath = ctx.engine.store?.layout.toolPolicyFile();
+      const policy = execPath
+        ? loadEffectivePolicy({
+            execPath,
+            identityPath: ctx.engine.identity?.layout.agentToolPolicyFile(),
+          })
+        : { version: 1 as const, rules: [] };
       const result = await runCodemode({
         code: String(input.code ?? ''),
-        tools: resolved.map((s) => ({ name: s.name, handler: s.handler })),
+        tools: resolved.map((s) => ({
+          name: s.name,
+          handler: s.handler,
+          needsApproval: s.needsApproval,
+        })),
         limits,
         onToolCall: ctx.onToolCall,
+        policy,
+        emit: ctx.engine.emit?.bind(ctx.engine),
+        runId: ctx.run.id,
+        workstreamId: ctx.run.workstreamId,
       });
       return JSON.stringify(result);
     },
