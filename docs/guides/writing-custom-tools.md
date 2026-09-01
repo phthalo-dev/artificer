@@ -59,7 +59,7 @@ Each field:
 
 Approval is deny-by-default. When `needsApproval` is `true` (or its function returns `true`), the runtime checks the tool policy before calling `execute`. With no matching rule, the handler does not run and the tool returns a structured JSON error with `kind: "approval_required"`; an explicit deny returns `kind: "approval_denied"`.
 
-Approval is policy-based, not an interactive pause: the runtime does not wait for a person in the middle of a tool call. Add an allow rule, then retry the call. The model cannot write the policy file itself. See [Tool approval policy](../reference/config.md#tool-approval-policy) for policy locations and management.
+Approval is policy-based, not an interactive pause: the runtime does not wait for a person in the middle of a tool call. Add an allow rule, then retry the call. The runtime exposes no model-facing API or tool for changing policy; policy mutations use the bearer-authenticated policy API. See [Tool approval policy](../reference/config.md#tool-approval-policy) for policy locations and management.
 
 ## The `roles` field
 

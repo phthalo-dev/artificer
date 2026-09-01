@@ -30,7 +30,9 @@ Worker and orchestrator can call `execute` to run a small JavaScript program tha
 
 ### Tool approval policy
 
-Tools marked with `needsApproval` are deny-by-default: their handlers run only when a matching `allow` rule exists. A matching deny returns a structured `approval_denied` tool error; no matching rule returns `approval_required`. Approval does not pause a call to wait for a person—the policy must be updated and the tool call retried. The model cannot write the policy file.
+Tools marked with `needsApproval` are deny-by-default: their handlers run only when a matching `allow` rule exists. A matching deny returns a structured `approval_denied` tool error; no matching rule returns `approval_required`. Approval does not pause a call to wait for a person—the policy must be updated and the tool call retried.
+
+In v1, all rules are agent-wide and use `scope: "agent"`. Per-run and per-workstream scopes are not supported.
 
 The runtime loads policy rules from:
 
@@ -39,9 +41,9 @@ The runtime loads policy rules from:
 
 Exec-directory rules override identity rules with the same tool and pattern. A missing or corrupt file is treated as an empty rule set and produces a warning, so approval-gated actions fail closed.
 
-The built-in `run_shell` tool gates dangerous commands, and `fetch_url` gates non-`GET` requests. Hard shell-policy denies are separate and unchanged; an approval allow rule does not bypass them.
+The built-in `run_shell` tool gates dangerous commands. The built-in `fetch_url` schema is `GET`-only, so its requests remain ungated. A fetch-style tool named `fetch` or `fetch_url` with a non-`GET` method would require a matching allow rule. Hard shell-policy denies and URL/private-IP guards are separate and unchanged; an approval allow rule does not bypass them.
 
-Autonomous agents should ship useful identity-level allow rules in `agent/tool-policy.json` for their normal workflow. Manage exec-directory rules through the bearer-authenticated [policy API](./api.md#tool-approval-policy).
+The runtime exposes no model-facing API or tool for changing policy. Exec-directory policy mutations are available only through `POST /api/policy/rules` and `DELETE /api/policy/rules/:id`; this is an API boundary, not a claim that an OS sandbox prevents other filesystem access. Autonomous agents should ship useful identity-level allow rules in `agent/tool-policy.json` for their normal workflow. See the bearer-authenticated [policy API](./api.md#tool-approval-policy).
 
 ### `models` block
 
