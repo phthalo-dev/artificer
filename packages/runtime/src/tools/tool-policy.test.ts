@@ -131,6 +131,8 @@ test('isDangerousShellCommand identifies dangerous and read-only commands', () =
     'helm upgrade api chart',
     'helm --namespace prod upgrade api chart',
     'helm -n prod upgrade api chart',
+    'GIT_EDITOR=/usr/bin/git git push origin main',
+    'KUBECONFIG=/tmp/kubectl kubectl apply -f deployment.yaml',
   ];
   const safe = [
     'git status',
@@ -225,6 +227,26 @@ test('matchRule supports glob patterns', () => {
   assert.equal(
     matchRule({ version: 1, rules: [matching] }, 'run_shell', 'npm install'),
     matching,
+  );
+});
+
+test('matchRule does not let a safe-prefix glob cover a chained dangerous command', () => {
+  const statusGlob = rule('status-glob', 'allow', 'git status*');
+  const gitGlob = rule('git-glob', 'allow', 'git *');
+  const chainExact = rule('chain', 'allow', 'git status && git push');
+  const chainKey = 'git status && git push';
+
+  assert.equal(
+    matchRule({ version: 1, rules: [statusGlob] }, 'run_shell', chainKey),
+    undefined,
+  );
+  assert.equal(
+    matchRule({ version: 1, rules: [gitGlob] }, 'run_shell', chainKey)?.id,
+    'git-glob',
+  );
+  assert.equal(
+    matchRule({ version: 1, rules: [chainExact] }, 'run_shell', chainKey)?.id,
+    'chain',
   );
 });
 
