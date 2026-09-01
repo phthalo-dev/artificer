@@ -8,6 +8,7 @@ import type { ScheduleAction, ScheduleDefinition } from './engine/schedules.js';
 import type { Store } from './storage/store.js';
 import type { IdentityStore } from './storage/identity-store.js';
 import type { RunRecord, ToolInvocation, Workstream } from './storage/types.js';
+import type { PolicyRule } from './tools/tool-policy.js';
 import type { ToolPlan } from './tools/tool-plan.js';
 
 export interface SpawnCallInput {
@@ -26,7 +27,18 @@ export type RuntimeEvent =
   | { kind: 'workstream'; at: string; data: unknown }
   | { kind: 'run'; at: string; data: unknown }
   | { kind: 'tool'; at: string; data: ToolInvocation & { runId: string } }
-  | { kind: 'quota'; at: string; data: unknown };
+  | { kind: 'quota'; at: string; data: unknown }
+  | {
+      kind: 'approval';
+      at: string;
+      data: {
+        tool: string;
+        approvalKey: string;
+        proposedRule: Omit<PolicyRule, 'id' | 'createdAt'>;
+        runId?: string;
+        workstreamId?: string;
+      };
+    };
 
 /**
  * The surface the engine exposes to tools. Tools use this to spawn child

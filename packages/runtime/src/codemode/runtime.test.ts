@@ -347,6 +347,37 @@ test('console.log appears in logs', async () => {
   }
 });
 
+test('needsApproval blocks the handler before it runs', async () => {
+  let called = false;
+  const events: { kind: string }[] = [];
+  const tools: CodemodeTool[] = [
+    {
+      name: 'gated',
+      needsApproval: true,
+      handler: async () => {
+        called = true;
+        return 'ran';
+      },
+    },
+  ];
+  const result = await runCodemode({
+    code: 'return await tools.gated({});',
+    tools,
+    limits,
+    policy: { version: 1, rules: [] },
+    emit: (event) => events.push(event),
+  });
+
+  assert.equal(result.ok, true);
+  assert.equal(called, false);
+  if (result.ok) {
+    const payload = JSON.parse(String(result.value)) as { kind: string };
+    assert.equal(payload.kind, 'approval_required');
+  }
+  assert.equal(events.length, 1);
+  assert.equal(events[0]?.kind, 'approval');
+});
+
 test('onToolCall fires for inner success and error', async () => {
   const seen: string[] = [];
   const tools = [

@@ -13,6 +13,7 @@ export function defineTool<TInput = Record<string, unknown>>(
         name: definition.name,
         description: definition.description,
         inputSchema: definition.input,
+        needsApproval: definition.needsApproval as ToolDef['needsApproval'],
         handler: (input) =>
           Promise.resolve(definition.execute(input as TInput, ctx)).then(
             String,

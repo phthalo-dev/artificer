@@ -37,6 +37,34 @@ describe('defineTool', () => {
     assert.equal(typeof toolDef.handler, 'function');
   });
 
+  it('preserves needsApproval true on toToolDef', () => {
+    const tool = defineTool({
+      name: 'deploy',
+      description: 'Deploy',
+      input: { type: 'object', properties: {}, required: [] },
+      needsApproval: true,
+      execute: async () => 'ok',
+    });
+
+    assert.equal(tool.toToolDef({} as any).needsApproval, true);
+  });
+
+  it('preserves needsApproval function on toToolDef', () => {
+    const needsApproval = (input: { force?: boolean }) => input.force === true;
+    const tool = defineTool({
+      name: 'deploy',
+      description: 'Deploy',
+      input: {
+        type: 'object',
+        properties: { force: { type: 'boolean' } },
+      },
+      needsApproval,
+      execute: async () => 'ok',
+    });
+
+    assert.equal(tool.toToolDef({} as any).needsApproval, needsApproval);
+  });
+
   it('respects role scoping', () => {
     const tool = defineTool({
       name: 'deploy',

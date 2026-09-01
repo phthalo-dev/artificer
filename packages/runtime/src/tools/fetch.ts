@@ -17,6 +17,8 @@ export function createFetchTools(_ctx: ToolContext): ToolDef[] {
         },
         required: ['url'],
       },
+      needsApproval: (input) =>
+        String(input.method ?? 'GET').toUpperCase() !== 'GET',
       handler: async (input) => {
         const url = String(input.url);
         const controller = new AbortController();
