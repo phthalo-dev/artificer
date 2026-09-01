@@ -296,6 +296,67 @@ Delete a memory by ID.
 
 ---
 
+### Tool approval policy
+
+All policy routes use the `/api` bearer authentication described above. They manage the exec-directory policy; identity policy rules are loaded into the effective list but cannot be deleted through this API.
+
+#### `GET /api/policy/rules`
+
+List effective tool approval rules after identity and exec-directory policies are layered.
+
+**Response** — `200 OK`
+
+```json
+{ "rules": [ { "id": "...", "tool": "run_shell", "pattern": "git push", "effect": "allow", "scope": "agent", "createdAt": "...", "note": "Allow routine pushes" } ] }
+```
+
+---
+
+#### `POST /api/policy/rules`
+
+Add a rule to the exec-directory policy.
+
+**Request body**
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `tool` | string | yes | Tool name to match |
+| `pattern` | string | yes | Approval-key pattern to match |
+| `effect` | `"allow"` \| `"deny"` | yes | Whether matching calls may run |
+| `note` | string | no | Human-readable reason for the rule |
+
+**Response** — `201 Created`
+
+```json
+{ "rule": { "id": "...", "tool": "run_shell", "pattern": "git push", "effect": "allow", "scope": "agent", "createdAt": "...", "note": "Allow routine pushes" } }
+```
+
+**Error codes**
+
+| Status | Condition |
+|---|---|
+| 400 | Validation failure |
+
+---
+
+#### `DELETE /api/policy/rules/:id`
+
+Delete a rule from the exec-directory policy. Identity-only rule IDs cannot be deleted through this endpoint.
+
+**Response** — `200 OK`
+
+```json
+{ "ok": true }
+```
+
+**Error codes**
+
+| Status | Condition |
+|---|---|
+| 404 | Rule not found in the exec-directory policy |
+
+---
+
 ### Usage and cost
 
 #### `GET /api/usage`
