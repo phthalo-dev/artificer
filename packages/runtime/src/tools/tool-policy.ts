@@ -201,6 +201,30 @@ function hasDangerousCurlCommand(command: string): boolean {
   });
 }
 
+function hasSubcommandAfterGlobalOptions(
+  command: string,
+  executable: string,
+  subcommand: string,
+  optionsWithValues: ReadonlySet<string>,
+): boolean {
+  return command.split(/[;&|]/).some((segment) => {
+    const tokens = shellTokens(segment.toLowerCase());
+    let index = tokens.indexOf(executable);
+    if (index < 0) return false;
+    index += 1;
+
+    while (tokens[index]?.startsWith('-')) {
+      const option = tokens[index]!;
+      index += 1;
+      if (!option.includes('=') && optionsWithValues.has(option)) {
+        index += 1;
+      }
+    }
+
+    return tokens[index] === subcommand;
+  });
+}
+
 export function isDangerousShellCommand(command: string): boolean {
   const normalized = command.toLowerCase();
 
@@ -217,8 +241,33 @@ export function isDangerousShellCommand(command: string): boolean {
 
   return (
     /\bssh\b/.test(normalized) ||
-    /\bkubectl\b[^;&|\n]*\bapply\b/.test(normalized) ||
-    /\bterraform\b[^;&|\n]*\bapply\b/.test(normalized) ||
+    hasSubcommandAfterGlobalOptions(
+      command,
+      'kubectl',
+      'apply',
+      new Set([
+        '--as',
+        '--as-group',
+        '--cache-dir',
+        '--certificate-authority',
+        '--client-certificate',
+        '--client-key',
+        '--cluster',
+        '--context',
+        '--kubeconfig',
+        '--namespace',
+        '--profile',
+        '--profile-output',
+        '--request-timeout',
+        '--server',
+        '--tls-server-name',
+        '--token',
+        '--user',
+        '-n',
+        '-s',
+      ]),
+    ) ||
+    hasSubcommandAfterGlobalOptions(command, 'terraform', 'apply', new Set()) ||
     /\bhelm\s+upgrade\b/.test(normalized)
   );
 }

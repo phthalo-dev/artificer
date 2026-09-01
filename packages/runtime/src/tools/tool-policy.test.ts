@@ -92,6 +92,8 @@ test('isDangerousShellCommand identifies dangerous and read-only commands', () =
     'git commit -m "safe"',
     'curl -f https://example.com',
     'wget --method=GET https://example.com',
+    'terraform plan -out=apply',
+    'kubectl get configmap apply',
   ];
 
   for (const command of dangerous) {
