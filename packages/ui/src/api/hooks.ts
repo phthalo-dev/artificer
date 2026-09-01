@@ -226,12 +226,19 @@ export function useUpdateQuotaConfig() {
 
 export interface ActivityEntry {
   id: string;
-  kind: 'message' | 'workstream' | 'run' | 'tool' | 'quota';
+  kind: 'message' | 'workstream' | 'run' | 'tool' | 'quota' | 'approval';
   label: string;
   at: string;
 }
 
-const SSE_KINDS = ['message', 'workstream', 'run', 'tool', 'quota'] as const;
+const SSE_KINDS = [
+  'message',
+  'workstream',
+  'run',
+  'tool',
+  'quota',
+  'approval',
+] as const;
 const MAX_ENTRIES = 100;
 
 function formatEntry(
@@ -276,6 +283,9 @@ function formatEntry(
       }
       break;
     }
+    case 'approval':
+      label = `approval ${String(data.tool ?? '')} ${String(data.approvalKey ?? '')}`;
+      break;
   }
 
   return { id: crypto.randomUUID(), kind, label, at };

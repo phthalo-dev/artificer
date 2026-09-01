@@ -21,6 +21,7 @@ const DOT_COLOR: Record<ActivityEntry['kind'], string> = {
   run: color.orange,
   tool: color.gray,
   quota: color.yellow,
+  approval: color.red,
 };
 
 function FeedRow({ entry }: { entry: ActivityEntry }) {
