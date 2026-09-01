@@ -166,7 +166,7 @@ test('needsApproval function true is gated', () => {
   assert.equal(parseDenied(decision.result).kind, 'approval_required');
 });
 
-test('run_shell approval key uses the command prefix', () => {
+test('run_shell approval key retains rm flags and the target path', () => {
   const decision = enforceApproval({
     tool: gatedTool({ name: 'run_shell' }),
     input: { command: 'rm -rf /tmp/build' },
@@ -174,7 +174,24 @@ test('run_shell approval key uses the command prefix', () => {
   });
 
   assert.equal(decision.allow, false);
-  assert.equal(parseDenied(decision.result).approvalKey, 'rm -rf');
+  const payload = parseDenied(decision.result);
+  assert.equal(payload.approvalKey, 'rm -rf /tmp/build');
+  assert.equal(payload.proposedRule.pattern, 'rm -rf /tmp/build');
+  assert.notEqual(payload.proposedRule.pattern, 'rm -rf');
+});
+
+test('enforceApproval returns structured JSON for invalid fetch URLs', () => {
+  const decision = enforceApproval({
+    tool: gatedTool({ name: 'fetch' }),
+    input: { method: 'POST', url: '' },
+    policy: EMPTY_POLICY,
+  });
+
+  assert.equal(decision.allow, false);
+  const payload = parseDenied(decision.result);
+  assert.equal(payload.kind, 'approval_required');
+  assert.equal(payload.approvalKey, 'POST <invalid-url>');
+  assert.equal(payload.proposedRule.pattern, 'POST <invalid-url>');
 });
 
 test('fetch and fetch_url approval keys use method and url', () => {
@@ -203,6 +220,7 @@ test('run_shell needsApproval follows isDangerousShellCommand', () => {
   if (typeof needsApproval !== 'function') return;
   assert.equal(needsApproval({ command: 'rm -rf /' }), true);
   assert.equal(needsApproval({ command: 'git status' }), false);
+  assert.equal(needsApproval({ command: 'git checkout abc123' }), false);
 });
 
 test('fetch_url needsApproval gates non-GET only', () => {
