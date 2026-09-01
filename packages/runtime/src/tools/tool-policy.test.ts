@@ -79,6 +79,7 @@ test('isDangerousShellCommand identifies dangerous and read-only commands', () =
     'ssh deploy@example.com',
     'kubectl apply -f deployment.yaml',
     'kubectl --context prod apply -f deployment.yaml',
+    'kubectl --username admin apply',
     'terraform apply',
     'terraform -chdir=infra apply',
     'helm upgrade api chart',
