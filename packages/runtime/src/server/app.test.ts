@@ -14,6 +14,7 @@ import { Store } from '../storage/store.js';
 import { IdentityStore } from '../storage/identity-store.js';
 import { createApp } from './app.js';
 import type { Memory } from '../storage/types.js';
+import { saveExecPolicy, type PolicyRule } from '../tools/tool-policy.js';
 
 async function buildApp(env: NodeJS.ProcessEnv = {}) {
   const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-app-'));
@@ -89,6 +90,113 @@ test('GET /api/health returns agent name', async () => {
   assert.equal(res.status, 200);
   const body = (await res.json()) as { ok: boolean; agent: string };
   assert.equal(body.ok, true);
+});
+
+test('POST /api/policy/rules persists a rule returned by GET', async () => {
+  const { engine } = await buildApp();
+  const app = createApp(engine);
+
+  const createRes = await app.request('/api/policy/rules', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      tool: 'shell',
+      pattern: 'pnpm test*',
+      effect: 'allow',
+      note: 'Allow runtime tests',
+    }),
+  });
+  assert.equal(createRes.status, 201);
+  const created = (await createRes.json()) as { rule: PolicyRule };
+  assert.equal(created.rule.tool, 'shell');
+  assert.equal(created.rule.pattern, 'pnpm test*');
+  assert.equal(created.rule.effect, 'allow');
+  assert.equal(created.rule.scope, 'agent');
+  assert.equal(created.rule.note, 'Allow runtime tests');
+  assert.ok(created.rule.id);
+  assert.ok(Date.parse(created.rule.createdAt));
+
+  const listRes = await app.request('/api/policy/rules');
+  assert.equal(listRes.status, 200);
+  const listed = (await listRes.json()) as { rules: PolicyRule[] };
+  assert.deepEqual(listed.rules, [created.rule]);
+});
+
+test('DELETE /api/policy/rules/:id removes an exec rule', async () => {
+  const { engine } = await buildApp();
+  const execRule: PolicyRule = {
+    id: 'exec-rule',
+    tool: 'fetch',
+    pattern: 'GET https://example.com/*',
+    effect: 'deny',
+    scope: 'agent',
+    createdAt: '2026-08-25T00:00:00.000Z',
+  };
+  saveExecPolicy(engine.store.layout.toolPolicyFile(), {
+    version: 1,
+    rules: [execRule],
+  });
+  const app = createApp(engine);
+
+  const deleteRes = await app.request(`/api/policy/rules/${execRule.id}`, {
+    method: 'DELETE',
+  });
+  assert.equal(deleteRes.status, 200);
+
+  const listRes = await app.request('/api/policy/rules');
+  const listed = (await listRes.json()) as { rules: PolicyRule[] };
+  assert.deepEqual(listed.rules, []);
+});
+
+test('DELETE /api/policy/rules/:id cannot remove an identity-only rule', async () => {
+  const { engine: baseEngine, store, dataDir } = await buildApp();
+  const identity = new IdentityStore(dataDir);
+  await identity.init();
+  const identityRule: PolicyRule = {
+    id: 'identity-rule',
+    tool: 'shell',
+    pattern: 'git status',
+    effect: 'allow',
+    scope: 'agent',
+    createdAt: '2026-08-25T00:00:00.000Z',
+  };
+  saveExecPolicy(identity.layout.agentToolPolicyFile(), {
+    version: 1,
+    rules: [identityRule],
+  });
+  const engine = new Engine(
+    baseEngine.config,
+    store,
+    undefined,
+    undefined,
+    identity,
+  );
+  const app = createApp(engine);
+
+  const deleteRes = await app.request(`/api/policy/rules/${identityRule.id}`, {
+    method: 'DELETE',
+  });
+  assert.equal(deleteRes.status, 404);
+
+  const listRes = await app.request('/api/policy/rules');
+  const listed = (await listRes.json()) as { rules: PolicyRule[] };
+  assert.deepEqual(listed.rules, [identityRule]);
+});
+
+test('POST /api/policy/rules rejects an invalid effect', async () => {
+  const { engine } = await buildApp();
+  const app = createApp(engine);
+
+  const res = await app.request('/api/policy/rules', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      tool: 'shell',
+      pattern: 'pnpm test*',
+      effect: 'prompt',
+    }),
+  });
+  assert.equal(res.status, 400);
 });
 
 test('GET /api/memories returns 503 when identity store is not configured', async () => {
