@@ -1,4 +1,5 @@
 import type { RuntimeConfig } from './config.js';
+import type { CodemodeCellStore } from './codemode/cells.js';
 import type { ModelTier } from './engine/models.js';
 import type {
   ProviderConfigSnapshot,
@@ -82,4 +83,6 @@ export interface ToolContext {
   onToolCall?: (invocation: ToolInvocation) => void;
   /** Frozen tool catalog for this call; set once by executeCall. */
   toolPlan?: ToolPlan;
+  /** Per-run execute cells. Set by executeCall; disposed in that call's finally. */
+  codemodeCells?: CodemodeCellStore;
 }

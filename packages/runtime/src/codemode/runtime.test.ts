@@ -1,7 +1,14 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test, type TestContext } from 'node:test';
 import { DEFAULT_CODEMODE_LIMITS } from '../config.js';
-import { runCodemode, type CodemodeTool } from './runtime.js';
+import { CodemodeCellStore } from './cells.js';
+import {
+  resumeCodemodeCell,
+  runCodemode,
+  startCodemodeCell,
+  type CodemodeSegmentResult,
+  type CodemodeTool,
+} from './runtime.js';
 
 const limits = {
   ...DEFAULT_CODEMODE_LIMITS,
@@ -10,6 +17,32 @@ const limits = {
 
 function tool(name: string, handler: CodemodeTool['handler']): CodemodeTool {
   return { name, handler };
+}
+
+const sleep = (ms: number) => new Promise((r) => setTimeout(r, ms));
+
+let runCounter = 0;
+
+/** A store plus run id, torn down after the test so no isolate outlives it. */
+function cellFixture(
+  t: TestContext,
+  opts: { maxCells?: number; cellTtlMs?: number } = {},
+): { store: CodemodeCellStore; runId: string } {
+  const store = new CodemodeCellStore({
+    maxCells: opts.maxCells ?? 4,
+    cellTtlMs: opts.cellTtlMs ?? 120_000,
+  });
+  const runId = `run-${++runCounter}`;
+  t.after(() => store.disposeRun(runId));
+  return { store, runId };
+}
+
+function runningCellId(segment: CodemodeSegmentResult): string {
+  assert.equal(segment.ok, true);
+  assert.equal(segment.ok && segment.running, true);
+  if (!segment.ok || !segment.running) throw new Error('not running');
+  assert.equal(typeof segment.cellId, 'string');
+  return segment.cellId;
 }
 
 test('empty code is ParseError', async () => {
@@ -366,4 +399,498 @@ test('onToolCall fires for inner success and error', async () => {
     onToolCall: (inv) => seen.push(`${inv.name}:${inv.error ?? 'ok'}`),
   });
   assert.deepEqual(seen, ['ok:ok', 'bad:x']);
+});
+
+test('yield_control returns running with a live cellId', async (t) => {
+  const { store, runId } = cellFixture(t);
+  const segment = await startCodemodeCell({
+    code: `await yield_control(); return 'done';`,
+    tools: [],
+    limits,
+    store,
+    runId,
+  });
+  const cellId = runningCellId(segment);
+  assert.ok(store.get(runId, cellId), 'cell should still be alive after yield');
+});
+
+test('resume completes and sees state written with store/load', async (t) => {
+  const { store, runId } = cellFixture(t);
+  const first = await startCodemodeCell({
+    code: `
+      store('k', { n: 1 });
+      await yield_control();
+      return load('k');
+    `,
+    tools: [],
+    limits,
+    store,
+    runId,
+  });
+  const cellId = runningCellId(first);
+  assert.deepEqual(store.kv(runId).get('k'), { n: 1 });
+
+  const second = await resumeCodemodeCell({ store, runId, cellId });
+  assert.equal(second.ok, true);
+  if (second.ok) {
+    assert.equal(second.running, false);
+    if (!second.running) assert.deepEqual(second.value, { n: 1 });
+  }
+  assert.equal(store.get(runId, cellId), undefined, 'cell freed on complete');
+});
+
+test('load returns undefined for a missing key', async (t) => {
+  const { store, runId } = cellFixture(t);
+  const segment = await startCodemodeCell({
+    code: `return typeof load('nope');`,
+    tools: [],
+    limits,
+    store,
+    runId,
+  });
+  assert.equal(segment.ok, true);
+  if (segment.ok && !segment.running) assert.equal(segment.value, 'undefined');
+});
+
+test('an uncaught store violation is InvalidDataValue', async (t) => {
+  const { store, runId } = cellFixture(t);
+  const segment = await startCodemodeCell({
+    code: `store('k', function () {}); return 1;`,
+    tools: [],
+    limits,
+    store,
+    runId,
+  });
+  assert.equal(segment.ok, false);
+  if (!segment.ok) assert.equal(segment.error.kind, 'InvalidDataValue');
+});
+
+test('a caught store violation lets the cell yield and finish', async (t) => {
+  const { store, runId } = cellFixture(t);
+  const first = await startCodemodeCell({
+    code: `
+      let caught = '';
+      try { store('bad', function () {}); } catch (e) { caught = e.message; }
+      store('ok', 1);
+      await yield_control();
+      return { caught, ok: load('ok'), bad: typeof load('bad') };
+    `,
+    tools: [],
+    limits,
+    store,
+    runId,
+  });
+  const cellId = runningCellId(first);
+
+  const second = await resumeCodemodeCell({ store, runId, cellId });
+  assert.equal(second.ok, true);
+  if (second.ok && !second.running) {
+    assert.deepEqual(second.value, {
+      caught: 'store("bad") value is not JSON-safe',
+      ok: 1,
+      bad: 'undefined',
+    });
+  }
+});
+
+test('run KV is shared by later cells in the same run', async (t) => {
+  const { store, runId } = cellFixture(t);
+  const writer = await startCodemodeCell({
+    code: `store('shared', 'hello'); return 1;`,
+    tools: [],
+    limits,
+    store,
+    runId,
+  });
+  assert.equal(writer.ok, true);
+
+  const reader = await startCodemodeCell({
+    code: `return load('shared');`,
+    tools: [],
+    limits,
+    store,
+    runId,
+  });
+  assert.equal(reader.ok, true);
+  if (reader.ok && !reader.running) assert.equal(reader.value, 'hello');
+});
+
+test('pragma soft yield returns while a tool is in flight; resume finishes', async (t) => {
+  const { store, runId } = cellFixture(t);
+  const tools = [
+    tool(
+      'slow',
+      () => new Promise<string>((r) => setTimeout(() => r('late'), 200)),
+    ),
+  ];
+  const startedAt = Date.now();
+  const first = await startCodemodeCell({
+    code: `// @exec: {"yield_time_ms": 50}\nreturn await tools.slow({});`,
+    tools,
+    limits,
+    store,
+    runId,
+  });
+  const elapsed = Date.now() - startedAt;
+  const cellId = runningCellId(first);
+  assert.deepEqual(first.toolCalls, ['slow']);
+  assert.ok(elapsed < 150, `expected a soft yield, took ${elapsed}ms`);
+
+  const second = await resumeCodemodeCell({ store, runId, cellId });
+  assert.equal(second.ok, true);
+  if (second.ok && !second.running) assert.equal(second.value, 'late');
+  assert.equal(store.get(runId, cellId), undefined);
+});
+
+test('invalid pragma JSON is ParseError before the program runs', async (t) => {
+  const { store, runId } = cellFixture(t);
+  const segment = await startCodemodeCell({
+    code: `// @exec: {yield_time_ms: 50}\nglobalThis.ran = true; return 1;`,
+    tools: [],
+    limits,
+    store,
+    runId,
+  });
+  assert.equal(segment.ok, false);
+  if (!segment.ok) assert.equal(segment.error.kind, 'ParseError');
+});
+
+test('hard timeoutMs spans segments and disposes the cell', async (t) => {
+  const { store, runId } = cellFixture(t, { cellTtlMs: 120_000 });
+  const first = await startCodemodeCell({
+    code: `await yield_control(); return 1;`,
+    tools: [],
+    limits: { ...limits, timeoutMs: 200 },
+    store,
+    runId,
+  });
+  const cellId = runningCellId(first);
+
+  await sleep(260);
+  const second = await resumeCodemodeCell({ store, runId, cellId });
+  assert.equal(second.ok, false);
+  if (!second.ok) assert.equal(second.error.kind, 'TimeoutExceeded');
+  assert.equal(store.get(runId, cellId), undefined);
+
+  const third = await resumeCodemodeCell({ store, runId, cellId });
+  assert.equal(third.ok, false);
+  if (!third.ok) assert.equal(third.error.kind, 'CellNotFound');
+});
+
+test('terminate completes with null and forgets the cell', async (t) => {
+  const { store, runId } = cellFixture(t);
+  const first = await startCodemodeCell({
+    code: `await yield_control(); return 'never';`,
+    tools: [],
+    limits,
+    store,
+    runId,
+  });
+  const cellId = runningCellId(first);
+
+  const second = await resumeCodemodeCell({
+    store,
+    runId,
+    cellId,
+    terminate: true,
+  });
+  assert.equal(second.ok, true);
+  if (second.ok) {
+    assert.equal(second.running, false);
+    if (!second.running) assert.equal(second.value, null);
+  }
+
+  const third = await resumeCodemodeCell({ store, runId, cellId });
+  assert.equal(third.ok, false);
+  if (!third.ok) assert.equal(third.error.kind, 'CellNotFound');
+});
+
+test('a second resume is refused while a segment is in flight', async (t) => {
+  const { store, runId } = cellFixture(t);
+  const tools = [
+    tool(
+      'slow',
+      () => new Promise<string>((r) => setTimeout(() => r('late'), 150)),
+    ),
+  ];
+  const first = await startCodemodeCell({
+    code: `await yield_control(); return await tools.slow({});`,
+    tools,
+    limits,
+    store,
+    runId,
+  });
+  const cellId = runningCellId(first);
+
+  const inFlight = resumeCodemodeCell({ store, runId, cellId });
+  const overlapping = await resumeCodemodeCell({ store, runId, cellId });
+  assert.equal(overlapping.ok, false);
+  if (!overlapping.ok) {
+    assert.equal(overlapping.error.kind, 'ExecutionFailure');
+    assert.match(overlapping.error.message, /already running a segment/);
+  }
+
+  const settled = await inFlight;
+  assert.equal(settled.ok, true);
+  if (settled.ok && !settled.running) assert.equal(settled.value, 'late');
+});
+
+test('terminate is refused while a segment is in flight', async (t) => {
+  const { store, runId } = cellFixture(t);
+  const tools = [
+    tool(
+      'slow',
+      () => new Promise<string>((r) => setTimeout(() => r('late'), 150)),
+    ),
+  ];
+  const first = await startCodemodeCell({
+    code: `await yield_control(); return await tools.slow({});`,
+    tools,
+    limits,
+    store,
+    runId,
+  });
+  const cellId = runningCellId(first);
+
+  const inFlight = resumeCodemodeCell({ store, runId, cellId });
+  const killed = await resumeCodemodeCell({
+    store,
+    runId,
+    cellId,
+    terminate: true,
+  });
+  assert.equal(killed.ok, false);
+  if (!killed.ok) assert.equal(killed.error.kind, 'ExecutionFailure');
+
+  const settled = await inFlight;
+  assert.equal(settled.ok, true);
+});
+
+test('TTL sweep does not dispose a cell that is driving a segment', async (t) => {
+  const ttl = 50;
+  const { store, runId } = cellFixture(t, { cellTtlMs: ttl });
+  const tools = [
+    tool(
+      'slow',
+      () => new Promise<string>((r) => setTimeout(() => r('late'), 150)),
+    ),
+  ];
+  const first = await startCodemodeCell({
+    code: `await yield_control(); return await tools.slow({});`,
+    tools,
+    limits,
+    store,
+    runId,
+  });
+  const cellId = runningCellId(first);
+  const cell = store.get(runId, cellId);
+  assert.ok(cell);
+
+  const inFlight = resumeCodemodeCell({ store, runId, cellId });
+  assert.equal(store.get(runId, cellId)?.busy, true);
+
+  // Parallel execute admits by sweeping first — the race Bugbot flagged.
+  store.admit(runId, cell.createdAt + ttl);
+  assert.equal(store.get(runId, cellId)?.vm.alive, true);
+
+  const settled = await inFlight;
+  assert.equal(settled.ok, true);
+  if (settled.ok && !settled.running) assert.equal(settled.value, 'late');
+});
+
+test('TTL sweep disposes an idle yielded cell past max age', async (t) => {
+  const ttl = 50;
+  const { store, runId } = cellFixture(t, { cellTtlMs: ttl });
+  const first = await startCodemodeCell({
+    code: `await yield_control(); return 1;`,
+    tools: [],
+    limits,
+    store,
+    runId,
+  });
+  const cellId = runningCellId(first);
+  const cell = store.get(runId, cellId);
+  assert.ok(cell);
+  assert.equal(cell.busy, false);
+
+  store.disposeExpired(cell.createdAt + ttl);
+  assert.equal(store.get(runId, cellId), undefined);
+  assert.equal(cell.vm.alive, false);
+});
+
+test('disposing the run mid-segment fails the segment without rejecting', async (t) => {
+  const { store, runId } = cellFixture(t);
+  const tools = [
+    tool(
+      'slow',
+      () => new Promise<string>((r) => setTimeout(() => r('late'), 150)),
+    ),
+  ];
+  const first = await startCodemodeCell({
+    code: `await yield_control(); return await tools.slow({});`,
+    tools,
+    limits,
+    store,
+    runId,
+  });
+  const cellId = runningCellId(first);
+
+  const inFlight = resumeCodemodeCell({ store, runId, cellId });
+  store.disposeRun(runId);
+  const segment = await inFlight;
+
+  assert.equal(segment.ok, false);
+  if (!segment.ok) {
+    assert.ok(
+      segment.error.kind === 'ExecutionFailure' ||
+        segment.error.kind === 'TimeoutExceeded',
+      `unexpected kind ${segment.error.kind}`,
+    );
+  }
+  assert.equal(store.get(runId, cellId), undefined);
+});
+
+test('resuming an unknown cell is CellNotFound', async (t) => {
+  const { store, runId } = cellFixture(t);
+  const segment = await resumeCodemodeCell({
+    store,
+    runId,
+    cellId: 'nope',
+  });
+  assert.equal(segment.ok, false);
+  if (!segment.ok) assert.equal(segment.error.kind, 'CellNotFound');
+  assert.deepEqual(segment.toolCalls, []);
+});
+
+test('a fifth concurrent cell is CellLimitExceeded', async (t) => {
+  const { store, runId } = cellFixture(t, { maxCells: 4 });
+  const start = () =>
+    startCodemodeCell({
+      code: `await yield_control(); return 1;`,
+      tools: [],
+      limits,
+      store,
+      runId,
+    });
+
+  for (let i = 0; i < 4; i += 1) {
+    runningCellId(await start());
+  }
+
+  const fifth = await start();
+  assert.equal(fifth.ok, false);
+  if (!fifth.ok) assert.equal(fifth.error.kind, 'CellLimitExceeded');
+});
+
+test('disposeRun frees every live cell in the run', async (t) => {
+  const { store, runId } = cellFixture(t);
+  const first = runningCellId(
+    await startCodemodeCell({
+      code: `await yield_control(); return 1;`,
+      tools: [],
+      limits,
+      store,
+      runId,
+    }),
+  );
+  const second = runningCellId(
+    await startCodemodeCell({
+      code: `await yield_control(); return 2;`,
+      tools: [],
+      limits,
+      store,
+      runId,
+    }),
+  );
+
+  const isolates = [first, second].map((id) => store.get(runId, id)?.vm);
+  assert.ok(isolates.every((vm) => vm?.alive));
+
+  store.disposeRun(runId);
+
+  assert.ok(
+    isolates.every((vm) => vm?.alive === false),
+    'no QuickJS context should outlive the run',
+  );
+  assert.equal(store.get(runId, first), undefined);
+  assert.equal(store.get(runId, second), undefined);
+  const resumed = await resumeCodemodeCell({ store, runId, cellId: first });
+  assert.equal(resumed.ok, false);
+  if (!resumed.ok) assert.equal(resumed.error.kind, 'CellNotFound');
+});
+
+test('notify output appears in notifications on the yield payload', async (t) => {
+  const { store, runId } = cellFixture(t);
+  const segment = await startCodemodeCell({
+    code: `
+      notify('x');
+      notify('n=' + 2);
+      await yield_control();
+      return 1;
+    `,
+    tools: [],
+    limits,
+    store,
+    runId,
+  });
+  runningCellId(segment);
+  assert.deepEqual(segment.notifications, ['x', 'n=2']);
+});
+
+test('maxToolCalls counts across segments', async (t) => {
+  const { store, runId } = cellFixture(t);
+  const tools = [tool('n', async () => 'x')];
+  const first = await startCodemodeCell({
+    code: `
+      await tools.n({});
+      await yield_control();
+      await tools.n({});
+      await tools.n({});
+      return 1;
+    `,
+    tools,
+    limits: { ...limits, maxToolCalls: 2 },
+    store,
+    runId,
+  });
+  const cellId = runningCellId(first);
+  assert.deepEqual(first.toolCalls, ['n']);
+
+  const second = await resumeCodemodeCell({ store, runId, cellId });
+  assert.equal(second.ok, false);
+  if (!second.ok) assert.equal(second.error.kind, 'ToolCallLimitExceeded');
+  assert.deepEqual(second.toolCalls, ['n', 'n']);
+});
+
+test('exit completes the cell with a null value', async (t) => {
+  const { store, runId } = cellFixture(t);
+  const segment = await startCodemodeCell({
+    code: `await exit(); return 'unreachable';`,
+    tools: [],
+    limits,
+    store,
+    runId,
+  });
+  assert.equal(segment.ok, true);
+  if (segment.ok) {
+    assert.equal(segment.running, false);
+    if (!segment.running) assert.equal(segment.value, null);
+  }
+});
+
+test('runCodemode drives yields to completion as a one-shot', async () => {
+  const result = await runCodemode({
+    code: `
+      notify('note');
+      await yield_control();
+      return 7;
+    `,
+    tools: [],
+    limits,
+  });
+  assert.equal(result.ok, true);
+  if (result.ok) {
+    assert.equal(result.value, 7);
+    assert.deepEqual(result.notifications, ['note']);
+  }
 });

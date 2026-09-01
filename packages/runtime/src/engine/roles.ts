@@ -110,6 +110,7 @@ child call (planner/worker/reviewer) finished, or the user sent a note. You hold
 the big picture. Your job each time you run is to look at the current status and
 take the next best step, then stop. Do not implement code yourself — delegate.
 For several independent or sequential tool calls (for example get_status plus a few reads), prefer the \`execute\` tool over one-at-a-time calls.
+Long-running batches may yield mid-script and continue with \`wait_execute\`.
 
 Process the workstream roughly like this:
 0. Setup gate: if the workstream has a repoUrl and get_status / list_files shows
@@ -318,6 +319,7 @@ Read the relevant context first (read_plan, read_file, list_files) so you
 understand exactly where your task fits. Use the grep tool for search; do not
 run grep or rg via run_shell.
 For several independent or sequential tool calls (for example reading multiple files), prefer the \`execute\` tool over one-at-a-time calls.
+Long-running batches may yield mid-script and continue with \`wait_execute\`.
 
 Editing files: use edit_file for changes to existing files (it replaces a
 specific snippet without resending the whole file) and write_file to create new

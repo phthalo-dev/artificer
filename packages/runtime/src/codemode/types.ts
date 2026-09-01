@@ -6,13 +6,16 @@ export type DiagnosticKind =
   | 'InvalidDataValue'
   | 'ToolCallLimitExceeded'
   | 'TimeoutExceeded'
-  | 'ExecutionFailure';
+  | 'ExecutionFailure'
+  | 'CellNotFound'
+  | 'CellLimitExceeded';
 
 export type CodemodeResult =
   | {
       ok: true;
       value: unknown;
       logs?: string[];
+      notifications?: string[];
       truncated?: true;
       toolCalls: string[];
     }
@@ -20,6 +23,42 @@ export type CodemodeResult =
       ok: false;
       error: { kind: DiagnosticKind; message: string };
       logs?: string[];
+      notifications?: string[];
+      truncated?: true;
+      toolCalls: string[];
+    };
+
+/**
+ * One host segment of a cell: it either finished, gave control back with the
+ * isolate still alive, or failed. `logs` / `notifications` / `toolCalls` are
+ * cumulative for the cell, and the byte budget is applied per segment.
+ */
+export type CodemodeSegmentResult =
+  | {
+      ok: true;
+      running: false;
+      value: unknown;
+      logs?: string[];
+      notifications?: string[];
+      truncated?: true;
+      toolCalls: string[];
+    }
+  | {
+      ok: true;
+      running: true;
+      cellId: string;
+      value?: unknown;
+      logs?: string[];
+      notifications?: string[];
+      truncated?: true;
+      toolCalls: string[];
+    }
+  | {
+      ok: false;
+      error: { kind: DiagnosticKind; message: string };
+      cellId?: string;
+      logs?: string[];
+      notifications?: string[];
       truncated?: true;
       toolCalls: string[];
     };

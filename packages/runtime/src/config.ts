@@ -46,12 +46,16 @@ export interface CodemodeLimits {
   timeoutMs: number;
   maxToolCalls: number;
   maxOutputBytes: number;
+  maxCells: number;
+  cellTtlMs: number;
 }
 
 export const DEFAULT_CODEMODE_LIMITS: CodemodeLimits = {
   timeoutMs: 120_000,
   maxToolCalls: 32,
   maxOutputBytes: 12_000,
+  maxCells: 4,
+  cellTtlMs: 120_000,
 };
 
 function parseEnvInt(
@@ -73,13 +77,14 @@ function parseEnvInt(
 }
 
 export function parseCodemodeLimits(env: NodeJS.ProcessEnv): CodemodeLimits {
+  const timeoutMs = parseEnvInt(
+    env,
+    'RUNTIME_CODEMODE_TIMEOUT_MS',
+    DEFAULT_CODEMODE_LIMITS.timeoutMs,
+    1,
+  );
   return {
-    timeoutMs: parseEnvInt(
-      env,
-      'RUNTIME_CODEMODE_TIMEOUT_MS',
-      DEFAULT_CODEMODE_LIMITS.timeoutMs,
-      1,
-    ),
+    timeoutMs,
     maxToolCalls: parseEnvInt(
       env,
       'RUNTIME_CODEMODE_MAX_TOOL_CALLS',
@@ -92,6 +97,13 @@ export function parseCodemodeLimits(env: NodeJS.ProcessEnv): CodemodeLimits {
       DEFAULT_CODEMODE_LIMITS.maxOutputBytes,
       0,
     ),
+    maxCells: parseEnvInt(
+      env,
+      'RUNTIME_CODEMODE_MAX_CELLS',
+      DEFAULT_CODEMODE_LIMITS.maxCells,
+      1,
+    ),
+    cellTtlMs: parseEnvInt(env, 'RUNTIME_CODEMODE_CELL_TTL_MS', timeoutMs, 1),
   };
 }
 

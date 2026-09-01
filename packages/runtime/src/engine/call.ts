@@ -2,7 +2,8 @@ import { exec } from 'node:child_process';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import type { LanguageModel } from 'ai';
-import type { RuntimeConfig } from '../config.js';
+import { CodemodeCellStore } from '../codemode/cells.js';
+import { DEFAULT_CODEMODE_LIMITS, type RuntimeConfig } from '../config.js';
 import type { EngineApi, ToolContext } from '../context.js';
 import { buildPriorRunsDigest, clipDiff } from './context-compact.js';
 import { compactionProfileForModel } from './compaction-thresholds.js';
@@ -257,7 +258,17 @@ export async function executeCall(
     void store.saveRun(run);
   };
 
-  const ctx: ToolContext = { engine, run, workspaceDir, onToolCall };
+  const ctx: ToolContext = {
+    engine,
+    run,
+    workspaceDir,
+    onToolCall,
+    codemodeCells: new CodemodeCellStore({
+      maxCells: config.codemode?.maxCells ?? DEFAULT_CODEMODE_LIMITS.maxCells,
+      cellTtlMs:
+        config.codemode?.cellTtlMs ?? DEFAULT_CODEMODE_LIMITS.cellTtlMs,
+    }),
+  };
   const roleDef = deps.registry.getRole(run.role);
   if (!roleDef) throw new Error(`Unknown role: '${run.role}'`);
   const effectiveBaseRole = roleDef.baseRole ?? run.role;
@@ -407,5 +418,7 @@ export async function executeCall(
     await store.saveRun(run);
     engine.emit({ kind: 'run', at: run.finishedAt, data: { ...run } });
     return run;
+  } finally {
+    ctx.codemodeCells?.disposeRun(run.id);
   }
 }

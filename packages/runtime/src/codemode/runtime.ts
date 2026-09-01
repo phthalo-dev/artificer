@@ -3,15 +3,21 @@ import {
   shouldInterruptAfterDeadline,
   type QuickJSContext,
   type QuickJSHandle,
+  type QuickJSWASMModule,
 } from 'quickjs-emscripten';
+import { DEFAULT_CODEMODE_LIMITS } from '../config.js';
 import {
+  installGuestGlobals,
   installTools,
+  resolveResumeDeferreds,
   settlePendingDeferreds,
   type BridgeState,
 } from './bridge.js';
+import { CodemodeCellStore, type CodemodeCell } from './cells.js';
 import {
   CODEMODE_MEMORY_BYTES,
   type CodemodeResult,
+  type CodemodeSegmentResult,
   type DiagnosticKind,
   type RunCodemodeOptions,
 } from './types.js';
@@ -20,9 +26,25 @@ export {
   CODEMODE_MAX_CONCURRENCY,
   CODEMODE_MEMORY_BYTES,
   type CodemodeResult,
+  type CodemodeSegmentResult,
   type CodemodeTool,
   type DiagnosticKind,
 } from './types.js';
+
+export interface StartCodemodeCellOptions extends RunCodemodeOptions {
+  store: CodemodeCellStore;
+  runId: string;
+}
+
+export interface ResumeCodemodeCellOptions {
+  store: CodemodeCellStore;
+  runId: string;
+  cellId: string;
+  /** Soft budget for this segment only. Omitted means run to completion. */
+  yieldTimeMs?: number;
+  /** Dispose the cell instead of running another segment. */
+  terminate?: boolean;
+}
 
 function guestMessage(vm: QuickJSContext, handle: QuickJSHandle): string {
   const dumped = vm.dump(handle);
@@ -73,45 +95,103 @@ function assertGuestJsonSafe(vm: QuickJSContext, value: QuickJSHandle): void {
   result.value.dispose();
 }
 
-function applyOutputBudget(
-  value: unknown,
+/** What a segment accumulated, echoed on every payload the cell produces. */
+interface SegmentOutput {
+  logs: string[];
+  notifications: string[];
+  toolCalls: string[];
+}
+
+/** Read-only placeholder for failures raised before a cell exists. */
+const NO_OUTPUT: SegmentOutput = { logs: [], notifications: [], toolCalls: [] };
+
+const TRUNCATION_MARKER = '\n(truncated)';
+
+function encodedBytes(
+  head: Record<string, unknown>,
   logs: string[],
-  maxOutputBytes: number,
-): { value: unknown; logs?: string[]; truncated?: true } {
-  const encodedBytes = (candidateValue: unknown, candidateLogs: string[]) =>
-    Buffer.byteLength(
-      JSON.stringify({ value: candidateValue, logs: candidateLogs }),
-      'utf8',
-    );
+  notifications: string[],
+): number {
+  const payload: Record<string, unknown> = { ...head, logs };
+  if (notifications.length > 0) payload.notifications = notifications;
+  return Buffer.byteLength(JSON.stringify(payload), 'utf8');
+}
 
-  if (encodedBytes(value, logs) <= maxOutputBytes) {
-    return logs.length > 0 ? { value, logs } : { value };
+/** Longest prefix of `items` that still fits the budget. */
+function keptPrefix(
+  items: string[],
+  fits: (candidate: string[]) => boolean,
+): string[] {
+  const kept: string[] = [];
+  for (const item of items) {
+    const candidate = [...kept, item];
+    if (!fits(candidate)) break;
+    kept.push(item);
   }
+  return kept;
+}
 
-  const marker = '\n(truncated)';
-  const keptLogs: string[] = [];
-  for (const log of logs) {
-    const candidateLogs = [...keptLogs, log];
-    if (encodedBytes(marker, candidateLogs) > maxOutputBytes) break;
-    keptLogs.push(log);
-  }
-
-  const serialized = Array.from(JSON.stringify(value));
+/** Largest prefix of `serialized` whose encoding still fits the budget. */
+function keptSerializedLength(
+  serialized: string[],
+  fits: (candidate: string) => boolean,
+): number {
   let low = 0;
   let high = serialized.length;
   while (low < high) {
     const middle = Math.ceil((low + high) / 2);
-    const candidate = serialized.slice(0, middle).join('') + marker;
-    if (encodedBytes(candidate, keptLogs) <= maxOutputBytes) {
+    if (fits(serialized.slice(0, middle).join('') + TRUNCATION_MARKER)) {
       low = middle;
     } else {
       high = middle - 1;
     }
   }
+  return low;
+}
+
+function applyOutputBudget(
+  value: unknown,
+  logs: string[],
+  notifications: string[],
+  maxOutputBytes: number,
+): {
+  value: unknown;
+  logs?: string[];
+  notifications?: string[];
+  truncated?: true;
+} {
+  const size = (v: unknown, l: string[], n: string[]) =>
+    encodedBytes({ value: v }, l, n);
+
+  if (size(value, logs, notifications) <= maxOutputBytes) {
+    return {
+      value,
+      ...(logs.length > 0 ? { logs } : {}),
+      ...(notifications.length > 0 ? { notifications } : {}),
+    };
+  }
+
+  const keptNotifications = keptPrefix(
+    notifications,
+    (n) => size(TRUNCATION_MARKER, [], n) <= maxOutputBytes,
+  );
+  const keptLogs = keptPrefix(
+    logs,
+    (l) => size(TRUNCATION_MARKER, l, keptNotifications) <= maxOutputBytes,
+  );
+  const serialized = Array.from(JSON.stringify(value) ?? 'null');
+  const kept = keptSerializedLength(
+    serialized,
+    (candidate) =>
+      size(candidate, keptLogs, keptNotifications) <= maxOutputBytes,
+  );
 
   return {
-    value: serialized.slice(0, low).join('') + marker,
+    value: serialized.slice(0, kept).join('') + TRUNCATION_MARKER,
     logs: keptLogs,
+    ...(keptNotifications.length > 0
+      ? { notifications: keptNotifications }
+      : {}),
     truncated: true,
   };
 }
@@ -120,77 +200,191 @@ function applyFailureOutputBudget(
   kind: DiagnosticKind,
   message: string,
   logs: string[],
+  notifications: string[],
   maxOutputBytes: number,
 ): {
   error: { kind: DiagnosticKind; message: string };
   logs?: string[];
+  notifications?: string[];
   truncated?: true;
 } {
-  const encodedBytes = (candidateMessage: string, candidateLogs: string[]) =>
-    Buffer.byteLength(
-      JSON.stringify({
-        error: { kind, message: candidateMessage },
-        logs: candidateLogs,
-      }),
-      'utf8',
-    );
+  const size = (m: string, l: string[], n: string[]) =>
+    encodedBytes({ error: { kind, message: m } }, l, n);
 
-  if (encodedBytes(message, logs) <= maxOutputBytes) {
-    return logs.length > 0
-      ? { error: { kind, message }, logs }
-      : { error: { kind, message } };
+  if (size(message, logs, notifications) <= maxOutputBytes) {
+    return {
+      error: { kind, message },
+      ...(logs.length > 0 ? { logs } : {}),
+      ...(notifications.length > 0 ? { notifications } : {}),
+    };
   }
 
-  const marker = '\n(truncated)';
-  const keptLogs: string[] = [];
-  for (const log of logs) {
-    const candidateLogs = [...keptLogs, log];
-    if (encodedBytes(marker, candidateLogs) > maxOutputBytes) break;
-    keptLogs.push(log);
-  }
-
+  const keptNotifications = keptPrefix(
+    notifications,
+    (n) => size(TRUNCATION_MARKER, [], n) <= maxOutputBytes,
+  );
+  const keptLogs = keptPrefix(
+    logs,
+    (l) => size(TRUNCATION_MARKER, l, keptNotifications) <= maxOutputBytes,
+  );
   const serialized = Array.from(message);
-  let low = 0;
-  let high = serialized.length;
-  while (low < high) {
-    const middle = Math.ceil((low + high) / 2);
-    const candidate = serialized.slice(0, middle).join('') + marker;
-    if (encodedBytes(candidate, keptLogs) <= maxOutputBytes) {
-      low = middle;
-    } else {
-      high = middle - 1;
-    }
-  }
+  const kept = keptSerializedLength(
+    serialized,
+    (candidate) =>
+      size(candidate, keptLogs, keptNotifications) <= maxOutputBytes,
+  );
 
   return {
     error: {
       kind,
-      message: serialized.slice(0, low).join('') + marker,
+      message: serialized.slice(0, kept).join('') + TRUNCATION_MARKER,
     },
     logs: keptLogs,
+    ...(keptNotifications.length > 0
+      ? { notifications: keptNotifications }
+      : {}),
     truncated: true,
   };
 }
 
-type GuestWait =
-  | { status: 'fulfilled'; value: QuickJSHandle }
+function failedSegment(
+  kind: DiagnosticKind,
+  message: string,
+  output: SegmentOutput,
+  maxOutputBytes: number,
+  cellId?: string,
+): CodemodeSegmentResult {
+  const capped = applyFailureOutputBudget(
+    kind,
+    message,
+    output.logs,
+    output.notifications,
+    maxOutputBytes,
+  );
+  return {
+    ok: false,
+    error: capped.error,
+    ...(cellId ? { cellId } : {}),
+    ...(capped.logs ? { logs: [...capped.logs] } : {}),
+    ...(capped.notifications
+      ? { notifications: [...capped.notifications] }
+      : {}),
+    ...(capped.truncated ? { truncated: true } : {}),
+    toolCalls: [...output.toolCalls],
+  };
+}
+
+function completedSegment(
+  cell: CodemodeCell,
+  value: unknown,
+): CodemodeSegmentResult {
+  const capped = applyOutputBudget(
+    value,
+    cell.logs,
+    cell.notifications,
+    cell.limits.maxOutputBytes,
+  );
+  return {
+    ok: true,
+    running: false,
+    value: capped.value,
+    ...(capped.logs ? { logs: [...capped.logs] } : {}),
+    ...(capped.notifications
+      ? { notifications: [...capped.notifications] }
+      : {}),
+    ...(capped.truncated ? { truncated: true } : {}),
+    toolCalls: [...cell.state.toolCalls],
+  };
+}
+
+function runningSegment(cell: CodemodeCell): CodemodeSegmentResult {
+  const capped = applyOutputBudget(
+    null,
+    cell.logs,
+    cell.notifications,
+    cell.limits.maxOutputBytes,
+  );
+  return {
+    ok: true,
+    running: true,
+    cellId: cell.id,
+    ...(capped.logs ? { logs: [...capped.logs] } : {}),
+    ...(capped.notifications
+      ? { notifications: [...capped.notifications] }
+      : {}),
+    ...(capped.truncated ? { truncated: true } : {}),
+    toolCalls: [...cell.state.toolCalls],
+  };
+}
+
+function outputOf(cell: CodemodeCell): SegmentOutput {
+  return {
+    logs: cell.logs,
+    notifications: cell.notifications,
+    toolCalls: cell.state.toolCalls,
+  };
+}
+
+const PRAGMA_PATTERN = /^\/\/\s*@exec:\s*(.*)$/;
+
+interface ExecPragma {
+  /** Soft budget for the first segment only. */
+  yieldTimeMs?: number;
+}
+
+/**
+ * Read the optional `// @exec: {"yield_time_ms": N}` first line. Unknown keys
+ * are ignored; malformed JSON is a `ParseError` before the program runs.
+ */
+function parseExecPragma(
+  code: string,
+): { ok: true; pragma: ExecPragma } | { ok: false; message: string } {
+  const lines = code.split('\n');
+  const first = lines.find((line) => line.trim() !== '')?.trim();
+  const match = first ? PRAGMA_PATTERN.exec(first) : undefined;
+  if (!match) return { ok: true, pragma: {} };
+
+  const body = match[1]?.trim() ?? '';
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(body);
+  } catch {
+    return { ok: false, message: `invalid @exec pragma: ${body}` };
+  }
+  if (!parsed || typeof parsed !== 'object' || Array.isArray(parsed)) {
+    return { ok: false, message: `invalid @exec pragma: ${body}` };
+  }
+
+  const raw = (parsed as Record<string, unknown>).yield_time_ms;
+  const usable = typeof raw === 'number' && Number.isFinite(raw) && raw > 0;
+  return { ok: true, pragma: usable ? { yieldTimeMs: raw } : {} };
+}
+
+type SegmentOutcome =
+  | { status: 'completed'; value: QuickJSHandle }
   | { status: 'rejected'; error: QuickJSHandle }
+  | { status: 'exited' }
+  | { status: 'yielded' }
   | { status: 'fail'; kind: DiagnosticKind; message: string };
 
 /**
- * Wait for the guest async IIFE without `resolvePromise()`.
- * That API creates a host Promise settled only by WASM `.then` callbacks; if we
- * time out or interrupt and dispose the VM, Node's test runner reports
- * "Promise resolution is still pending but the event loop has already resolved"
- * and fails every subsequent test file in the same process.
+ * Drive the guest until it settles, asks to pause, or runs out of budget.
+ *
+ * Deliberately polls `getPromiseState` instead of `resolvePromise()`: that API
+ * creates a host Promise settled only by WASM `.then` callbacks, so timing out
+ * and disposing the VM makes Node's test runner report "Promise resolution is
+ * still pending but the event loop has already resolved" and fail every
+ * subsequent test file in the same process.
  */
-async function awaitGuestPromise(
-  vm: QuickJSContext,
-  promiseHandle: QuickJSHandle,
-  deadline: number,
-  state: BridgeState,
-): Promise<GuestWait> {
+async function runSegment(
+  cell: CodemodeCell,
+  yieldTimeMs?: number,
+): Promise<SegmentOutcome> {
+  const { vm, state } = cell;
   const runtime = vm.runtime;
+  const softDeadline =
+    yieldTimeMs === undefined ? undefined : Date.now() + yieldTimeMs;
+
   let notify: (() => void) | undefined;
   state.kick = () => notify?.();
 
@@ -207,86 +401,240 @@ async function awaitGuestPromise(
       };
     });
 
-  for (;;) {
-    const jobs = runtime.executePendingJobs();
-    if (jobs.error) {
-      const message = guestMessage(vm, jobs.error);
+  try {
+    for (;;) {
+      const jobs = runtime.executePendingJobs();
+      if (jobs.error) {
+        const message = guestMessage(vm, jobs.error);
+        jobs.dispose();
+        const interrupted = /interrupted/i.test(message);
+        return {
+          status: 'fail',
+          kind: interrupted ? 'TimeoutExceeded' : 'ExecutionFailure',
+          message: interrupted ? 'timeoutMs exceeded' : message,
+        };
+      }
       jobs.dispose();
-      const interrupted = /interrupted/i.test(message);
-      return {
-        status: 'fail',
-        kind: interrupted ? 'TimeoutExceeded' : 'ExecutionFailure',
-        message: interrupted ? 'timeoutMs exceeded' : message,
-      };
-    }
-    jobs.dispose();
 
-    const pstate = vm.getPromiseState(promiseHandle);
-    if (pstate.type === 'fulfilled') {
-      return { status: 'fulfilled', value: pstate.value };
-    }
-    if (pstate.type === 'rejected') {
-      return { status: 'rejected', error: pstate.error };
-    }
+      if (state.exitRequested) return { status: 'exited' };
 
-    const remaining = deadline - Date.now();
-    if (remaining <= 0) {
-      return {
-        status: 'fail',
-        kind: 'TimeoutExceeded',
-        message: 'timeoutMs exceeded',
-      };
+      const promise = vm.getPromiseState(cell.promise);
+      if (promise.type === 'fulfilled') {
+        return { status: 'completed', value: promise.value };
+      }
+      if (promise.type === 'rejected') {
+        return { status: 'rejected', error: promise.error };
+      }
+
+      // The hard ceiling outranks a pause request so a guest that yields in a
+      // loop cannot outlive `timeoutMs`.
+      const now = Date.now();
+      if (now >= cell.deadlineAt) {
+        return {
+          status: 'fail',
+          kind: 'TimeoutExceeded',
+          message: 'timeoutMs exceeded',
+        };
+      }
+      if (state.yieldRequested) return { status: 'yielded' };
+      if (softDeadline !== undefined && now >= softDeadline) {
+        return { status: 'yielded' };
+      }
+
+      if (runtime.hasPendingJob()) continue;
+      const remaining = Math.min(
+        cell.deadlineAt - now,
+        softDeadline === undefined
+          ? Number.POSITIVE_INFINITY
+          : softDeadline - now,
+      );
+      await waitForHost(Math.min(10, remaining));
     }
-    if (runtime.hasPendingJob()) continue;
-    await waitForHost(Math.min(10, remaining));
+  } finally {
+    notify = undefined;
+    state.kick = undefined;
   }
 }
 
-function failure(
-  kind: DiagnosticKind,
-  message: string,
-  logs: string[],
-  toolCalls: string[],
-  maxOutputBytes: number,
-): CodemodeResult {
-  const capped = applyFailureOutputBudget(kind, message, logs, maxOutputBytes);
-  return {
-    ok: false,
-    error: capped.error,
-    ...(capped.logs ? { logs: capped.logs } : {}),
-    ...(capped.truncated ? { truncated: true } : {}),
-    toolCalls,
-  };
+/**
+ * Turn a segment outcome into a payload. Every outcome except `yielded` is
+ * terminal, so the cell is disposed and its slot freed.
+ */
+function settleSegment(
+  store: CodemodeCellStore,
+  cell: CodemodeCell,
+  outcome: SegmentOutcome,
+): CodemodeSegmentResult {
+  const { vm, limits, state } = cell;
+
+  // A breached hard limit leaves the cell unresumable, so a pause request must
+  // not hand a cellId back to the caller.
+  const settled: SegmentOutcome =
+    outcome.status === 'yielded' && state.fatal
+      ? { status: 'fail', ...state.fatal }
+      : outcome;
+  if (settled.status === 'yielded') return runningSegment(cell);
+
+  const output = outputOf(cell);
+  const fail = (kind: DiagnosticKind, message: string) =>
+    failedSegment(kind, message, output, limits.maxOutputBytes, cell.id);
+
+  let result: CodemodeSegmentResult | undefined;
+  try {
+    if (settled.status === 'fail') {
+      result = fail(settled.kind, settled.message);
+      return result;
+    }
+
+    if (state.fatal) {
+      if (settled.status === 'completed') settled.value.dispose();
+      if (settled.status === 'rejected') settled.error.dispose();
+      result = fail(state.fatal.kind, state.fatal.message);
+      return result;
+    }
+
+    if (settled.status === 'exited') {
+      result = completedSegment(cell, null);
+      return result;
+    }
+
+    if (settled.status === 'rejected') {
+      const message = nameUnknownTool(
+        guestMessage(vm, settled.error),
+        cell.code,
+        cell.tools,
+      );
+      settled.error.dispose();
+      if (/interrupted/i.test(message)) {
+        result = fail('TimeoutExceeded', 'timeoutMs exceeded');
+        return result;
+      }
+      // A JSON-safe boundary throw the guest chose not to catch keeps its own
+      // diagnostic instead of collapsing into ExecutionFailure.
+      const kind = state.dataViolations?.has(message)
+        ? 'InvalidDataValue'
+        : 'ExecutionFailure';
+      result = fail(kind, message);
+      return result;
+    }
+
+    if (vm.typeof(settled.value) === 'function') {
+      settled.value.dispose();
+      result = fail('InvalidDataValue', 'result is not JSON-safe');
+      return result;
+    }
+    try {
+      assertGuestJsonSafe(vm, settled.value);
+    } catch {
+      settled.value.dispose();
+      result = fail('InvalidDataValue', 'result is not JSON-safe');
+      return result;
+    }
+
+    const raw = vm.dump(settled.value);
+    settled.value.dispose();
+    try {
+      result = completedSegment(cell, jsonSafe(raw));
+      return result;
+    } catch (err) {
+      result = fail(
+        'InvalidDataValue',
+        err instanceof Error ? err.message : String(err),
+      );
+      return result;
+    }
+  } finally {
+    store.disposeCell(cell.runId, cell.id);
+    // Isolate is gone (frees a maxCells slot) but a successful completion
+    // stays readable until disposeRun so a later wait is not CellNotFound.
+    if (result?.ok && result.running === false) {
+      store.cacheCompleted(cell.runId, cell.id, result);
+    }
+  }
 }
 
-export async function runCodemode(
-  opts: RunCodemodeOptions,
-): Promise<CodemodeResult> {
-  if (!opts.code.trim()) {
-    return failure(
-      'ParseError',
-      'code is empty',
-      [],
-      [],
-      opts.limits.maxOutputBytes,
+/**
+ * Run one segment and turn it into a payload, keeping the isolate accounted for
+ * even when the host throws.
+ *
+ * The reachable case is a run-end `store.disposeRun` landing while a segment is
+ * mid-flight: the cell is freed underneath us and the next
+ * `executePendingJobs` / `getPromiseState` is a use-after-free. Callers get a
+ * typed failure instead of a rejected Promise, and the cell is unregistered so
+ * a dead isolate cannot linger until the next `admit` sweeps it.
+ */
+async function driveSegment(
+  store: CodemodeCellStore,
+  cell: CodemodeCell,
+  yieldTimeMs?: number,
+): Promise<CodemodeSegmentResult> {
+  cell.busy = true;
+  try {
+    return settleSegment(store, cell, await runSegment(cell, yieldTimeMs));
+  } catch (err) {
+    // `settleSegment` disposes on every terminal outcome and must not dispose on
+    // a yield, so this catch is the only place left that can leak a cell.
+    store.disposeCell(cell.runId, cell.id);
+    const message = err instanceof Error ? err.message : String(err);
+    const interrupted = /interrupted/i.test(message);
+    return failedSegment(
+      interrupted ? 'TimeoutExceeded' : 'ExecutionFailure',
+      interrupted ? 'timeoutMs exceeded' : message,
+      outputOf(cell),
+      cell.limits.maxOutputBytes,
+      cell.id,
     );
+  } finally {
+    cell.busy = false;
   }
+}
 
-  const QuickJS = await getQuickJS();
+type CellInit =
+  | { ok: true; cell: CodemodeCell }
+  | {
+      ok: false;
+      kind: DiagnosticKind;
+      message: string;
+      output: SegmentOutput;
+    };
+
+/**
+ * Build the isolate and start the guest program. Evaluating the async IIFE runs
+ * the body up to its first `await`, so this can already fail or log.
+ */
+function createCell(
+  QuickJS: QuickJSWASMModule,
+  cellId: string,
+  opts: StartCodemodeCellOptions,
+): CellInit {
+  const { limits } = opts;
+  const createdAt = Date.now();
+  const deadlineAt = createdAt + limits.timeoutMs;
   const runtime = QuickJS.newRuntime();
   const vm = runtime.newContext();
   const logs: string[] = [];
+  const notifications: string[] = [];
   const state: BridgeState = {
     disposed: false,
     toolCalls: [],
     admitted: 0,
     onToolCall: opts.onToolCall,
   };
-  const deadline = Date.now() + opts.limits.timeoutMs;
+
+  let tornDown = false;
+  const teardown = () => {
+    if (tornDown) return;
+    tornDown = true;
+    state.disposed = true;
+    state.kick = undefined;
+    settlePendingDeferreds(vm, state);
+    vm.dispose();
+    runtime.dispose();
+  };
 
   try {
     runtime.setMemoryLimit(CODEMODE_MEMORY_BYTES);
-    runtime.setInterruptHandler(shouldInterruptAfterDeadline(deadline));
+    runtime.setInterruptHandler(shouldInterruptAfterDeadline(deadlineAt));
 
     const consoleHandle = vm.newObject();
     for (const method of ['log', 'warn', 'error'] as const) {
@@ -300,139 +648,242 @@ export async function runCodemode(
     vm.setProp(vm.global, 'console', consoleHandle);
     consoleHandle.dispose();
 
-    const toolsHandle = installTools(vm, opts.tools, opts.limits, state);
+    const toolsHandle = installTools(vm, opts.tools, limits, state);
     vm.setProp(vm.global, 'tools', toolsHandle);
     toolsHandle.dispose();
+
+    installGuestGlobals(vm, state, {
+      kv: opts.store.kv(opts.runId),
+      notifications,
+    });
 
     const evalResult = vm.evalCode(`(async () => {\n${opts.code}\n})()`);
     if (evalResult.error) {
       const message = guestMessage(vm, evalResult.error);
       evalResult.error.dispose();
       const interrupted = /interrupted/i.test(message);
-      return failure(
-        interrupted ? 'TimeoutExceeded' : 'ParseError',
-        interrupted ? 'timeoutMs exceeded' : message,
-        logs,
-        state.toolCalls,
-        opts.limits.maxOutputBytes,
-      );
+      const output = { logs, notifications, toolCalls: state.toolCalls };
+      teardown();
+      return {
+        ok: false,
+        kind: interrupted ? 'TimeoutExceeded' : 'ParseError',
+        message: interrupted ? 'timeoutMs exceeded' : message,
+        output,
+      };
     }
+    const promise = vm.unwrapResult(evalResult);
 
-    const promiseHandle = vm.unwrapResult(evalResult);
-    const resolved = await awaitGuestPromise(
-      vm,
-      promiseHandle,
-      deadline,
+    const cell: CodemodeCell = {
+      id: cellId,
+      runId: opts.runId,
+      createdAt,
+      deadlineAt,
+      code: opts.code,
+      tools: opts.tools,
+      limits,
+      busy: false,
+      logs,
+      notifications,
       state,
-    );
-    promiseHandle.dispose();
-
-    if (resolved.status === 'fail') {
-      return failure(
-        resolved.kind,
-        resolved.message,
-        logs,
-        state.toolCalls,
-        opts.limits.maxOutputBytes,
-      );
-    }
-
-    if (state.fatal) {
-      if (resolved.status === 'rejected') {
-        resolved.error.dispose();
-      } else {
-        resolved.value.dispose();
-      }
-      return failure(
-        state.fatal.kind,
-        state.fatal.message,
-        logs,
-        state.toolCalls,
-        opts.limits.maxOutputBytes,
-      );
-    }
-
-    if (resolved.status === 'rejected') {
-      const message = nameUnknownTool(
-        guestMessage(vm, resolved.error),
-        opts.code,
-        opts.tools,
-      );
-      resolved.error.dispose();
-      const interrupted = /interrupted/i.test(message);
-      return failure(
-        interrupted ? 'TimeoutExceeded' : 'ExecutionFailure',
-        interrupted ? 'timeoutMs exceeded' : message,
-        logs,
-        state.toolCalls,
-        opts.limits.maxOutputBytes,
-      );
-    }
-
-    if (vm.typeof(resolved.value) === 'function') {
-      resolved.value.dispose();
-      return failure(
-        'InvalidDataValue',
-        'result is not JSON-safe',
-        logs,
-        state.toolCalls,
-        opts.limits.maxOutputBytes,
-      );
-    }
-
-    try {
-      assertGuestJsonSafe(vm, resolved.value);
-    } catch {
-      resolved.value.dispose();
-      return failure(
-        'InvalidDataValue',
-        'result is not JSON-safe',
-        logs,
-        state.toolCalls,
-        opts.limits.maxOutputBytes,
-      );
-    }
-
-    const raw = vm.dump(resolved.value);
-    resolved.value.dispose();
-    let value: unknown;
-    try {
-      value = jsonSafe(raw);
-    } catch (err) {
-      return failure(
-        'InvalidDataValue',
-        err instanceof Error ? err.message : String(err),
-        logs,
-        state.toolCalls,
-        opts.limits.maxOutputBytes,
-      );
-    }
-
-    const capped = applyOutputBudget(value, logs, opts.limits.maxOutputBytes);
-    return {
-      ok: true,
-      value: capped.value,
-      ...(capped.logs ? { logs: capped.logs } : {}),
-      ...(capped.truncated ? { truncated: true } : {}),
-      toolCalls: state.toolCalls,
+      vm,
+      promise,
+      dispose: () => {
+        try {
+          if (promise.alive) promise.dispose();
+        } catch {
+          // VM may already be tearing down.
+        }
+        teardown();
+      },
     };
+    return { ok: true, cell };
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
-    const kind: DiagnosticKind = /interrupted/i.test(message)
-      ? 'TimeoutExceeded'
-      : 'ExecutionFailure';
-    return failure(
-      kind,
-      kind === 'TimeoutExceeded' ? 'timeoutMs exceeded' : message,
-      logs,
-      state.toolCalls,
-      opts.limits.maxOutputBytes,
+    const interrupted = /interrupted/i.test(message);
+    const output = { logs, notifications, toolCalls: state.toolCalls };
+    teardown();
+    return {
+      ok: false,
+      kind: interrupted ? 'TimeoutExceeded' : 'ExecutionFailure',
+      message: interrupted ? 'timeoutMs exceeded' : message,
+      output,
+    };
+  }
+}
+
+/**
+ * Start a cell and run its first segment. Returns `running: true` with a
+ * `cellId` when the guest paused; the isolate stays alive in `store` until
+ * `resumeCodemodeCell` finishes it, the run ends, or the TTL sweeps it.
+ */
+export async function startCodemodeCell(
+  opts: StartCodemodeCellOptions,
+): Promise<CodemodeSegmentResult> {
+  const { limits, store, runId } = opts;
+  if (!opts.code.trim()) {
+    return failedSegment(
+      'ParseError',
+      'code is empty',
+      NO_OUTPUT,
+      limits.maxOutputBytes,
     );
+  }
+
+  const pragma = parseExecPragma(opts.code);
+  if (!pragma.ok) {
+    return failedSegment(
+      'ParseError',
+      pragma.message,
+      NO_OUTPUT,
+      limits.maxOutputBytes,
+    );
+  }
+
+  const QuickJS = await getQuickJS();
+
+  // admit -> createCell -> register stays synchronous so two concurrent starts
+  // cannot both claim the last slot.
+  const cellId = store.admit(runId);
+  if (cellId === undefined) {
+    return failedSegment(
+      'CellLimitExceeded',
+      `maxCells (${limits.maxCells}) exceeded`,
+      NO_OUTPUT,
+      limits.maxOutputBytes,
+    );
+  }
+
+  const init = createCell(QuickJS, cellId, opts);
+  if (!init.ok) {
+    return failedSegment(
+      init.kind,
+      init.message,
+      init.output,
+      limits.maxOutputBytes,
+    );
+  }
+  // `driveSegment` claims the cell before its first `await`, so registering it
+  // here cannot expose an unclaimed cell to a concurrent resume.
+  store.register(init.cell);
+  return driveSegment(store, init.cell, pragma.pragma.yieldTimeMs);
+}
+
+/**
+ * Run another segment of a paused cell. In-flight host tool handlers kept
+ * running between segments; the segment loop drains their guest jobs.
+ */
+export async function resumeCodemodeCell(
+  opts: ResumeCodemodeCellOptions,
+): Promise<CodemodeSegmentResult> {
+  const { store, runId, cellId } = opts;
+  const cell = store.get(runId, cellId);
+  if (!cell) {
+    const cached = store.getCompleted(runId, cellId);
+    if (cached) {
+      if (opts.terminate) {
+        store.forgetCompleted(runId, cellId);
+        return {
+          ok: true,
+          running: false,
+          value: null,
+          toolCalls: cached.toolCalls,
+        };
+      }
+      return cached;
+    }
+    return failedSegment(
+      'CellNotFound',
+      `no live codemode cell ${cellId}`,
+      NO_OUTPUT,
+      DEFAULT_CODEMODE_LIMITS.maxOutputBytes,
+    );
+  }
+
+  const maxOutputBytes = cell.limits.maxOutputBytes;
+  // Terminating is refused too: disposing under a live segment is the same
+  // use-after-free, and the in-flight segment is already capped by `deadlineAt`.
+  if (cell.busy) {
+    return failedSegment(
+      'ExecutionFailure',
+      `codemode cell ${cellId} is already running a segment`,
+      outputOf(cell),
+      maxOutputBytes,
+      cellId,
+    );
+  }
+
+  if (opts.terminate) {
+    const payload = completedSegment(cell, null);
+    store.disposeCell(runId, cellId);
+    return payload;
+  }
+
+  const now = Date.now();
+  if (now >= cell.deadlineAt) {
+    const payload = failedSegment(
+      'TimeoutExceeded',
+      'timeoutMs exceeded',
+      outputOf(cell),
+      maxOutputBytes,
+      cellId,
+    );
+    store.disposeCell(runId, cellId);
+    return payload;
+  }
+  if (now - cell.createdAt >= store.cellTtlMs) {
+    store.disposeCell(runId, cellId);
+    return failedSegment(
+      'CellNotFound',
+      `codemode cell ${cellId} expired before it was resumed`,
+      NO_OUTPUT,
+      maxOutputBytes,
+    );
+  }
+
+  cell.state.yieldRequested = false;
+  resolveResumeDeferreds(cell.state);
+  return driveSegment(store, cell, opts.yieldTimeMs);
+}
+
+/** The fields a segment payload and a v1 result share verbatim. */
+function envelope(segment: CodemodeSegmentResult) {
+  return {
+    ...(segment.logs ? { logs: segment.logs } : {}),
+    ...(segment.notifications ? { notifications: segment.notifications } : {}),
+    ...(segment.truncated ? { truncated: true as const } : {}),
+    toolCalls: segment.toolCalls,
+  };
+}
+
+/**
+ * One-shot v1 entry point: an ephemeral store, and yields driven straight
+ * through to completion because the caller has no way to resume.
+ */
+export async function runCodemode(
+  opts: RunCodemodeOptions,
+): Promise<CodemodeResult> {
+  const store = new CodemodeCellStore({
+    maxCells: 1,
+    cellTtlMs: opts.limits.timeoutMs,
+  });
+  const runId = 'codemode-one-shot';
+
+  try {
+    let segment = await startCodemodeCell({ ...opts, store, runId });
+    for (;;) {
+      if (!segment.ok) {
+        return { ok: false, error: segment.error, ...envelope(segment) };
+      }
+      if (!segment.running) {
+        return { ok: true, value: segment.value, ...envelope(segment) };
+      }
+      segment = await resumeCodemodeCell({
+        store,
+        runId,
+        cellId: segment.cellId,
+      });
+    }
   } finally {
-    state.disposed = true;
-    state.kick = undefined;
-    settlePendingDeferreds(vm, state);
-    vm.dispose();
-    runtime.dispose();
+    store.disposeRun(runId);
   }
 }
