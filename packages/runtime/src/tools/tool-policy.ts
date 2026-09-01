@@ -41,14 +41,24 @@ function shellTokens(command: string): string[] {
   return command.match(/"[^"]*"|'[^']*'|\S+/g) ?? [];
 }
 
+function withoutSurroundingQuotes(token: string): string {
+  const first = token[0];
+  return token.length >= 2 &&
+    (first === '"' || first === "'") &&
+    token.at(-1) === first
+    ? token.slice(1, -1)
+    : token;
+}
+
 function isSecretValue(token: string): boolean {
+  const unquoted = withoutSurroundingQuotes(token);
   return (
-    /^(?:gh[pousr]_[A-Za-z0-9]+|sk-[A-Za-z0-9_-]+)$/i.test(token) ||
-    /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(token) ||
-    (token.length >= 24 &&
-      /^[A-Za-z0-9+/=_-]+$/.test(token) &&
-      /[A-Za-z]/.test(token) &&
-      /\d/.test(token))
+    /^(?:gh[pousr]_[A-Za-z0-9]+|sk-[A-Za-z0-9_-]+)$/i.test(unquoted) ||
+    /^eyJ[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+\.[A-Za-z0-9_-]+$/.test(unquoted) ||
+    (unquoted.length >= 24 &&
+      /^[A-Za-z0-9+/=_-]+$/.test(unquoted) &&
+      /[A-Za-z]/.test(unquoted) &&
+      /\d/.test(unquoted))
   );
 }
 
@@ -157,18 +167,46 @@ function hasDangerousGitCommand(command: string): boolean {
   });
 }
 
+function hasDangerousCurlCommand(command: string): boolean {
+  const writeMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
+
+  return command.split(/[;&|]/).some((segment) => {
+    const tokens = shellTokens(segment);
+    const curlIndex = tokens.indexOf('curl');
+    if (curlIndex < 0) return false;
+
+    for (let index = curlIndex + 1; index < tokens.length; index += 1) {
+      const token = tokens[index]!;
+      if (
+        /^-(?:d|F|T|o)(?:.|$)/.test(token) ||
+        /^--(?:data(?:-[a-z-]+)?|form|upload-file|output)(?:=|$)/.test(token)
+      ) {
+        return true;
+      }
+
+      if (token === '-X' || token === '--request') {
+        if (writeMethods.has(tokens[index + 1]?.toUpperCase() ?? '')) {
+          return true;
+        }
+      } else if (token.startsWith('-X')) {
+        if (writeMethods.has(token.slice(2).toUpperCase())) return true;
+      } else if (token.startsWith('--request=')) {
+        if (writeMethods.has(token.slice('--request='.length).toUpperCase())) {
+          return true;
+        }
+      }
+    }
+
+    return false;
+  });
+}
+
 export function isDangerousShellCommand(command: string): boolean {
   const normalized = command.toLowerCase();
 
   if (hasDangerousRm(command) || hasDangerousGitCommand(command)) return true;
 
-  if (
-    /\bcurl\b[^;&|\n]*(?:\s-(?:x\s*(?:post|put|patch|delete)|d|f|t|o)(?:\s|$)|--(?:request(?:=|\s+)(?:post|put|patch|delete)|data(?:-[a-z-]+)?(?:=|\s)|form(?:=|\s)|upload-file(?:=|\s)|output(?:=|\s)))/i.test(
-      command,
-    )
-  ) {
-    return true;
-  }
+  if (hasDangerousCurlCommand(command)) return true;
   if (
     /\bwget\b[^;&|\n]*(?:--(?:post-data|post-file|output-document)(?:=|\s)|--method(?:=|\s+)(?:post|put|patch|delete)|\s-o(?:\s|$))/i.test(
       command,
@@ -179,8 +217,8 @@ export function isDangerousShellCommand(command: string): boolean {
 
   return (
     /\bssh\b/.test(normalized) ||
-    /\bkubectl\s+apply\b/.test(normalized) ||
-    /\bterraform\s+apply\b/.test(normalized) ||
+    /\bkubectl\b[^;&|\n]*\bapply\b/.test(normalized) ||
+    /\bterraform\b[^;&|\n]*\bapply\b/.test(normalized) ||
     /\bhelm\s+upgrade\b/.test(normalized)
   );
 }
@@ -210,7 +248,11 @@ function isToolPolicyFile(value: unknown): value is ToolPolicyFile {
 }
 
 function loadPolicyFile(filePath: string | undefined): ToolPolicyFile {
-  if (!filePath || !fs.existsSync(filePath)) return EMPTY_POLICY;
+  if (!filePath) return EMPTY_POLICY;
+  if (!fs.existsSync(filePath)) {
+    console.warn(`Could not load tool policy file ${filePath}: file not found`);
+    return EMPTY_POLICY;
+  }
 
   try {
     const parsed: unknown = JSON.parse(fs.readFileSync(filePath, 'utf8'));
