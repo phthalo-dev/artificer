@@ -205,7 +205,6 @@ function hasSubcommandAfterGlobalOptions(
   command: string,
   executable: string,
   subcommand: string,
-  optionsWithValues: ReadonlySet<string>,
 ): boolean {
   return command.split(/[;&|]/).some((segment) => {
     const tokens = shellTokens(segment.toLowerCase());
@@ -215,9 +214,10 @@ function hasSubcommandAfterGlobalOptions(
 
     while (tokens[index]?.startsWith('-')) {
       const option = tokens[index]!;
-      index += 1;
-      if (!option.includes('=') && optionsWithValues.has(option)) {
+      if (option.includes('=') || tokens[index + 1]?.startsWith('-')) {
         index += 1;
+      } else {
+        index += 2;
       }
     }
 
@@ -241,33 +241,8 @@ export function isDangerousShellCommand(command: string): boolean {
 
   return (
     /\bssh\b/.test(normalized) ||
-    hasSubcommandAfterGlobalOptions(
-      command,
-      'kubectl',
-      'apply',
-      new Set([
-        '--as',
-        '--as-group',
-        '--cache-dir',
-        '--certificate-authority',
-        '--client-certificate',
-        '--client-key',
-        '--cluster',
-        '--context',
-        '--kubeconfig',
-        '--namespace',
-        '--profile',
-        '--profile-output',
-        '--request-timeout',
-        '--server',
-        '--tls-server-name',
-        '--token',
-        '--user',
-        '-n',
-        '-s',
-      ]),
-    ) ||
-    hasSubcommandAfterGlobalOptions(command, 'terraform', 'apply', new Set()) ||
+    hasSubcommandAfterGlobalOptions(command, 'kubectl', 'apply') ||
+    hasSubcommandAfterGlobalOptions(command, 'terraform', 'apply') ||
     /\bhelm\s+upgrade\b/.test(normalized)
   );
 }
