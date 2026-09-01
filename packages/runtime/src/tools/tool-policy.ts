@@ -46,8 +46,14 @@ function tokenExecutable(token: string): string {
   return base.toLowerCase();
 }
 
+function isEnvAssignment(token: string): boolean {
+  return /^[A-Za-z_][A-Za-z0-9_]*=/.test(withoutSurroundingQuotes(token));
+}
+
 function indexOfExecutable(tokens: string[], name: string): number {
-  return tokens.findIndex((token) => tokenExecutable(token) === name);
+  return tokens.findIndex(
+    (token) => !isEnvAssignment(token) && tokenExecutable(token) === name,
+  );
 }
 
 function isSecretValue(token: string): boolean {
@@ -342,17 +348,22 @@ function globMatches(pattern: string, value: string): boolean {
   return new RegExp(`^${expression}$`).test(value);
 }
 
-export function matchRule(
+function toolMatches(candidate: PolicyRule, tool: string): boolean {
+  return candidate.tool === tool || candidate.tool === '*';
+}
+
+function matchSingleKey(
   policy: ToolPolicyFile,
   tool: string,
   approvalKey: string,
+  rules: PolicyRule[],
 ): PolicyRule | undefined {
   let lastAllow: PolicyRule | undefined;
 
-  for (let index = policy.rules.length - 1; index >= 0; index -= 1) {
-    const candidate = policy.rules[index]!;
+  for (let index = rules.length - 1; index >= 0; index -= 1) {
+    const candidate = rules[index]!;
     if (
-      (candidate.tool === tool || candidate.tool === '*') &&
+      toolMatches(candidate, tool) &&
       globMatches(candidate.pattern, approvalKey)
     ) {
       if (candidate.effect === 'deny') return candidate;
@@ -361,6 +372,38 @@ export function matchRule(
   }
 
   return lastAllow;
+}
+
+export function matchRule(
+  policy: ToolPolicyFile,
+  tool: string,
+  approvalKey: string,
+): PolicyRule | undefined {
+  const segments = approvalKey.split(' && ');
+  if (segments.length === 1) {
+    return matchSingleKey(policy, tool, approvalKey, policy.rules);
+  }
+
+  const chainRules = policy.rules.filter((candidate) =>
+    candidate.pattern.includes(' && '),
+  );
+  const segmentRules = policy.rules.filter(
+    (candidate) => !candidate.pattern.includes(' && '),
+  );
+
+  const whole = matchSingleKey(policy, tool, approvalKey, chainRules);
+  if (whole?.effect === 'deny') return whole;
+
+  const segmentMatches = segments.map((segment) =>
+    matchSingleKey(policy, tool, segment, segmentRules),
+  );
+  const denied = segmentMatches.find((match) => match?.effect === 'deny');
+  if (denied) return denied;
+  if (whole?.effect === 'allow') return whole;
+  if (segmentMatches.every((match) => match?.effect === 'allow')) {
+    return segmentMatches.at(-1);
+  }
+  return undefined;
 }
 
 export function saveExecPolicy(execPath: string, file: ToolPolicyFile): void {
