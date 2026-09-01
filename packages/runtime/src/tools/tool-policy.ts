@@ -33,6 +33,23 @@ function withoutSurroundingQuotes(token: string): string {
     : token;
 }
 
+function splitCommandSegments(command: string): string[] {
+  return command
+    .split(/\s*(?:&&|\|\||[\n\r]+|;|\||&)\s*/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+}
+
+function tokenExecutable(token: string): string {
+  const unquoted = withoutSurroundingQuotes(token);
+  const base = unquoted.split(/[/\\]/).filter(Boolean).pop() ?? unquoted;
+  return base.toLowerCase();
+}
+
+function indexOfExecutable(tokens: string[], name: string): number {
+  return tokens.findIndex((token) => tokenExecutable(token) === name);
+}
+
 function isSecretValue(token: string): boolean {
   const unquoted = withoutSurroundingQuotes(token);
   return (
@@ -81,28 +98,37 @@ function redactShellTokens(tokens: string[]): string[] {
   return redacted;
 }
 
-/**
- * Produces a stable, non-secret command prefix for approval matching.
- * `rm`/`rmdir` keep flags and path operands so distinct targets do not
- * collapse. Docker Compose retains its subcommand as a third token.
- * Other commands use a two-token prefix.
- */
-export function shellApprovalKey(command: string): string {
-  const tokens = redactShellTokens(shellTokens(command.trim()));
+function keySingleSegment(segment: string): string {
+  const tokens = redactShellTokens(shellTokens(segment.trim()));
   if (tokens.length === 0) return '';
 
-  const executable = tokens[0]!.toLowerCase();
+  const executable = tokenExecutable(tokens[0]!);
+  const rest = tokens.slice(1);
   if (executable === 'rm' || executable === 'rmdir') {
-    return tokens.join(' ');
+    return [executable, ...rest].join(' ');
   }
 
   const arity =
     executable === 'docker-compose' ||
-    (executable === 'docker' && tokens[1]?.toLowerCase() === 'compose')
+    (executable === 'docker' && rest[0]?.toLowerCase() === 'compose')
       ? 3
       : 2;
 
-  return tokens.slice(0, arity).join(' ');
+  return [executable, ...rest].slice(0, arity).join(' ');
+}
+
+/**
+ * Produces a stable, non-secret command prefix for approval matching.
+ * `rm`/`rmdir` keep flags and path operands so distinct targets do not
+ * collapse. Docker Compose retains its subcommand as a third token.
+ * Other commands use a two-token prefix. Chained commands are keyed
+ * per segment so a leading safe command cannot stand in for a later
+ * dangerous one.
+ */
+export function shellApprovalKey(command: string): string {
+  const segments = splitCommandSegments(command);
+  if (segments.length === 0) return '';
+  return segments.map(keySingleSegment).filter(Boolean).join(' && ');
 }
 
 export function fetchApprovalKey(method: string, url: string): string {
@@ -115,9 +141,9 @@ export function fetchApprovalKey(method: string, url: string): string {
 }
 
 function hasDangerousRm(command: string): boolean {
-  return command.split(/[;&|]/).some((segment) => {
+  return splitCommandSegments(command).some((segment) => {
     const tokens = shellTokens(segment.toLowerCase());
-    const rmIndex = tokens.indexOf('rm');
+    const rmIndex = indexOfExecutable(tokens, 'rm');
     if (rmIndex < 0) return false;
 
     const flags = tokens
@@ -134,9 +160,9 @@ function hasDangerousRm(command: string): boolean {
 }
 
 function hasDangerousGitCommand(command: string): boolean {
-  return command.split(/[;&|]/).some((segment) => {
+  return splitCommandSegments(command).some((segment) => {
     const tokens = shellTokens(segment.toLowerCase());
-    let index = tokens.indexOf('git');
+    let index = indexOfExecutable(tokens, 'git');
     if (index < 0) return false;
     index += 1;
 
@@ -158,9 +184,9 @@ function hasDangerousGitCommand(command: string): boolean {
 function hasDangerousCurlCommand(command: string): boolean {
   const writeMethods = new Set(['POST', 'PUT', 'PATCH', 'DELETE']);
 
-  return command.split(/[;&|]/).some((segment) => {
+  return splitCommandSegments(command).some((segment) => {
     const tokens = shellTokens(segment);
-    const curlIndex = tokens.indexOf('curl');
+    const curlIndex = indexOfExecutable(tokens, 'curl');
     if (curlIndex < 0) return false;
 
     for (let index = curlIndex + 1; index < tokens.length; index += 1) {
@@ -194,9 +220,9 @@ function hasSubcommandAfterGlobalOptions(
   executable: string,
   subcommand: string,
 ): boolean {
-  return command.split(/[;&|]/).some((segment) => {
+  return splitCommandSegments(command).some((segment) => {
     const tokens = shellTokens(segment.toLowerCase());
-    let index = tokens.indexOf(executable);
+    let index = indexOfExecutable(tokens, executable);
     if (index < 0) return false;
     index += 1;
 
@@ -231,7 +257,7 @@ export function isDangerousShellCommand(command: string): boolean {
     /\bssh\b/.test(normalized) ||
     hasSubcommandAfterGlobalOptions(command, 'kubectl', 'apply') ||
     hasSubcommandAfterGlobalOptions(command, 'terraform', 'apply') ||
-    /\bhelm\s+upgrade\b/.test(normalized)
+    hasSubcommandAfterGlobalOptions(command, 'helm', 'upgrade')
   );
 }
 
