@@ -45,7 +45,11 @@ export function loadContextSections(filePath: string): ContextSectionsFile {
     const parsed: unknown = JSON.parse(raw);
     if (!parsed || typeof parsed !== 'object') return emptyFile();
     const rec = parsed as Record<string, unknown>;
-    if (rec.version !== 1 || !rec.sections || typeof rec.sections !== 'object') {
+    if (
+      rec.version !== 1 ||
+      !rec.sections ||
+      typeof rec.sections !== 'object'
+    ) {
       return emptyFile();
     }
     const sections: ContextSectionsFile['sections'] = {};

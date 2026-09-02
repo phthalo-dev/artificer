@@ -583,7 +583,7 @@ export class Store {
       for (const t of e.tags) counts.set(t, (counts.get(t) ?? 0) + 1);
     }
     const topTags = [...counts.entries()]
-      .sort((a, b) => b[1] - a[1])
+      .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
       .slice(0, 8)
       .map(([t]) => t);
     const topics = topTags.length ? ` (topics: ${topTags.join(', ')})` : '';
