@@ -165,6 +165,33 @@ test('submit_review output preserved when not compactable', async () => {
   assert.ok(!COMPACTABLE_TOOLS.has('submit_review'));
 });
 
+test('prior runs with the same finishedAt sort by id', async () => {
+  const t = '2026-06-01T00:01:00.000Z';
+  const run = (id: string): RunRecord => ({
+    id,
+    role: 'worker',
+    status: 'done',
+    task: 't',
+    toolCalls: [inv('grep', `${id}:1:foo`)],
+    usage: emptyUsage(),
+    createdAt: t,
+    finishedAt: t,
+    workstreamId: 'ws_1',
+  });
+  const digest = await buildPriorRunsDigest(
+    mockStore([run('run_b'), run('run_a')]),
+    'ws_1',
+    undefined,
+    8,
+    true,
+  );
+  assert.ok(digest);
+  const a = digest!.indexOf('Run run_a');
+  const b = digest!.indexOf('Run run_b');
+  assert.ok(a >= 0 && b >= 0);
+  assert.ok(a < b);
+});
+
 test('microcompact enabled includes only maxRuns prior runs', async () => {
   const runs: RunRecord[] = Array.from({ length: 4 }, (_, i) => ({
     id: `run_${i}`,

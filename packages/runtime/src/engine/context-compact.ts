@@ -88,7 +88,8 @@ function completedRuns(runs: RunRecord[], excludeRunId?: string): RunRecord[] {
     .sort(
       (a, b) =>
         new Date(a.finishedAt ?? a.createdAt).getTime() -
-        new Date(b.finishedAt ?? b.createdAt).getTime(),
+          new Date(b.finishedAt ?? b.createdAt).getTime() ||
+        a.id.localeCompare(b.id),
     );
 }
 
