@@ -6,6 +6,11 @@ import type { RuntimeConfig } from '../config.js';
 import type { EngineApi, ToolContext } from '../context.js';
 import { buildPriorRunsDigest, clipDiff } from './context-compact.js';
 import { compactionProfileForModel } from './compaction-thresholds.js';
+import {
+  formatSectionsFooter,
+  renderSection,
+  type ContextSectionId,
+} from './context-sections.js';
 import { FileCache } from './file-cache.js';
 import { formatCallError } from '../llm/errors.js';
 import { runToolLoop } from '../llm/loop.js';
@@ -61,7 +66,12 @@ async function changedFilesSummary(
       timeout: 15_000,
       maxBuffer: 1024 * 1024,
     });
-    const text = stdout.trim();
+    const text = stdout
+      .trim()
+      .split('\n')
+      .filter(Boolean)
+      .sort((a, b) => a.localeCompare(b))
+      .join('\n');
     if (!text) return null;
     const rel = path.relative(workspaceDir, repo) || '.';
     const sections = [
@@ -99,7 +109,13 @@ async function recentWorkSummary(
   workstreamId: string,
 ): Promise<string | null> {
   const tasks = await store.listTasks(workstreamId);
-  const done = tasks.filter((t) => t.status === 'done' && t.result).slice(-5);
+  const done = tasks
+    .filter((t) => t.status === 'done' && t.result)
+    .sort(
+      (a, b) =>
+        a.updatedAt.localeCompare(b.updatedAt) || a.id.localeCompare(b.id),
+    )
+    .slice(-5);
   if (done.length === 0) return null;
   const lines = done.map(
     (t) => `- [${t.role}] ${t.description}\n  ${clip(t.result ?? '', 400)}`,
@@ -119,8 +135,39 @@ export interface ExecuteCallDeps {
   route?: import('./quota-types.js').DispatchRoute;
 }
 
+async function appendStatusAndSignpost(
+  sections: string[],
+  store: Store,
+  identity?: IdentityStore,
+): Promise<void> {
+  const signpost = identity
+    ? await identity.memorySignpost()
+    : await store.memorySignpost();
+  sections.push(
+    [
+      'You can use get_status to query more detail.',
+      signpost ??
+        'You have no memories saved yet; use add_memory to remember durable facts.',
+    ].join(' '),
+  );
+}
+
+async function pushHashedSection(
+  sections: string[],
+  updatedIds: ContextSectionId[],
+  args: {
+    id: ContextSectionId;
+    filePath: string;
+    compute: () => string | Promise<string>;
+  },
+): Promise<void> {
+  const result = await renderSection(args);
+  if (result.updated) updatedIds.push(args.id);
+  if (result.body) sections.push(result.body);
+}
+
 /** Compose the context a call sees: its task plus a summary of its workstream. */
-async function buildContext(
+export async function buildContext(
   store: Store,
   run: RunRecord,
   workspaceDir: string,
@@ -154,39 +201,88 @@ async function buildContext(
 
     // Give the roles that touch the repo continuity on what has already been
     // done, so they pick up where the last call left off instead of starting a
-    // fresh investigation every time.
+    // fresh investigation every time. Replay byte-identical section bodies
+    // when hashes match so prompt caches can hit across consecutive calls.
     if (WORK_ROLES.has(effectiveBaseRole)) {
-      const findings = await findingsBlock(store, run.workstreamId);
-      if (findings) sections.push(findings);
+      const filePath = store.layout.contextSectionsFile(run.workstreamId);
+      const updatedIds: ContextSectionId[] = [];
+      const workstreamId = run.workstreamId;
 
-      const recent = await recentWorkSummary(store, run.workstreamId);
-      if (recent) sections.push(recent);
-      const changed = await changedFilesSummary(
-        workspaceDir,
-        effectiveBaseRole === 'reviewer',
-      );
-      if (changed) sections.push(changed);
+      await pushHashedSection(sections, updatedIds, {
+        id: 'findings',
+        filePath,
+        compute: async () => (await findingsBlock(store, workstreamId)) ?? '',
+      });
+      await pushHashedSection(sections, updatedIds, {
+        id: 'recent_tasks',
+        filePath,
+        compute: async () =>
+          (await recentWorkSummary(store, workstreamId)) ?? '',
+      });
+      await pushHashedSection(sections, updatedIds, {
+        id: 'git_status',
+        filePath,
+        compute: async () =>
+          (await changedFilesSummary(
+            workspaceDir,
+            effectiveBaseRole === 'reviewer',
+          )) ?? '',
+      });
+      await pushHashedSection(sections, updatedIds, {
+        id: 'prior_runs',
+        filePath,
+        compute: async () => {
+          const digestProfile = compactionProfileForModel(
+            run.model ?? config.model,
+            config.contextBorrowing.compactionProfile,
+          );
+          return (
+            (await buildPriorRunsDigest(
+              store,
+              workstreamId,
+              run.id,
+              digestProfile.priorRunsToInclude,
+              config.contextBorrowing.microcompactEnabled,
+            )) ?? ''
+          );
+        },
+      });
+      await pushHashedSection(sections, updatedIds, {
+        id: 'file_cache',
+        filePath,
+        compute: async () => {
+          const fileCache = await FileCache.load(
+            store.layout,
+            workstreamId,
+            config.contextBorrowing.fileCacheMaxEntries,
+          );
+          return fileCache.formatHintBlock() ?? '';
+        },
+      });
 
-      const digestProfile = compactionProfileForModel(
-        run.model ?? config.model,
-        config.contextBorrowing.compactionProfile,
+      const signpostRendered = await renderSection({
+        id: 'memory_signpost',
+        filePath,
+        compute: async () => {
+          const signpost = identity
+            ? await identity.memorySignpost()
+            : await store.memorySignpost();
+          return (
+            signpost ??
+            'You have no memories saved yet; use add_memory to remember durable facts.'
+          );
+        },
+      });
+      if (signpostRendered.updated) updatedIds.push('memory_signpost');
+      sections.push(
+        [
+          'You can use get_status to query more detail.',
+          signpostRendered.body,
+        ].join(' '),
       );
-      const digest = await buildPriorRunsDigest(
-        store,
-        run.workstreamId,
-        run.id,
-        digestProfile.priorRunsToInclude,
-        config.contextBorrowing.microcompactEnabled,
-      );
-      if (digest) sections.push(digest);
-
-      const fileCache = await FileCache.load(
-        store.layout,
-        run.workstreamId,
-        config.contextBorrowing.fileCacheMaxEntries,
-      );
-      const fileHints = fileCache.formatHintBlock();
-      if (fileHints) sections.push(fileHints);
+      sections.push(formatSectionsFooter(updatedIds));
+    } else {
+      await appendStatusAndSignpost(sections, store, identity);
     }
   } else {
     const all = await store.listWorkstreams();
@@ -198,18 +294,8 @@ async function buildContext(
     } else {
       sections.push('Current workstreams: (none)');
     }
+    await appendStatusAndSignpost(sections, store, identity);
   }
-
-  const signpost = identity
-    ? await identity.memorySignpost()
-    : await store.memorySignpost();
-  sections.push(
-    [
-      'You can use get_status to query more detail.',
-      signpost ??
-        'You have no memories saved yet; use add_memory to remember durable facts.',
-    ].join(' '),
-  );
 
   return sections.join('\n\n');
 }
@@ -225,7 +311,10 @@ async function findingsBlock(
   const findings = await store.listFindings(workstreamId);
   if (findings.length === 0) return null;
   const lines = [...findings]
-    .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+    .sort(
+      (a, b) =>
+        a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+    )
     .map((f) => `- [${f.role}${f.file ? ` · ${f.file}` : ''}] ${f.note}`);
   return [
     'Findings already recorded on this workstream (the shared blackboard).',

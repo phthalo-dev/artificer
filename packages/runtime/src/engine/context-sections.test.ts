@@ -51,7 +51,10 @@ test('renderSection replays exact body when hash matches', async () => {
     assert.equal(second.body, first.body);
     assert.equal(computes, 2); // compute still runs to produce hash input
     const stored = loadContextSections(filePath);
-    assert.equal(stored.sections.findings?.updatedAt, '2026-01-01T00:00:00.000Z');
+    assert.equal(
+      stored.sections.findings?.updatedAt,
+      '2026-01-01T00:00:00.000Z',
+    );
     assert.equal(stored.sections.findings?.hash, shortHash('FINDINGS\n- a'));
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
@@ -80,7 +83,10 @@ test('changed body updates store', async () => {
     assert.equal(stored.version, 1);
     assert.equal(stored.sections.findings?.body, 'FINDINGS\n- b');
     assert.equal(stored.sections.findings?.hash, shortHash('FINDINGS\n- b'));
-    assert.equal(stored.sections.findings?.updatedAt, '2026-01-02T00:00:00.000Z');
+    assert.equal(
+      stored.sections.findings?.updatedAt,
+      '2026-01-02T00:00:00.000Z',
+    );
   } finally {
     await fs.rm(dir, { recursive: true, force: true });
   }
