@@ -95,6 +95,11 @@ export class Layout {
     return path.join(this.workstreamDir(workstreamId), 'file-cache.json');
   }
 
+  /** Hash-stable snapshots of volatile buildContext sections. */
+  contextSectionsFile(workstreamId: string): string {
+    return path.join(this.workstreamDir(workstreamId), 'context-sections.json');
+  }
+
   /** Stores the identity memory ID for a workstream so updates survive restarts. */
   workstreamMemoryRefFile(workstreamId: string): string {
     return path.join(this.workstreamDir(workstreamId), 'memory-ref.txt');
