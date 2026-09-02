@@ -14,7 +14,7 @@ You can override the execution directory with `ARTIFICER_EXEC_DIR=./.artificer` 
 
 A workstream is the unit of ongoing work. When you ask the agent to do something non-trivial, it creates a workstream: plan, tasks, worker runs, and reviews all live there. The agent works through tasks in sequence, reviewing each result before moving to the next.
 
-You can have multiple workstreams running concurrently (controlled by `RUNTIME_CONCURRENCY`). Each runs in its own isolated workspace directory (a fresh clone of the relevant repo).
+You can have multiple workstreams running concurrently (controlled by `RUNTIME_CONCURRENCY`). Each runs in its own isolated workspace directory (a fresh clone of the relevant repo). Planner, worker, and reviewer prompts replay hash-stable context section bodies when content is unchanged — see [Hash-stable context sections](../introduction/how-it-works.md#hash-stable-context-sections).
 
 ## Roles
 

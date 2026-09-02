@@ -38,6 +38,16 @@ A workstream is the fundamental unit of ongoing work. When you send the agent a 
 
 Workstream state is stored under `~/.artificer/<agent-name>/workstreams/<id>/`.
 
+## Hash-stable context sections
+
+Planner, worker, and reviewer calls assemble a user message from the task, workstream meta, and volatile sections (findings, recent tasks, git status, prior-run digest, file-cache hints, memory signpost). Each section is hashed (SHA-256, truncated) and snapshotted in `workstreams/<id>/context-sections.json`. When the hash is unchanged, Artificer **replays the exact previous body bytes** so provider prompt caches can hit; it does not replace the section with an “unchanged” stub.
+
+Reviewer calls store git status plus `git diff HEAD` under `git_status_diff`, separate from the planner/worker `git_status` snapshot, so role transitions do not clobber each other. Empty omitted sections are not listed in the footer.
+
+A one-line footer at the **end** of the user message lists which sections changed (`[context sections updated: git_status, findings]`) or says `[context sections: all unchanged]`. The footer is not part of any section hash. Prefix-cache hits are same-role: consecutive `IMPLEMENT_TASK` worker runs share a stable `Your task:` + workstream meta prefix; planner → worker → reviewer already differ in that prefix, so they will not hit a shared prompt-cache prefix even when section bodies replay.
+
+Section formatters must stay deterministic: no `Date.now()`, random IDs, or unstable object-key order inside section bodies. Timestamps that belong on a stored record (workstream status, finding `createdAt`) are fine; generating a new clock reading while formatting is not.
+
 ## The identity split
 
 Two things look like "the agent" but serve different purposes:
