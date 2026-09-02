@@ -208,9 +208,7 @@ test('changing one finding updates only findings in the footer and snapshot', as
       file: 'src/engine/call.ts',
     });
     await buildContext(store, run, workspaceDir, config, 'worker');
-    const before = loadContextSections(
-      store.layout.contextSectionsFile(ws.id),
-    );
+    const before = loadContextSections(store.layout.contextSectionsFile(ws.id));
 
     await store.createFinding({
       workstreamId: ws.id,
@@ -227,7 +225,10 @@ test('changing one finding updates only findings in the footer and snapshot', as
 
     assert.match(second, /\[context sections updated: findings\]/);
     const after = loadContextSections(store.layout.contextSectionsFile(ws.id));
-    assert.notEqual(after.sections.findings?.body, before.sections.findings?.body);
+    assert.notEqual(
+      after.sections.findings?.body,
+      before.sections.findings?.body,
+    );
     for (const id of [
       'recent_tasks',
       'git_status',
@@ -253,14 +254,8 @@ test('empty omitted sections are not listed in the updated footer', async () => 
       'worker',
     );
     assert.match(first, /\[context sections updated: memory_signpost\]/);
-    assert.doesNotMatch(
-      first,
-      /\[context sections updated:[^\]]*findings/,
-    );
-    assert.doesNotMatch(
-      first,
-      /\[context sections updated:[^\]]*git_status/,
-    );
+    assert.doesNotMatch(first, /\[context sections updated:[^\]]*findings/);
+    assert.doesNotMatch(first, /\[context sections updated:[^\]]*git_status/);
   } finally {
     await fs.rm(dataDir, { recursive: true, force: true });
   }
