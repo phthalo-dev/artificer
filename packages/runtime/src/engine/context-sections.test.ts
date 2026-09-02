@@ -7,6 +7,7 @@ import {
   formatSectionsFooter,
   loadContextSections,
   renderSection,
+  renderSections,
   shortHash,
 } from './context-sections.js';
 
@@ -136,6 +137,49 @@ test('formatSectionsFooter', () => {
     formatSectionsFooter(['git_status', 'findings']),
     '[context sections updated: git_status, findings]',
   );
+  assert.equal(
+    formatSectionsFooter(['git_status_diff']),
+    '[context sections updated: git_status_diff]',
+  );
+});
+
+test('renderSections changing one id leaves the other stored body intact', async () => {
+  const { dir, filePath } = await tempFile();
+  try {
+    const first = await renderSections({
+      filePath,
+      now: () => '2026-01-01T00:00:00.000Z',
+      items: [
+        { id: 'findings', compute: () => 'FINDINGS\n- a' },
+        { id: 'git_status', compute: () => 'STATUS' },
+      ],
+    });
+    assert.equal(first[0]?.updated, true);
+    assert.equal(first[1]?.updated, true);
+    const second = await renderSections({
+      filePath,
+      now: () => '2026-01-02T00:00:00.000Z',
+      items: [
+        { id: 'findings', compute: () => 'FINDINGS\n- b' },
+        { id: 'git_status', compute: () => 'STATUS' },
+      ],
+    });
+    assert.equal(second[0]?.updated, true);
+    assert.equal(second[0]?.body, 'FINDINGS\n- b');
+    assert.equal(second[1]?.updated, false);
+    assert.equal(second[1]?.body, 'STATUS');
+    const stored = loadContextSections(filePath);
+    assert.equal(stored.sections.findings?.body, 'FINDINGS\n- b');
+    assert.equal(stored.sections.git_status?.body, 'STATUS');
+    assert.equal(
+      stored.sections.git_status?.updatedAt,
+      '2026-01-01T00:00:00.000Z',
+    );
+    const leftovers = (await fs.readdir(dir)).filter((f) => f.includes('.tmp'));
+    assert.deepEqual(leftovers, []);
+  } finally {
+    await fs.rm(dir, { recursive: true, force: true });
+  }
 });
 
 test('save failure warns and still returns the computed body', async () => {

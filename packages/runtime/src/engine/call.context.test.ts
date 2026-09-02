@@ -8,6 +8,7 @@ import { promisify } from 'node:util';
 import { loadConfig } from '../config.js';
 import { Store } from '../storage/store.js';
 import { buildContext } from './call.js';
+import { loadContextSections } from './context-sections.js';
 import { FileCache } from './file-cache.js';
 
 const exec = promisify(execFile);
@@ -192,6 +193,131 @@ test('git status fixture is byte-identical across buildContext calls', async () 
     const lines = gitBlock![1].split('\n');
     const sorted = [...lines].sort((a, b) => a.localeCompare(b));
     assert.deepEqual(lines, sorted);
+  } finally {
+    await fs.rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('changing one finding updates only findings in the footer and snapshot', async () => {
+  const { dataDir, config, store, ws, workspaceDir, run } = await setup();
+  try {
+    await store.createFinding({
+      workstreamId: ws.id,
+      role: 'planner',
+      note: 'root cause is a missing sort',
+      file: 'src/engine/call.ts',
+    });
+    await buildContext(store, run, workspaceDir, config, 'worker');
+    const before = loadContextSections(
+      store.layout.contextSectionsFile(ws.id),
+    );
+
+    await store.createFinding({
+      workstreamId: ws.id,
+      role: 'worker',
+      note: 'sort by id as a tie-break',
+    });
+    const second = await buildContext(
+      store,
+      run,
+      workspaceDir,
+      config,
+      'worker',
+    );
+
+    assert.match(second, /\[context sections updated: findings\]/);
+    const after = loadContextSections(store.layout.contextSectionsFile(ws.id));
+    assert.notEqual(after.sections.findings?.body, before.sections.findings?.body);
+    for (const id of [
+      'recent_tasks',
+      'git_status',
+      'prior_runs',
+      'file_cache',
+      'memory_signpost',
+    ] as const) {
+      assert.equal(after.sections[id]?.body, before.sections[id]?.body);
+    }
+  } finally {
+    await fs.rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('empty omitted sections are not listed in the updated footer', async () => {
+  const { dataDir, config, store, workspaceDir, run } = await setup();
+  try {
+    const first = await buildContext(
+      store,
+      run,
+      workspaceDir,
+      config,
+      'worker',
+    );
+    assert.match(first, /\[context sections updated: memory_signpost\]/);
+    assert.doesNotMatch(
+      first,
+      /\[context sections updated:[^\]]*findings/,
+    );
+    assert.doesNotMatch(
+      first,
+      /\[context sections updated:[^\]]*git_status/,
+    );
+  } finally {
+    await fs.rm(dataDir, { recursive: true, force: true });
+  }
+});
+
+test('reviewer git_status_diff does not clobber worker git_status', async () => {
+  const { dataDir, config, store, ws, workspaceDir, run } = await setup();
+  try {
+    await exec('git', ['-C', workspaceDir, 'init', '-q']);
+    await exec('git', ['-C', workspaceDir, 'config', 'user.email', 't@t.test']);
+    await exec('git', ['-C', workspaceDir, 'config', 'user.name', 'Test']);
+    await fs.writeFile(path.join(workspaceDir, 'a.txt'), 'one\n');
+    await exec('git', ['-C', workspaceDir, 'add', '-A']);
+    await exec('git', ['-C', workspaceDir, 'commit', '-q', '-m', 'init']);
+    await fs.writeFile(path.join(workspaceDir, 'a.txt'), 'changed\n');
+
+    await buildContext(store, run, workspaceDir, config, 'worker');
+    const afterWorker = loadContextSections(
+      store.layout.contextSectionsFile(ws.id),
+    );
+    assert.ok(afterWorker.sections.git_status?.body);
+    assert.equal(afterWorker.sections.git_status_diff, undefined);
+    assert.doesNotMatch(
+      afterWorker.sections.git_status.body,
+      /Current diff \(git diff HEAD\)/,
+    );
+
+    const reviewer = await buildContext(
+      store,
+      run,
+      workspaceDir,
+      config,
+      'reviewer',
+    );
+    assert.match(reviewer, /Current diff \(git diff HEAD\)/);
+    const afterReviewer = loadContextSections(
+      store.layout.contextSectionsFile(ws.id),
+    );
+    assert.equal(
+      afterReviewer.sections.git_status?.body,
+      afterWorker.sections.git_status?.body,
+    );
+    assert.match(
+      afterReviewer.sections.git_status_diff?.body ?? '',
+      /Current diff \(git diff HEAD\)/,
+    );
+
+    const workerAgain = await buildContext(
+      store,
+      run,
+      workspaceDir,
+      config,
+      'worker',
+    );
+    const footer = workerAgain.match(/\[context sections[^\]]*\]$/)?.[0];
+    assert.ok(footer);
+    assert.doesNotMatch(footer, /git_status/);
   } finally {
     await fs.rm(dataDir, { recursive: true, force: true });
   }

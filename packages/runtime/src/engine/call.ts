@@ -8,7 +8,7 @@ import { buildPriorRunsDigest, clipDiff } from './context-compact.js';
 import { compactionProfileForModel } from './compaction-thresholds.js';
 import {
   formatSectionsFooter,
-  renderSection,
+  renderSections,
   type ContextSectionId,
 } from './context-sections.js';
 import { FileCache } from './file-cache.js';
@@ -152,18 +152,15 @@ async function appendStatusAndSignpost(
   );
 }
 
-async function pushHashedSection(
+function appendRenderedSection(
   sections: string[],
   updatedIds: ContextSectionId[],
-  args: {
-    id: ContextSectionId;
-    filePath: string;
-    compute: () => string | Promise<string>;
-  },
-): Promise<void> {
-  const result = await renderSection(args);
-  if (result.updated) updatedIds.push(args.id);
-  if (result.body) sections.push(result.body);
+  result: { id: ContextSectionId; body: string; updated: boolean },
+  prefix?: string,
+): void {
+  if (result.updated && result.body) updatedIds.push(result.id);
+  const text = prefix ? `${prefix} ${result.body}` : result.body;
+  if (text) sections.push(text);
 }
 
 /** Compose the context a call sees: its task plus a summary of its workstream. */
@@ -207,79 +204,83 @@ export async function buildContext(
       const filePath = store.layout.contextSectionsFile(run.workstreamId);
       const updatedIds: ContextSectionId[] = [];
       const workstreamId = run.workstreamId;
+      const includeDiff = effectiveBaseRole === 'reviewer';
+      const gitSectionId: ContextSectionId = includeDiff
+        ? 'git_status_diff'
+        : 'git_status';
 
-      await pushHashedSection(sections, updatedIds, {
-        id: 'findings',
+      const rendered = await renderSections({
         filePath,
-        compute: async () => (await findingsBlock(store, workstreamId)) ?? '',
-      });
-      await pushHashedSection(sections, updatedIds, {
-        id: 'recent_tasks',
-        filePath,
-        compute: async () =>
-          (await recentWorkSummary(store, workstreamId)) ?? '',
-      });
-      await pushHashedSection(sections, updatedIds, {
-        id: 'git_status',
-        filePath,
-        compute: async () =>
-          (await changedFilesSummary(
-            workspaceDir,
-            effectiveBaseRole === 'reviewer',
-          )) ?? '',
-      });
-      await pushHashedSection(sections, updatedIds, {
-        id: 'prior_runs',
-        filePath,
-        compute: async () => {
-          const digestProfile = compactionProfileForModel(
-            run.model ?? config.model,
-            config.contextBorrowing.compactionProfile,
-          );
-          return (
-            (await buildPriorRunsDigest(
-              store,
-              workstreamId,
-              run.id,
-              digestProfile.priorRunsToInclude,
-              config.contextBorrowing.microcompactEnabled,
-            )) ?? ''
-          );
-        },
-      });
-      await pushHashedSection(sections, updatedIds, {
-        id: 'file_cache',
-        filePath,
-        compute: async () => {
-          const fileCache = await FileCache.load(
-            store.layout,
-            workstreamId,
-            config.contextBorrowing.fileCacheMaxEntries,
-          );
-          return fileCache.formatHintBlock() ?? '';
-        },
+        items: [
+          {
+            id: 'findings',
+            compute: async () =>
+              (await findingsBlock(store, workstreamId)) ?? '',
+          },
+          {
+            id: 'recent_tasks',
+            compute: async () =>
+              (await recentWorkSummary(store, workstreamId)) ?? '',
+          },
+          {
+            id: gitSectionId,
+            compute: async () =>
+              (await changedFilesSummary(workspaceDir, includeDiff)) ?? '',
+          },
+          {
+            id: 'prior_runs',
+            compute: async () => {
+              const digestProfile = compactionProfileForModel(
+                run.model ?? config.model,
+                config.contextBorrowing.compactionProfile,
+              );
+              return (
+                (await buildPriorRunsDigest(
+                  store,
+                  workstreamId,
+                  run.id,
+                  digestProfile.priorRunsToInclude,
+                  config.contextBorrowing.microcompactEnabled,
+                )) ?? ''
+              );
+            },
+          },
+          {
+            id: 'file_cache',
+            compute: async () => {
+              const fileCache = await FileCache.load(
+                store.layout,
+                workstreamId,
+                config.contextBorrowing.fileCacheMaxEntries,
+              );
+              return fileCache.formatHintBlock() ?? '';
+            },
+          },
+          {
+            id: 'memory_signpost',
+            compute: async () => {
+              const signpost = identity
+                ? await identity.memorySignpost()
+                : await store.memorySignpost();
+              return (
+                signpost ??
+                'You have no memories saved yet; use add_memory to remember durable facts.'
+              );
+            },
+          },
+        ],
       });
 
-      const signpostRendered = await renderSection({
-        id: 'memory_signpost',
-        filePath,
-        compute: async () => {
-          const signpost = identity
-            ? await identity.memorySignpost()
-            : await store.memorySignpost();
-          return (
-            signpost ??
-            'You have no memories saved yet; use add_memory to remember durable facts.'
-          );
-        },
-      });
-      if (signpostRendered.updated) updatedIds.push('memory_signpost');
-      sections.push(
-        [
-          'You can use get_status to query more detail.',
-          signpostRendered.body,
-        ].join(' '),
-      );
+      for (const result of rendered) {
+        appendRenderedSection(
+          sections,
+          updatedIds,
+          result,
+          result.id === 'memory_signpost'
+            ? 'You can use get_status to query more detail.'
+            : undefined,
+        );
+      }
       sections.push(formatSectionsFooter(updatedIds));
     } else {
       await appendStatusAndSignpost(sections, store, identity);

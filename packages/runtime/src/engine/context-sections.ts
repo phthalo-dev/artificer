@@ -1,4 +1,4 @@
-import { createHash } from 'node:crypto';
+import { createHash, randomUUID } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 
@@ -6,6 +6,7 @@ export type ContextSectionId =
   | 'findings'
   | 'recent_tasks'
   | 'git_status'
+  | 'git_status_diff'
   | 'prior_runs'
   | 'file_cache'
   | 'memory_signpost';
@@ -19,6 +20,12 @@ export type ContextSectionSnapshot = {
 export type ContextSectionsFile = {
   version: 1;
   sections: Partial<Record<ContextSectionId, ContextSectionSnapshot>>;
+};
+
+export type RenderedSection = {
+  id: ContextSectionId;
+  body: string;
+  updated: boolean;
 };
 
 function emptyFile(): ContextSectionsFile {
@@ -70,15 +77,50 @@ export function saveContextSections(
   filePath: string,
   file: ContextSectionsFile,
 ): void {
+  const tmp = `${filePath}.${process.pid}.${randomUUID()}.tmp`;
   try {
     fs.mkdirSync(path.dirname(filePath), { recursive: true });
-    fs.writeFileSync(filePath, `${JSON.stringify(file, null, 2)}\n`);
+    fs.writeFileSync(tmp, `${JSON.stringify(file, null, 2)}\n`);
+    fs.renameSync(tmp, filePath);
   } catch (err) {
+    try {
+      fs.unlinkSync(tmp);
+    } catch {
+      // Best-effort cleanup of a leftover temp file.
+    }
     console.warn(
       `[artificer] failed to save context sections to ${filePath}:`,
       err,
     );
   }
+}
+
+export async function renderSections(args: {
+  filePath: string;
+  items: Array<{
+    id: ContextSectionId;
+    compute: () => string | Promise<string>;
+  }>;
+  now?: () => string;
+}): Promise<RenderedSection[]> {
+  const file = loadContextSections(args.filePath);
+  const now = args.now ?? (() => new Date().toISOString());
+  const results: RenderedSection[] = [];
+  let dirty = false;
+  for (const item of args.items) {
+    const body = await item.compute();
+    const hash = shortHash(body);
+    const previous = file.sections[item.id];
+    if (previous && previous.hash === hash) {
+      results.push({ id: item.id, body: previous.body, updated: false });
+      continue;
+    }
+    file.sections[item.id] = { hash, body, updatedAt: now() };
+    dirty = true;
+    results.push({ id: item.id, body, updated: true });
+  }
+  if (dirty) saveContextSections(args.filePath, file);
+  return results;
 }
 
 export async function renderSection(args: {
@@ -87,17 +129,12 @@ export async function renderSection(args: {
   compute: () => string | Promise<string>;
   now?: () => string;
 }): Promise<{ body: string; updated: boolean }> {
-  const body = await args.compute();
-  const hash = shortHash(body);
-  const file = loadContextSections(args.filePath);
-  const previous = file.sections[args.id];
-  if (previous && previous.hash === hash) {
-    return { body: previous.body, updated: false };
-  }
-  const now = args.now ?? (() => new Date().toISOString());
-  file.sections[args.id] = { hash, body, updatedAt: now() };
-  saveContextSections(args.filePath, file);
-  return { body, updated: true };
+  const [result] = await renderSections({
+    filePath: args.filePath,
+    now: args.now,
+    items: [{ id: args.id, compute: args.compute }],
+  });
+  return result ?? { body: '', updated: true };
 }
 
 export function formatSectionsFooter(updatedIds: ContextSectionId[]): string {

@@ -43,7 +43,7 @@ buildContext(...)
     ├─ stable prefix: task + workstream meta (always computed fresh;
     │     meta formatting must be deterministic — no Date.now() in section bodies)
     │
-    └─ for section in [findings, recent_tasks, git_status, prior_runs, file_cache, memory_signpost]:
+    └─ for section in [findings, recent_tasks, git_status|git_status_diff, prior_runs, file_cache, memory_signpost]:
             body = computeSection(...)
             hash = shortHash(body)
             if store.get(workstreamId, sectionId)?.hash === hash:
@@ -59,6 +59,7 @@ export type ContextSectionId =
   | 'findings'
   | 'recent_tasks'
   | 'git_status'
+  | 'git_status_diff'
   | 'prior_runs'
   | 'file_cache'
   | 'memory_signpost';
@@ -81,7 +82,8 @@ export type ContextSectionsFile = {
 |---|---|---|
 | `findings` | `findingsBlock` / `store.listFindings` | Deterministic sort by id/createdAt |
 | `recent_tasks` | `recentWorkSummary` | Keep last-N fixed; stable ordering |
-| `git_status` | `changedFilesSummary` | Normalize paths; avoid volatile porcelain that embeds timestamps |
+| `git_status` | `changedFilesSummary` (planner/worker) | Status only; normalize paths; avoid volatile porcelain that embeds timestamps |
+| `git_status_diff` | `changedFilesSummary` with `includeDiff` (reviewer) | Same status block plus `git diff HEAD`; stored separately so implement ↔ review does not clobber |
 | `prior_runs` | `buildPriorRunsDigest` | Already somewhat compact; ensure stable ordering of runs |
 | `file_cache` | `FileCache.formatHintBlock` | Replay when hint set unchanged |
 | `memory_signpost` | `memorySignpost()` | Counts/tags only; already small |
