@@ -46,6 +46,18 @@ interface Resolved {
 export class ServiceManager {
   private readonly portAllocator = new PortAllocator();
   private readonly inFlight = new Map<string, Promise<ServiceStartResult>>();
+  private readonly locks = new Map<string, Promise<void>>();
+
+  private withLock<T>(key: string, fn: () => Promise<T>): Promise<T> {
+    const previous = this.locks.get(key) ?? Promise.resolve();
+    const run = previous.then(() => fn());
+    const barrier = run.then(
+      () => undefined,
+      () => undefined,
+    );
+    this.locks.set(key, barrier);
+    return run;
+  }
 
   constructor(
     private readonly store: Store,
@@ -89,7 +101,7 @@ export class ServiceManager {
     const existingInFlight = this.inFlight.get(key);
     if (existingInFlight) return existingInFlight;
 
-    const promise = this.doStart(workstreamId, name).finally(() => {
+    const promise = this.withLock(key, () => this.doStart(workstreamId, name)).finally(() => {
       this.inFlight.delete(key);
     });
     this.inFlight.set(key, promise);
@@ -202,6 +214,14 @@ export class ServiceManager {
   }
 
   async stop(
+    workstreamId: string,
+    name: string,
+  ): Promise<{ status: 'stopped' | 'already_stopped' }> {
+    const key = `${workstreamId}:${name}`;
+    return this.withLock(key, () => this.doStop(workstreamId, name));
+  }
+
+  private async doStop(
     workstreamId: string,
     name: string,
   ): Promise<{ status: 'stopped' | 'already_stopped' }> {
