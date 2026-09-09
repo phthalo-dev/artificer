@@ -149,6 +149,47 @@ test('concurrent start calls for the same service do not race', async () => {
   process.kill(webStates[0].pid, 'SIGKILL');
 });
 
+test('concurrent start and stop for the same service do not race', async () => {
+  const { store, config, ws, repoRoot } = await setup();
+  const script = longLivedScript(repoRoot);
+  writeServiceConfig(repoRoot, {
+    web: { run: `${process.execPath} ${script}`, portRange: [41160, 41169] },
+  });
+  const manager = new ServiceManager(store, config);
+
+  // Fire start() and stop() back-to-back in the same synchronous tick,
+  // before either has a chance to resolve.
+  const startPromise = manager.start(ws.id, 'web');
+  const stopPromise = manager.stop(ws.id, 'web');
+
+  const [startResult, stopResult] = await Promise.all([startPromise, stopPromise]);
+
+  // Neither call should have thrown (Promise.all above would have rejected
+  // if either did), and start() must have actually succeeded (it was queued
+  // first, so it should run to completion before stop() begins).
+  assert.equal(startResult.status, 'started');
+  // stop() ran after start() completed, so it should see a real running
+  // service and actually stop it - not silently no-op against stale state.
+  assert.equal(stopResult.status, 'stopped');
+
+  const listed = await manager.list(ws.id);
+  const web = listed.find((s) => s.name === 'web');
+  // Either the entry was pruned from state entirely, or it's present but
+  // reported as stopped. It must NOT be reported as running - that would
+  // mean stop() raced start() and left a live process untracked as "stopped".
+  assert.ok(!web || web.status === 'stopped');
+
+  if (web && web.status === 'running') {
+    // Defensive cleanup so a failing run doesn't leak a process; harmless
+    // no-op once the fix makes this branch unreachable.
+    const states = JSON.parse(
+      fs.readFileSync(store.layout.workstreamServicesStateFile(ws.id), 'utf-8'),
+    );
+    const entry = states.find((s: { name: string }) => s.name === 'web');
+    if (entry) process.kill(entry.pid, 'SIGKILL');
+  }
+});
+
 test('stop kills the process, runs teardown, and is idempotent', async () => {
   const { store, config, ws, repoRoot } = await setup();
   const script = longLivedScript(repoRoot);
