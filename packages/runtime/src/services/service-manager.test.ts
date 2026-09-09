@@ -148,3 +148,115 @@ test('concurrent start calls for the same service do not race', async () => {
 
   process.kill(webStates[0].pid, 'SIGKILL');
 });
+
+test('stop kills the process, runs teardown, and is idempotent', async () => {
+  const { store, config, ws, repoRoot } = await setup();
+  const script = longLivedScript(repoRoot);
+  const teardownMarker = path.join(repoRoot, 'teardown-ran.txt');
+  writeServiceConfig(repoRoot, {
+    web: {
+      run: `${process.execPath} ${script}`,
+      teardown: `touch ${teardownMarker}`,
+      portRange: [41200, 41209],
+    },
+  });
+  const manager = new ServiceManager(store, config);
+  const started = await manager.start(ws.id, 'web');
+  assert.equal(started.status, 'started');
+
+  const stopped = await manager.stop(ws.id, 'web');
+  assert.equal(stopped.status, 'stopped');
+  assert.ok(fs.existsSync(teardownMarker));
+
+  const stoppedAgain = await manager.stop(ws.id, 'web');
+  assert.equal(stoppedAgain.status, 'already_stopped');
+});
+
+test('list reports running and stopped services', async () => {
+  const { store, config, ws, repoRoot } = await setup();
+  const script = longLivedScript(repoRoot);
+  writeServiceConfig(repoRoot, {
+    web: { run: `${process.execPath} ${script}`, portRange: [41210, 41219] },
+  });
+  const manager = new ServiceManager(store, config);
+  await manager.start(ws.id, 'web');
+  const listed = await manager.list(ws.id);
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0].name, 'web');
+  assert.equal(listed[0].status, 'running');
+  await manager.stop(ws.id, 'web');
+});
+
+test('check fetches a running service and returns its status/body', async () => {
+  const { store, config, ws, repoRoot } = await setup();
+  const serverFile = path.join(repoRoot, 'server.mjs');
+  fs.writeFileSync(
+    serverFile,
+    "import http from 'node:http';\n" +
+      "http.createServer((_, res) => res.end('ok')).listen(Number(process.env.ARTIFICER_SERVICE_PORT));\n",
+  );
+  writeServiceConfig(repoRoot, {
+    web: { run: `${process.execPath} ${serverFile}`, portRange: [41220, 41229] },
+  });
+  const manager = new ServiceManager(store, config);
+  await manager.start(ws.id, 'web');
+  // Give the HTTP server a moment to bind before checking it.
+  await new Promise((r) => setTimeout(r, 300));
+  const result = await manager.check(ws.id, 'web');
+  assert.equal((result as { status: number }).status, 200);
+  assert.equal((result as { body: string }).body, 'ok');
+  await manager.stop(ws.id, 'web');
+});
+
+test('check errors for a service that was never started', async () => {
+  const { store, config, ws } = await setup();
+  const manager = new ServiceManager(store, config);
+  const result = await manager.check(ws.id, 'web');
+  assert.equal(result.status, 'error');
+});
+
+test('teardownWorkstream stops every tracked service', async () => {
+  const { store, config, ws, repoRoot } = await setup();
+  const script = longLivedScript(repoRoot);
+  writeServiceConfig(repoRoot, {
+    web: { run: `${process.execPath} ${script}`, portRange: [41230, 41239] },
+    worker: { run: `${process.execPath} ${script}`, portRange: [41240, 41249] },
+  });
+  const manager = new ServiceManager(store, config);
+  await manager.start(ws.id, 'web');
+  await manager.start(ws.id, 'worker');
+  await manager.teardownWorkstream(ws.id);
+  const listed = await manager.list(ws.id);
+  assert.equal(listed.length, 0);
+});
+
+test('reconcileAll drops dead entries and keeps alive ones claimed', async () => {
+  const { store, config, ws, repoRoot } = await setup();
+  const script = longLivedScript(repoRoot);
+  writeServiceConfig(repoRoot, {
+    web: { run: `${process.execPath} ${script}`, portRange: [41250, 41259] },
+  });
+  const manager = new ServiceManager(store, config);
+  const started = await manager.start(ws.id, 'web');
+  assert.equal(started.status, 'started');
+
+  // Simulate a dead entry alongside the live one.
+  const stateFile = store.layout.workstreamServicesStateFile(ws.id);
+  const states = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+  states.push({
+    name: 'ghost',
+    pid: 999_999,
+    port: 41258,
+    startedAt: new Date().toISOString(),
+    script: 'dead',
+  });
+  fs.writeFileSync(stateFile, JSON.stringify(states));
+
+  const fresh = new ServiceManager(store, config);
+  await fresh.reconcileAll();
+  const listed = await fresh.list(ws.id);
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0].name, 'web');
+
+  await fresh.stop(ws.id, 'web');
+});
