@@ -4,6 +4,7 @@ import path from 'node:path';
 import type { RuntimeConfig } from '../config.js';
 import { findGitRepo } from '../engine/git-repo.js';
 import type { Store } from '../storage/store.js';
+import { truncateText } from '../tools/fetch-util.js';
 import { runShellCommand } from '../tools/shell.js';
 import { PortAllocator } from './port-allocator.js';
 import {
@@ -13,6 +14,7 @@ import {
 } from './workspace-config.js';
 
 const CRASH_DETECTION_MS = 1500;
+const STOP_GRACE_MS = 5000;
 
 export interface ServiceState {
   name: string;
@@ -197,5 +199,113 @@ export class ServiceManager {
         }
       });
     });
+  }
+
+  async stop(
+    workstreamId: string,
+    name: string,
+  ): Promise<{ status: 'stopped' | 'already_stopped' }> {
+    const states = this.readState(workstreamId);
+    const existing = states.find((s) => s.name === name);
+    if (!existing || !isAlive(existing.pid)) {
+      this.writeState(
+        workstreamId,
+        states.filter((s) => s.name !== name),
+      );
+      return { status: 'already_stopped' };
+    }
+
+    await this.killWithGrace(existing.pid);
+    this.portAllocator.release(existing.port);
+    this.writeState(
+      workstreamId,
+      states.filter((s) => s.name !== name),
+    );
+
+    const resolved = await this.resolve(workstreamId, name);
+    if (!('error' in resolved) && resolved.svc.teardown) {
+      try {
+        await runShellCommand({
+          command: resolved.svc.teardown,
+          cwd: resolved.repoRoot,
+          env: process.env,
+        });
+      } catch (err) {
+        console.error(`[services] teardown for "${name}" failed:`, err);
+      }
+    }
+
+    return { status: 'stopped' };
+  }
+
+  private async killWithGrace(pid: number): Promise<void> {
+    try {
+      process.kill(pid, 'SIGTERM');
+    } catch {
+      return;
+    }
+    const deadline = Date.now() + STOP_GRACE_MS;
+    while (Date.now() < deadline) {
+      if (!isAlive(pid)) return;
+      await new Promise((r) => setTimeout(r, 200));
+    }
+    try {
+      process.kill(pid, 'SIGKILL');
+    } catch {
+      /* already gone */
+    }
+  }
+
+  async list(
+    workstreamId: string,
+  ): Promise<Array<{ name: string; port: number; status: 'running' | 'stopped' }>> {
+    return this.readState(workstreamId).map((s) => ({
+      name: s.name,
+      port: s.port,
+      status: isAlive(s.pid) ? ('running' as const) : ('stopped' as const),
+    }));
+  }
+
+  async check(
+    workstreamId: string,
+    name: string,
+  ): Promise<{ status: number; body: string } | { status: 'error'; message: string }> {
+    const existing = this.readState(workstreamId).find(
+      (s) => s.name === name && isAlive(s.pid),
+    );
+    if (!existing) {
+      return { status: 'error', message: `"${name}" is not running.` };
+    }
+    try {
+      const res = await fetch(`http://127.0.0.1:${existing.port}`, {
+        signal: AbortSignal.timeout(5000),
+      });
+      const text = await res.text();
+      return { status: res.status, body: truncateText(text, 4000).text };
+    } catch (err) {
+      return {
+        status: 'error',
+        message: `fetch failed: ${err instanceof Error ? err.message : String(err)}`,
+      };
+    }
+  }
+
+  async teardownWorkstream(workstreamId: string): Promise<void> {
+    const states = this.readState(workstreamId);
+    for (const s of states) {
+      await this.stop(workstreamId, s.name);
+    }
+  }
+
+  async reconcileAll(): Promise<void> {
+    const workstreams = await this.store.listWorkstreams();
+    for (const ws of workstreams) {
+      const states = this.readState(ws.id);
+      const alive = states.filter((s) => isAlive(s.pid));
+      for (const s of alive) this.portAllocator.claim(s.port);
+      if (alive.length !== states.length) {
+        this.writeState(ws.id, alive);
+      }
+    }
   }
 }
