@@ -125,3 +125,26 @@ test('start returns an error for an unknown service name', async () => {
   const result = await manager.start(ws.id, 'web');
   assert.equal(result.status, 'error');
 });
+
+test('concurrent start calls for the same service do not race', async () => {
+  const { store, config, ws, repoRoot } = await setup();
+  const script = longLivedScript(repoRoot);
+  writeServiceConfig(repoRoot, {
+    web: { run: `${process.execPath} ${script}`, portRange: [41140, 41149] },
+  });
+  const manager = new ServiceManager(store, config);
+  const [first, second] = await Promise.all([
+    manager.start(ws.id, 'web'),
+    manager.start(ws.id, 'web'),
+  ]);
+  assert.equal(first.status, 'started');
+  assert.deepEqual(first, second);
+
+  const states = JSON.parse(
+    fs.readFileSync(store.layout.workstreamServicesStateFile(ws.id), 'utf-8'),
+  );
+  const webStates = states.filter((s: { name: string }) => s.name === 'web');
+  assert.equal(webStates.length, 1);
+
+  process.kill(webStates[0].pid, 'SIGKILL');
+});

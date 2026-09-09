@@ -43,6 +43,7 @@ interface Resolved {
 
 export class ServiceManager {
   private readonly portAllocator = new PortAllocator();
+  private readonly inFlight = new Map<string, Promise<ServiceStartResult>>();
 
   constructor(
     private readonly store: Store,
@@ -82,6 +83,21 @@ export class ServiceManager {
   }
 
   async start(workstreamId: string, name: string): Promise<ServiceStartResult> {
+    const key = `${workstreamId}:${name}`;
+    const existingInFlight = this.inFlight.get(key);
+    if (existingInFlight) return existingInFlight;
+
+    const promise = this.doStart(workstreamId, name).finally(() => {
+      this.inFlight.delete(key);
+    });
+    this.inFlight.set(key, promise);
+    return promise;
+  }
+
+  private async doStart(
+    workstreamId: string,
+    name: string,
+  ): Promise<ServiceStartResult> {
     const resolved = await this.resolve(workstreamId, name);
     if ('error' in resolved) return { status: 'error', message: resolved.error };
     const { svc, repoRoot, workspaceDir } = resolved;
