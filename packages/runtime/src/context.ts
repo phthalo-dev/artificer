@@ -5,6 +5,12 @@ import type {
   ProviderConfigUpdate,
 } from './engine/provider-config.js';
 import type { ScheduleAction, ScheduleDefinition } from './engine/schedules.js';
+import type {
+  ServiceCheckResult,
+  ServiceListEntry,
+  ServiceStartResult,
+  ServiceStopResult,
+} from './services/service-manager.js';
 import type { Store } from './storage/store.js';
 import type { IdentityStore } from './storage/identity-store.js';
 import type { RunRecord, ToolInvocation, Workstream } from './storage/types.js';
@@ -83,6 +89,10 @@ export interface EngineApi {
   deleteSchedule(
     id: string,
   ): Promise<{ ok: true } | { ok: false; error: string }>;
+  startService(workstreamId: string, name: string): Promise<ServiceStartResult>;
+  stopService(workstreamId: string, name: string): Promise<ServiceStopResult>;
+  listServices(workstreamId: string): Promise<ServiceListEntry[]>;
+  checkService(workstreamId: string, name: string): Promise<ServiceCheckResult>;
 }
 
 /** Everything a tool factory needs about the call it is serving. */

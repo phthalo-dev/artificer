@@ -28,6 +28,16 @@ export type ServiceStartResult =
   | { status: 'started' | 'already_running'; port: number; url: string }
   | { status: 'error'; message: string };
 
+export type ServiceStopResult = { status: 'stopped' | 'already_stopped' };
+export interface ServiceListEntry {
+  name: string;
+  port: number;
+  status: 'running' | 'stopped';
+}
+export type ServiceCheckResult =
+  | { status: number; body: string }
+  | { status: 'error'; message: string };
+
 function isAlive(pid: number): boolean {
   try {
     process.kill(pid, 0);
@@ -213,10 +223,7 @@ export class ServiceManager {
     });
   }
 
-  async stop(
-    workstreamId: string,
-    name: string,
-  ): Promise<{ status: 'stopped' | 'already_stopped' }> {
+  async stop(workstreamId: string, name: string): Promise<ServiceStopResult> {
     const key = `${workstreamId}:${name}`;
     return this.withLock(key, () => this.doStop(workstreamId, name));
   }
@@ -276,9 +283,7 @@ export class ServiceManager {
     }
   }
 
-  async list(
-    workstreamId: string,
-  ): Promise<Array<{ name: string; port: number; status: 'running' | 'stopped' }>> {
+  async list(workstreamId: string): Promise<ServiceListEntry[]> {
     return this.readState(workstreamId).map((s) => ({
       name: s.name,
       port: s.port,
@@ -286,10 +291,7 @@ export class ServiceManager {
     }));
   }
 
-  async check(
-    workstreamId: string,
-    name: string,
-  ): Promise<{ status: number; body: string } | { status: 'error'; message: string }> {
+  async check(workstreamId: string, name: string): Promise<ServiceCheckResult> {
     const existing = this.readState(workstreamId).find(
       (s) => s.name === name && isAlive(s.pid),
     );
