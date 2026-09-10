@@ -326,6 +326,31 @@ test('DELETE /api/memories/:id returns 404 for unknown id', async () => {
   assert.equal(res.status, 404);
 });
 
+test('Engine exposes service operations end to end', async () => {
+  const { engine, store } = await buildApp();
+  const ws = await store.createWorkstream({ title: 't', goal: 'g' });
+  const repoRoot = store.layout.workstreamWorkspace(ws.id);
+  await fs.mkdir(path.join(repoRoot, '.git'), { recursive: true });
+  await fs.mkdir(path.join(repoRoot, '.artificer'), { recursive: true });
+  const script = path.join(repoRoot, 'long-lived.mjs');
+  await fs.writeFile(script, 'setInterval(() => {}, 1000);\n');
+  await fs.writeFile(
+    path.join(repoRoot, '.artificer', 'workspace.json'),
+    JSON.stringify({
+      services: {
+        web: { run: `${process.execPath} ${script}`, portRange: [41300, 41309] },
+      },
+    }),
+  );
+
+  const started = await engine.startService(ws.id, 'web');
+  assert.equal(started.status, 'started');
+  const listed = await engine.listServices(ws.id);
+  assert.equal(listed[0]?.status, 'running');
+  const stopped = await engine.stopService(ws.id, 'web');
+  assert.equal(stopped.status, 'stopped');
+});
+
 test('Engine creates an identity memory when a workstream is started', async () => {
   const { engine, identity } = await buildEngineWithMemory();
 
