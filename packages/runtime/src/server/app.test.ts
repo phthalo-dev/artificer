@@ -338,7 +338,10 @@ test('Engine exposes service operations end to end', async () => {
     path.join(repoRoot, '.artificer', 'workspace.json'),
     JSON.stringify({
       services: {
-        web: { run: `${process.execPath} ${script}`, portRange: [41300, 41309] },
+        web: {
+          run: `${process.execPath} ${script}`,
+          portRange: [41300, 41309],
+        },
       },
     }),
   );
