@@ -1,5 +1,6 @@
 import fs from 'node:fs';
 import path from 'node:path';
+import type { WorkspaceServicesConfig } from '../api/types.js';
 
 export interface ServiceScriptConfig {
   setup?: string;
@@ -12,11 +13,12 @@ export interface WorkspaceServicesFile {
   services: Record<string, ServiceScriptConfig>;
 }
 
-/** The `workspaceServices` block inside artificer.config.json. */
-export interface WorkspaceServicesOverrideConfig {
-  disabled?: string[];
-  overrides?: Record<string, Partial<Pick<ServiceScriptConfig, 'portRange'>>>;
-}
+/**
+ * The `workspaceServices` block inside artificer.config.json. Re-exported
+ * under this name for readability at call sites in this file; canonically
+ * defined in api/types.ts alongside the rest of ArtificerConfig.
+ */
+export type WorkspaceServicesOverrideConfig = WorkspaceServicesConfig;
 
 /**
  * Reads `.artificer/workspace.json` from a repo root. Returns undefined if
