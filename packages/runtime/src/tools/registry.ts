@@ -20,6 +20,7 @@ import { createLearnBatchTools } from './learn-batches.js';
 import { createOrchestratorTools } from './orchestrator-tool.js';
 import { createSearchTools } from './search.js';
 import { createScheduleTools } from './schedules.js';
+import { createServiceTools } from './services.js';
 import { createShellTool } from './shell.js';
 import { createToolResultReadTools } from './tool-result-read.js';
 
@@ -54,6 +55,7 @@ export function toolsForRole(
   const searchGrepOnly = createSearchTools(ctx, { includeGlob: false });
   const schedules = createScheduleTools(ctx);
   const history = createHistoryTools(ctx);
+  const services = createServiceTools(ctx);
 
   let result: ToolDef[];
   switch (role) {
@@ -106,6 +108,7 @@ export function toolsForRole(
         ...toolResultRead,
         ...shell,
         ...git,
+        ...services,
         ...byName(artifacts, ['read_plan', 'submit_review']),
         ...byName(orchestrator, [
           'get_status',
@@ -123,6 +126,7 @@ export function toolsForRole(
         ...toolResultRead,
         ...shell,
         ...git,
+        ...services,
         ...byName(artifacts, ['read_plan', 'report_status']),
         ...byName(orchestrator, [
           'get_status',
