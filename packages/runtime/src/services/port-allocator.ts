@@ -14,10 +14,6 @@ export interface PortRange {
 export class PortAllocator {
   private readonly claimed = new Set<number>();
 
-  isClaimed(port: number): boolean {
-    return this.claimed.has(port);
-  }
-
   claim(port: number): void {
     this.claimed.add(port);
   }

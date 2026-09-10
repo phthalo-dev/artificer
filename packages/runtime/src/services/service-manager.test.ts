@@ -43,6 +43,22 @@ function crashingScript(dir: string): string {
   return file;
 }
 
+function isPidAliveForTest(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function waitForPidToDie(pid: number, timeoutMs = 3000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline && isPidAliveForTest(pid)) {
+    await new Promise((r) => setTimeout(r, 20));
+  }
+}
+
 test('start spawns the run script and records state', async () => {
   const { store, config, ws, repoRoot } = await setup();
   const script = longLivedScript(repoRoot);
@@ -153,6 +169,39 @@ test('concurrent start calls for the same service do not race', async () => {
   assert.equal(webStates.length, 1);
 
   process.kill(webStates[0].pid, 'SIGKILL');
+});
+
+test('concurrent start calls for two different services in the same workstream do not clobber each other\'s state entry', async () => {
+  const { store, config, ws, repoRoot } = await setup();
+  const script = longLivedScript(repoRoot);
+  writeServiceConfig(repoRoot, {
+    web: { run: `${process.execPath} ${script}`, portRange: [41300, 41309] },
+    worker: { run: `${process.execPath} ${script}`, portRange: [41310, 41319] },
+  });
+  const manager = new ServiceManager(store, config);
+
+  // These are DIFFERENT services, so the per-service lock does not
+  // serialize them - before the fix, each reads the (empty) state array
+  // up front and, ~1.5s later, writes back `[...thatStaleSnapshot, self]`,
+  // so whichever writes last silently erases the other's entry.
+  const [webResult, workerResult] = await Promise.all([
+    manager.start(ws.id, 'web'),
+    manager.start(ws.id, 'worker'),
+  ]);
+  assert.equal(webResult.status, 'started');
+  assert.equal(workerResult.status, 'started');
+
+  const states = JSON.parse(
+    fs.readFileSync(store.layout.workstreamServicesStateFile(ws.id), 'utf-8'),
+  );
+  const names = states.map((s: { name: string }) => s.name).sort();
+  assert.deepEqual(
+    names,
+    ['web', 'worker'],
+    'both services must survive in the state file - neither write may clobber the other',
+  );
+
+  for (const s of states) process.kill(s.pid, 'SIGKILL');
 });
 
 test('concurrent start and stop for the same service do not race', async () => {
@@ -312,4 +361,80 @@ test('reconcileAll drops dead entries and keeps alive ones claimed', async () =>
   assert.equal(listed[0].name, 'web');
 
   await fresh.stop(ws.id, 'web');
+});
+
+test('start releases a dead service\'s port on restart, so repeated crash+restart cycles do not exhaust a small port range', async () => {
+  const { store, config, ws, repoRoot } = await setup();
+  const script = longLivedScript(repoRoot);
+  // Only two ports in range - if the dead entry's port were never released
+  // on restart, the 3rd cycle here would exhaust the range and doStart's
+  // portAllocator.allocate() would throw instead of returning 'started'.
+  writeServiceConfig(repoRoot, {
+    web: { run: `${process.execPath} ${script}`, portRange: [41330, 41331] },
+  });
+  const manager = new ServiceManager(store, config);
+  const stateFile = store.layout.workstreamServicesStateFile(ws.id);
+
+  for (let cycle = 0; cycle < 4; cycle += 1) {
+    const started = await manager.start(ws.id, 'web');
+    assert.equal(
+      started.status,
+      'started',
+      `cycle ${cycle} should start (old ports must have been released)`,
+    );
+    if (started.status !== 'started') continue;
+
+    const states = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+    const entry = states.find((s: { name: string }) => s.name === 'web');
+    assert.ok(entry, `cycle ${cycle} recorded a state entry`);
+
+    // Simulate an external crash: kill the process out-of-band, bypassing
+    // manager.stop(), leaving behind a state entry whose pid is dead and
+    // whose port is still marked claimed - exactly the situation doStart's
+    // "existing but not alive" branch must release before allocating anew.
+    process.kill(entry.pid, 'SIGKILL');
+    await waitForPidToDie(entry.pid);
+  }
+});
+
+test('stop releases the port of an already-dead service instead of leaking it', async () => {
+  const { store, config, ws, repoRoot } = await setup();
+  const script = longLivedScript(repoRoot);
+  // Exactly one port in range - restarting only succeeds if stop()
+  // released the dead entry's port instead of leaking it.
+  writeServiceConfig(repoRoot, {
+    web: { run: `${process.execPath} ${script}`, portRange: [41340, 41340] },
+  });
+  const manager = new ServiceManager(store, config);
+
+  const started = await manager.start(ws.id, 'web');
+  assert.equal(started.status, 'started');
+  if (started.status !== 'started') return;
+
+  const stateFile = store.layout.workstreamServicesStateFile(ws.id);
+  const states = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+  const entry = states.find((s: { name: string }) => s.name === 'web');
+  assert.ok(entry);
+
+  // Kill it out-of-band so stop() finds an "already dead" entry rather
+  // than a live process to terminate.
+  process.kill(entry.pid, 'SIGKILL');
+  await waitForPidToDie(entry.pid);
+
+  const stopped = await manager.stop(ws.id, 'web');
+  assert.equal(stopped.status, 'already_stopped');
+
+  const restarted = await manager.start(ws.id, 'web');
+  assert.equal(
+    restarted.status,
+    'started',
+    'the single port in range must have been released by stop()',
+  );
+  if (restarted.status === 'started') {
+    const finalStates = JSON.parse(fs.readFileSync(stateFile, 'utf-8'));
+    const finalEntry = finalStates.find(
+      (s: { name: string }) => s.name === 'web',
+    );
+    process.kill(finalEntry.pid, 'SIGKILL');
+  }
 });
