@@ -113,6 +113,47 @@ Selects the worker execution backend. Omitting this field uses the built-in LLM 
 | `executor.timeout` | number | No | `600000` | Max milliseconds before the process is killed |
 | `executor.mcpConfigPath` | string | No | `".artificer-mcp.json"` | Relative path for the MCP config file; substituted into `{mcpConfig}` |
 
+### `.artificer/workspace.json` (target repo) and `workspaceServices` override
+
+Projects can declare named, long-lived dev-server scripts in a `.artificer/workspace.json` file committed at the root of the *target* repo (not the identity repo) — the same file whether a human or Artificer runs the project:
+
+```json
+{
+  "services": {
+    "web": {
+      "setup": "npm install",
+      "run": "npm run dev",
+      "teardown": "",
+      "portRange": [3000, 3009]
+    }
+  }
+}
+```
+
+| Field | Required | Description |
+|---|---|---|
+| `setup` | No | Runs once per workstream, before the first `run`. A non-zero exit aborts before `run` ever executes. |
+| `run` | Yes | The long-lived process. Spawned detached so it survives a runtime restart. |
+| `teardown` | No | Runs once after the process is stopped. Failures are logged only. |
+| `portRange` | Yes | `[min, max]` inclusive. The runtime allocates the next free port in this range. |
+
+The `worker` and `reviewer` roles start/stop/list/check these by name with the `start_service`, `stop_service`, `list_services`, and `check_service` tools (see [Roles reference](./roles.md)). Every `setup`/`run`/`teardown` invocation gets `ARTIFICER_SERVICE_NAME`, `ARTIFICER_SERVICE_PORT`, `ARTIFICER_SERVICE_URL` (`http://127.0.0.1:<port>`), and `ARTIFICER_WORKSPACE_DIR` in its environment.
+
+An identity repo can disable or override a target repo's declared services via `artificer.config.json`:
+
+```jsonc
+{
+  "workspaceServices": {
+    "disabled": ["worker"],
+    "overrides": {
+      "web": { "portRange": [4000, 4009] }
+    }
+  }
+}
+```
+
+`disabled` removes a named service from the tool-visible set entirely. `overrides` merges field-by-field onto the target repo's declaration for that name — today only `portRange` is supported.
+
 ### `quota` block
 
 Configures quota windows, spend budgets, and failover routing across multiple LLM accounts. This is an advanced field; see the quota documentation for full details.
