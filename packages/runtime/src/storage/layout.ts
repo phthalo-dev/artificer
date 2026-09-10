@@ -127,7 +127,10 @@ export class Layout {
   }
 
   workstreamServiceLogFile(workstreamId: string, name: string): string {
-    return path.join(this.workstreamServiceLogsDir(workstreamId), `${name}.log`);
+    return path.join(
+      this.workstreamServiceLogsDir(workstreamId),
+      `${name}.log`,
+    );
   }
 
   /** Cursor/state for the GitHub activity watcher (own PRs + notifications). */

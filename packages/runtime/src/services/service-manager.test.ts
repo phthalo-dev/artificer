@@ -33,13 +33,13 @@ function writeServiceConfig(repoRoot: string, services: object): void {
 
 function longLivedScript(dir: string): string {
   const file = path.join(dir, 'long-lived.mjs');
-  fs.writeFileSync(file, "setInterval(() => {}, 1000);\n");
+  fs.writeFileSync(file, 'setInterval(() => {}, 1000);\n');
   return file;
 }
 
 function crashingScript(dir: string): string {
   const file = path.join(dir, 'crash.mjs');
-  fs.writeFileSync(file, "process.exit(1);\n");
+  fs.writeFileSync(file, 'process.exit(1);\n');
   return file;
 }
 
@@ -57,7 +57,10 @@ test('start spawns the run script and records state', async () => {
     assert.equal(result.url, `http://127.0.0.1:${result.port}`);
     process.kill(
       JSON.parse(
-        fs.readFileSync(store.layout.workstreamServicesStateFile(ws.id), 'utf-8'),
+        fs.readFileSync(
+          store.layout.workstreamServicesStateFile(ws.id),
+          'utf-8',
+        ),
       )[0].pid,
       'SIGKILL',
     );
@@ -78,7 +81,10 @@ test('start is idempotent for an already-running service', async () => {
     assert.equal(first.port, second.port);
     process.kill(
       JSON.parse(
-        fs.readFileSync(store.layout.workstreamServicesStateFile(ws.id), 'utf-8'),
+        fs.readFileSync(
+          store.layout.workstreamServicesStateFile(ws.id),
+          'utf-8',
+        ),
       )[0].pid,
       'SIGKILL',
     );
@@ -162,7 +168,10 @@ test('concurrent start and stop for the same service do not race', async () => {
   const startPromise = manager.start(ws.id, 'web');
   const stopPromise = manager.stop(ws.id, 'web');
 
-  const [startResult, stopResult] = await Promise.all([startPromise, stopPromise]);
+  const [startResult, stopResult] = await Promise.all([
+    startPromise,
+    stopPromise,
+  ]);
 
   // Neither call should have thrown (Promise.all above would have rejected
   // if either did), and start() must have actually succeeded (it was queued
@@ -237,7 +246,10 @@ test('check fetches a running service and returns its status/body', async () => 
       "http.createServer((_, res) => res.end('ok')).listen(Number(process.env.ARTIFICER_SERVICE_PORT));\n",
   );
   writeServiceConfig(repoRoot, {
-    web: { run: `${process.execPath} ${serverFile}`, portRange: [41220, 41229] },
+    web: {
+      run: `${process.execPath} ${serverFile}`,
+      portRange: [41220, 41229],
+    },
   });
   const manager = new ServiceManager(store, config);
   await manager.start(ws.id, 'web');

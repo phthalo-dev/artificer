@@ -25,7 +25,11 @@ async function freshContext(
     store,
     async startService(workstreamId: string, name: string) {
       calls.push({ method: 'startService', args: [workstreamId, name] });
-      return { status: 'started' as const, port: 4100, url: 'http://127.0.0.1:4100' };
+      return {
+        status: 'started' as const,
+        port: 4100,
+        url: 'http://127.0.0.1:4100',
+      };
     },
     async stopService(workstreamId: string, name: string) {
       calls.push({ method: 'stopService', args: [workstreamId, name] });
@@ -53,22 +57,22 @@ test('start_service calls engine.startService with the run workstreamId', async 
     port: 4100,
     url: 'http://127.0.0.1:4100',
   });
-  assert.deepEqual(calls, [
-    { method: 'startService', args: ['ws1', 'web'] },
-  ]);
+  assert.deepEqual(calls, [{ method: 'startService', args: ['ws1', 'web'] }]);
 });
 
 test('stop_service, list_services, check_service delegate to engine', async () => {
   const { ctx } = await freshContext('ws1');
   const tools = createServiceTools(ctx);
-  const stopResult = await tools.find((t) => t.name === 'stop_service')!.handler({
-    name: 'web',
-  });
+  const stopResult = await tools
+    .find((t) => t.name === 'stop_service')!
+    .handler({
+      name: 'web',
+    });
   assert.deepEqual(JSON.parse(stopResult), { status: 'stopped' });
 
-  const listResult = await tools.find((t) => t.name === 'list_services')!.handler(
-    {},
-  );
+  const listResult = await tools
+    .find((t) => t.name === 'list_services')!
+    .handler({});
   assert.deepEqual(JSON.parse(listResult), [
     { name: 'web', port: 4100, status: 'running' },
   ]);

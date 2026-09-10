@@ -97,11 +97,7 @@ export class ServiceManager {
     const workspaceDir = this.store.layout.workstreamWorkspace(workstreamId);
     const repoRoot = (await findGitRepo(workspaceDir)) ?? workspaceDir;
     const file = loadWorkspaceServiceConfig(repoRoot);
-    const svc = resolveServiceConfig(
-      file,
-      name,
-      this.config.workspaceServices,
-    );
+    const svc = resolveServiceConfig(file, name, this.config.workspaceServices);
     if (!svc) return { error: `Unknown or disabled service "${name}".` };
     return { svc, repoRoot, workspaceDir };
   }
@@ -111,7 +107,9 @@ export class ServiceManager {
     const existingInFlight = this.inFlight.get(key);
     if (existingInFlight) return existingInFlight;
 
-    const promise = this.withLock(key, () => this.doStart(workstreamId, name)).finally(() => {
+    const promise = this.withLock(key, () =>
+      this.doStart(workstreamId, name),
+    ).finally(() => {
       this.inFlight.delete(key);
     });
     this.inFlight.set(key, promise);
@@ -123,7 +121,8 @@ export class ServiceManager {
     name: string,
   ): Promise<ServiceStartResult> {
     const resolved = await this.resolve(workstreamId, name);
-    if ('error' in resolved) return { status: 'error', message: resolved.error };
+    if ('error' in resolved)
+      return { status: 'error', message: resolved.error };
     const { svc, repoRoot, workspaceDir } = resolved;
 
     const states = this.readState(workstreamId);
@@ -187,7 +186,10 @@ export class ServiceManager {
       const tail = fs.existsSync(logFile)
         ? fs.readFileSync(logFile, 'utf-8').slice(-2000)
         : '';
-      return { status: 'error', message: `"${name}" exited immediately.\n${tail}` };
+      return {
+        status: 'error',
+        message: `"${name}" exited immediately.\n${tail}`,
+      };
     }
 
     this.writeState(workstreamId, [
