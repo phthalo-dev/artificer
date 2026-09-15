@@ -1,7 +1,7 @@
 # Runtime benchmarking harness (SWE-bench-style)
 
 > **Consumers:** for identity-based agent evals (`agent/evals/`, `artificer eval run`),
-> see [Agent evals](../../../docs/guides/agent-evals.md).
+> see [Agent evals](../../../docs/content/docs/guides/agent-evals.md).
 >
 > **Source of truth:** harness code lives in `@artificer-ai/eval` (`packages/eval/src/bench/`).
 > This directory keeps task fixtures (`tasks/`), graders (`eval/`), and results.
