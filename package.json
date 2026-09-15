@@ -19,11 +19,13 @@
     "publish-packages": "pnpm --filter @artificer-ai/runtime build && pnpm --filter @artificer-ai/runtime build:ui && pnpm --filter @artificer-ai/cli build && changeset publish",
     "ci": "node scripts/check-pinned-deps.mjs && turbo run lint type-check test build",
     "ci:packages": "pnpm run ci",
-    "release": "node scripts/publish.mjs"
+    "release": "node scripts/publish.mjs",
+    "prepare": "husky"
   },
   "devDependencies": {
     "@changesets/cli": "2.31.0",
     "@types/node": "20.19.35",
+    "husky": "9.1.7",
     "prettier": "3.8.1",
     "turbo": "1.13.4",
     "typescript": "5.9.3"

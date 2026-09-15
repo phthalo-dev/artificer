@@ -1,0 +1,6 @@
+if git diff --cached --name-only | grep -q '^pnpm-lock.yaml$'; then
+  if [ -z "$ARTIFICER_ALLOW_LOCKFILE_CHANGE" ]; then
+    echo "pnpm-lock.yaml is staged. Set ARTIFICER_ALLOW_LOCKFILE_CHANGE=1 to commit a deliberate lockfile change."
+    exit 1
+  fi
+fi
