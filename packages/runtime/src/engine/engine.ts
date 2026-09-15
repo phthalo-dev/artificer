@@ -1251,6 +1251,8 @@ export class Engine implements EngineApi {
           summary:
             `${ws.summary}\n\n[System] Paused: LLM call failed due to insufficient API balance (model: ${model}).`.trim(),
         });
+        const updated = await this.store.getWorkstream(run.workstreamId);
+        if (updated) void this.handleWorkstreamTerminal(updated);
       }
     }
 
