@@ -1,3 +1,8 @@
+---
+title: CLI Reference
+description: The Artificer CLI (`artificer`) manages the agent lifecycle.
+---
+
 # CLI Reference
 
 The Artificer CLI (`artificer`) manages the agent lifecycle.

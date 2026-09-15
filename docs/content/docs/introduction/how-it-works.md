@@ -1,3 +1,8 @@
+---
+title: How It Works
+description: This page covers the mental model behind Artificer — what happens when you send the agent a message and how work gets done.
+---
+
 # How It Works
 
 This page covers the mental model behind Artificer — what happens when you send the agent a message and how work gets done.
@@ -77,6 +82,6 @@ By default, the worker role uses Artificer's internal LLM tool loop. You can swa
 
 ## Next steps
 
-- [Quickstart](../getting-started/quickstart.md) — run the agent for the first time
-- [Core concepts](../getting-started/core-concepts.md) — workstreams, roles, and storage in more detail
-- [Roles reference](../reference/roles.md) — full reference for each role and its configuration
+- [Quickstart](/docs/getting-started/quickstart) — run the agent for the first time
+- [Core concepts](/docs/getting-started/core-concepts) — workstreams, roles, and storage in more detail
+- [Roles reference](/docs/reference/roles) — full reference for each role and its configuration

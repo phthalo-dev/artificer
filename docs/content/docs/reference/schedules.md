@@ -1,3 +1,8 @@
+---
+title: Schedules Reference
+description: Recurring schedules let you define work that runs on a timer — daily check-ins, weekly maintenance, or any cron-based job.
+---
+
 # Schedules Reference
 
 Recurring schedules let you define work that runs on a timer — daily check-ins, weekly maintenance, or any cron-based job. Definitions live as markdown files in the identity repo at `agent/schedules/<id>.md`, the same way roles and skills are discovered from disk.
@@ -97,7 +102,7 @@ When `pullInterval` is set, the runtime periodically `git pull --rebase`s the id
 
 On rebase conflict the pull is aborted and logged — schedules keep the last successfully loaded definitions until a human or the agent resolves the conflict.
 
-See [Config Reference](./config.md#identity-block) for full `identity` options.
+See [Config Reference](/docs/reference/config#identity-block) for full `identity` options.
 
 ---
 

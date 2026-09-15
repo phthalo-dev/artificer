@@ -1,3 +1,8 @@
+---
+title: What Is Artificer?
+description: Artificer runs AI coding agents that have their own GitHub identity.
+---
+
 # What Is Artificer?
 
 Artificer runs AI coding agents that have their own GitHub identity. The agent gets its own GitHub account, makes commits under its own name, and opens PRs from its own profile — not yours.
@@ -16,5 +21,5 @@ Artificer is open-source and runs anywhere Node.js runs. You operate it on your 
 
 ## Next steps
 
-- [Quickstart](../getting-started/quickstart.md) — get an agent running in under 10 minutes
-- [How it works](how-it-works.md) — the mental model behind the orchestration
+- [Quickstart](/docs/getting-started/quickstart) — get an agent running in under 10 minutes
+- [How it works](/docs/introduction/how-it-works) — the mental model behind the orchestration

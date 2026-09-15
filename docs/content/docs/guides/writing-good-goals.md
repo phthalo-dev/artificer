@@ -1,3 +1,8 @@
+---
+title: Writing Good Goals
+description: The words you send Artificer become the workstream's `goal` — the single string the planner, worker, and reviewer all work from.
+---
+
 # Writing Good Goals
 
 The words you send Artificer become the workstream's `goal` — the single string the planner, worker, and reviewer all work from. A vague goal produces a vague plan; a specific one produces a plan the worker can execute without guessing. This guide covers what makes a goal specific enough to act on.
@@ -47,7 +52,7 @@ If you know which file or module owns the behavior, say so — it saves the plan
 
 ## Let the loop retry before you intervene
 
-Artificer's workstream loop already re-runs a rejected task and detects when a worker is thrashing (repeating the same edit, or making no progress) — it blocks and reports back to you automatically rather than looping forever. You generally don't need to babysit each step. Reach for a steering message in chat ("for the comments feature, make sure to paginate the list") only when the workstream is heading in a direction you know is wrong, not to nudge every intermediate step — see [How it works](../introduction/how-it-works.md) for what happens between your message and a finished result.
+Artificer's workstream loop already re-runs a rejected task and detects when a worker is thrashing (repeating the same edit, or making no progress) — it blocks and reports back to you automatically rather than looping forever. You generally don't need to babysit each step. Reach for a steering message in chat ("for the comments feature, make sure to paginate the list") only when the workstream is heading in a direction you know is wrong, not to nudge every intermediate step — see [How it works](/docs/introduction/how-it-works) for what happens between your message and a finished result.
 
 ## Quick checklist
 
@@ -60,6 +65,6 @@ Before sending a non-trivial goal, check it states:
 
 ## Related docs
 
-- [How it works](../introduction/how-it-works.md) — what happens between your message and a finished result
-- [Core concepts — workstreams](../getting-started/core-concepts.md#workstreams)
-- [Roles reference](../reference/roles.md) — what the planner, worker, and reviewer each do
+- [How it works](/docs/introduction/how-it-works) — what happens between your message and a finished result
+- [Core concepts — workstreams](/docs/getting-started/core-concepts#workstreams)
+- [Roles reference](/docs/reference/roles) — what the planner, worker, and reviewer each do

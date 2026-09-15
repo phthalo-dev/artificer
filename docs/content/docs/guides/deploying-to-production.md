@@ -1,3 +1,8 @@
+---
+title: Deploying to Production
+description: Production mode adds API key authentication and (optionally) runs from a container image.
+---
+
 # Deploying to Production
 
 Production mode adds API key authentication and (optionally) runs from a container image. This guide covers: securing the API, choosing a deployment target, and using `IDENTITY_REPO` to pull the agent's identity from GitHub at boot so the container stays stateless.
@@ -228,6 +233,6 @@ The agent UI is available at `http://localhost:4100`.
 
 ## Next steps
 
-- [Agent identity setup](./agent-identity-setup.md) — setting up the identity repo
-- [Environment variables reference](../reference/env-vars.md) — complete env var list
-- [infrastructure/README.md](../../infrastructure/README.md) — an alternative AWS path with hibernate-on-idle EC2, if you don't want an always-on Fly.io/Docker host
+- [Agent identity setup](/docs/guides/agent-identity-setup) — setting up the identity repo
+- [Environment variables reference](/docs/reference/env-vars) — complete env var list
+- [infrastructure/README.md](https://github.com/dbanksdesign/artificer/blob/main/infrastructure/README.md) — an alternative AWS path with hibernate-on-idle EC2, if you don't want an always-on Fly.io/Docker host

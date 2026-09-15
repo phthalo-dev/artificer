@@ -1,10 +1,15 @@
+---
+title: Setting Up an Agent Identity Repo
+description: This guide walks through creating a dedicated GitHub account for an Artificer agent and scaffolding its identity repo.
+---
+
 # Setting Up an Agent Identity Repo
 
 This guide walks through creating a dedicated GitHub account for an Artificer agent and scaffolding its identity repo. The agent gets its own git identity — separate from yours — so its commits, PRs, and activity appear as a distinct person.
 
 ## Before you start
 
-New to Artificer? Start with the [Quickstart](../getting-started/quickstart.md) to get a local agent running before following this guide.
+New to Artificer? Start with the [Quickstart](/docs/getting-started/quickstart) to get a local agent running before following this guide.
 
 You will need:
 
@@ -300,8 +305,8 @@ To run the same agent elsewhere, clone the identity repo, copy `.env` (or recrea
 
 ## Next steps
 
-- [Agent evals](./agent-evals.md) — add `agent/evals/`, run `artificer eval`, and review results in the Benchmark UI
-- [Connect Slack & Discord](./slack-discord-connections.md) — let your team message the agent in chat
+- [Agent evals](/docs/guides/agent-evals) — add `agent/evals/`, run `artificer eval`, and review results in the Benchmark UI
+- [Connect Slack & Discord](/docs/guides/slack-discord-connections) — let your team message the agent in chat
 
 ---
 

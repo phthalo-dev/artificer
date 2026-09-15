@@ -1,3 +1,8 @@
+---
+title: Config Reference
+description: "`artificer.config.json` is the agent's configuration file, located at the root of the identity repo."
+---
+
 # Config Reference
 
 `artificer.config.json` is the agent's configuration file, located at the root of the identity repo. Your editor should offer JSON schema autocomplete if the `$schema` field resolves correctly.
@@ -43,7 +48,7 @@ Exec-directory rules override identity rules with the same tool and pattern. A m
 
 The built-in `run_shell` tool gates dangerous commands. The built-in `fetch_url` schema is `GET`-only, so its requests remain ungated. A fetch-style tool named `fetch` or `fetch_url` with a non-`GET` method would require a matching allow rule. Hard shell-policy denies and URL/private-IP guards are separate and unchanged; an approval allow rule does not bypass them.
 
-The runtime exposes no model-facing API or tool for changing policy. Exec-directory policy mutations are available only through `POST /api/policy/rules` and `DELETE /api/policy/rules/:id`; this is an API boundary, not a claim that an OS sandbox prevents other filesystem access. Autonomous agents should ship useful identity-level allow rules in `agent/tool-policy.json` for their normal workflow. See the bearer-authenticated [policy API](./api.md#tool-approval-policy).
+The runtime exposes no model-facing API or tool for changing policy. Exec-directory policy mutations are available only through `POST /api/policy/rules` and `DELETE /api/policy/rules/:id`; this is an API boundary, not a claim that an OS sandbox prevents other filesystem access. Autonomous agents should ship useful identity-level allow rules in `agent/tool-policy.json` for their normal workflow. See the bearer-authenticated [policy API](/docs/reference/api#tool-approval-policy).
 
 ### `models` block
 
@@ -80,7 +85,7 @@ Controls how the agent commits and pushes memories to the identity repo after ea
 | `identity.commitPrefix` | string | No | — | Prefix prepended to auto-commit messages |
 | `identity.remote` | string | No | `"origin"` | Git remote name to push to |
 | `identity.branch` | string | No | current branch | Branch to push to |
-| `identity.pullInterval` | string | No | — | How often to pull identity from origin (including schedule files in `agent/schedules/`). Accepts duration strings: `"30s"`, `"5m"`, `"1h"`, `"1d"`. Absent or unset disables periodic identity pull. See [Schedules Reference](./schedules.md) |
+| `identity.pullInterval` | string | No | — | How often to pull identity from origin (including schedule files in `agent/schedules/`). Accepts duration strings: `"30s"`, `"5m"`, `"1h"`, `"1d"`. Absent or unset disables periodic identity pull. See [Schedules Reference](/docs/reference/schedules) |
 
 ### `executor` block
 
