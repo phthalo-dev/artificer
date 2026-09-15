@@ -24,7 +24,7 @@ inbound message
    └──▶ reviewer ── notes ─────┘
 ```
 
-See [How it works](docs/introduction/how-it-works.md) for the full mental model, and [Core concepts](docs/getting-started/core-concepts.md) for the vocabulary (workstreams, channels, executors, memories).
+See [How it works](docs/content/docs/introduction/how-it-works.md) for the full mental model, and [Core concepts](docs/content/docs/getting-started/core-concepts.md) for the vocabulary (workstreams, channels, executors, memories).
 
 ## Project structure
 
@@ -39,7 +39,7 @@ artificer/
 │   └── ui/        # @artificer-ai/ui — the web dashboard, built into runtime/ui-dist
 ├── infrastructure/ # AWS CDK stack for a personal, hibernating EC2 deployment
 ├── docker/         # Sidecar images used by the infrastructure deployment
-└── docs/           # End-user documentation (see below)
+└── docs/           # Astro docs site; published pages in docs/content/docs/
 ```
 
 There is no separate control-plane app and no database — a running agent is a single Node.js process that persists everything as files under `ARTIFICER_EXEC_DIR` (default `~/.artificer/<name>/`).
@@ -55,7 +55,7 @@ npm install
 artificer dev
 ```
 
-Open `http://localhost:4100` and send it a message. Full walkthrough: [Quickstart](docs/getting-started/quickstart.md).
+Open `http://localhost:4100` and send it a message. Full walkthrough: [Quickstart](docs/content/docs/getting-started/quickstart.md).
 
 ### Working on Artificer itself
 
@@ -68,24 +68,25 @@ pnpm build        # build all packages
 pnpm lint         # lint all packages
 pnpm type-check   # type-check all packages
 pnpm ci:packages  # what CI runs: type-check, test, and build the publishable packages
+pnpm --filter docs dev   # docs site at http://localhost:4321
 ```
 
 ## Documentation
 
-- [What is Artificer?](docs/introduction/what-is-artificer.md) / [How it works](docs/introduction/how-it-works.md)
-- [Quickstart](docs/getting-started/quickstart.md) / [Core concepts](docs/getting-started/core-concepts.md)
-- Guides: [agent identity setup](docs/guides/agent-identity-setup.md), [writing good goals](docs/guides/writing-good-goals.md), [Slack & Discord](docs/guides/slack-discord-connections.md), [custom tools](docs/guides/writing-custom-tools.md), [custom channels](docs/guides/writing-custom-channels.md), [managing memories](docs/guides/managing-memories.md), [custom CLI executors](docs/guides/custom-cli-executor.md), [deploying to production](docs/guides/deploying-to-production.md)
-- Reference: [CLI](docs/reference/cli.md), [config](docs/reference/config.md), [env vars](docs/reference/env-vars.md), [HTTP API](docs/reference/api.md), [roles](docs/reference/roles.md)
+- [What is Artificer?](docs/content/docs/introduction/what-is-artificer.md) / [How it works](docs/content/docs/introduction/how-it-works.md)
+- [Quickstart](docs/content/docs/getting-started/quickstart.md) / [Core concepts](docs/content/docs/getting-started/core-concepts.md)
+- Guides: [agent identity setup](docs/content/docs/guides/agent-identity-setup.md), [writing good goals](docs/content/docs/guides/writing-good-goals.md), [Slack & Discord](docs/content/docs/guides/slack-discord-connections.md), [custom tools](docs/content/docs/guides/writing-custom-tools.md), [custom channels](docs/content/docs/guides/writing-custom-channels.md), [managing memories](docs/content/docs/guides/managing-memories.md), [custom CLI executors](docs/content/docs/guides/custom-cli-executor.md), [deploying to production](docs/content/docs/guides/deploying-to-production.md)
+- Reference: [CLI](docs/content/docs/reference/cli.md), [config](docs/content/docs/reference/config.md), [env vars](docs/content/docs/reference/env-vars.md), [HTTP API](docs/content/docs/reference/api.md), [roles](docs/content/docs/reference/roles.md)
 
 ## Deployment
 
-For a scaffolded agent project, [Deploying to production](docs/guides/deploying-to-production.md) covers Fly.io and plain Docker — the fastest paths to a self-hosted instance ($3–8/month).
+For a scaffolded agent project, [Deploying to production](docs/content/docs/guides/deploying-to-production.md) covers Fly.io and plain Docker — the fastest paths to a self-hosted instance ($3–8/month).
 
 `infrastructure/` in this repo is a separate path: an AWS CDK stack the maintainers use for a personal, hibernating EC2 deployment (wakes on message via SQS, ~$3–8/month idle). See [infrastructure/README.md](infrastructure/README.md) if you specifically want the AWS route instead of Fly.io/Docker.
 
 ## Contributing
 
-Issues and PRs are welcome. `docs/` covers usage; the code under `packages/runtime/src/` is the best starting point for understanding the implementation (colocated `*.test.ts` files next to the code they test).
+Issues and PRs are welcome. `docs/` is the docs site (published pages under `docs/content/docs/`); the code under `packages/runtime/src/` is the best starting point for understanding the implementation (colocated `*.test.ts` files next to the code they test).
 
 ## License
 
