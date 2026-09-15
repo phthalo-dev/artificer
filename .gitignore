@@ -70,3 +70,7 @@ cost.json
 .docs/
 docs/superpowers/
 docs/research/
+
+# Astro docs site
+docs/.astro
+
