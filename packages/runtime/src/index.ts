@@ -98,6 +98,7 @@ export async function startRuntime(): Promise<void> {
     : undefined;
   await identity?.init();
   const engine = new Engine(config, store, undefined, undefined, identity);
+  await engine.reconcileServices();
   const scheduleRunner = createScheduleRunnerForEngine(engine);
 
   const recovered = await engine.recoverZombieRuns();

@@ -123,6 +123,7 @@ export async function createRuntime(
     identity,
     tools,
   );
+  await engine.reconcileServices();
   const scheduleRunner = createScheduleRunnerForEngine(engine);
   const app = createApp(engine, { identity, channels });
 

@@ -206,3 +206,22 @@ test('loadConfigWithIdentityDefinition reads executor and quota from artificer.c
   });
   assert.deepEqual(config.quota, { reservePercent: 15 });
 });
+
+test('workspaceServices passes through from artificer.config.json', () => {
+  const config = mergeWithDefinition(
+    {
+      name: 'test',
+      workspaceServices: { disabled: ['worker'] },
+    },
+    { LLM_API_KEY: 'test-key' },
+  );
+  assert.deepEqual(config.workspaceServices, { disabled: ['worker'] });
+});
+
+test('workspaceServices is undefined by default', () => {
+  const config = mergeWithDefinition(
+    { name: 'test' },
+    { LLM_API_KEY: 'test-key' },
+  );
+  assert.equal(config.workspaceServices, undefined);
+});
