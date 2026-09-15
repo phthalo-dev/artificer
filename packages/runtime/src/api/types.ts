@@ -58,6 +58,11 @@ export type ExecutorConfig =
       mcpConfigPath?: string;
     };
 
+export interface WorkspaceServicesConfig {
+  disabled?: string[];
+  overrides?: Record<string, { portRange?: [number, number] }>;
+}
+
 export interface ArtificerConfig {
   name: string;
   description?: string;
@@ -72,6 +77,7 @@ export interface ArtificerConfig {
   identity?: IdentityConfig;
   executor?: ExecutorConfig;
   quota?: QuotaConfig;
+  workspaceServices?: WorkspaceServicesConfig;
 }
 
 export interface ToolDefinition<TInput = Record<string, unknown>> {

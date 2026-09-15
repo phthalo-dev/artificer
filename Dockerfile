@@ -2,7 +2,7 @@
 # then produces a minimal image with only the compiled output and production deps.
 
 FROM node:22-bookworm-slim AS deps
-RUN npm install -g pnpm@8.15.1
+RUN npm install -g pnpm@12.4.2
 WORKDIR /workspace
 
 # Copy workspace manifests first so this layer is cached until deps change

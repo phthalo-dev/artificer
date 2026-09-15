@@ -5,6 +5,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { loadConfig } from '../config.js';
 import { Store } from '../storage/store.js';
+import { emptyUsage, type RunRecord } from '../storage/types.js';
 import { Engine } from './engine.js';
 import { RoleRegistry } from './role-registry.js';
 import type { IdentityRole } from '../discover/loader.js';
@@ -87,4 +88,71 @@ test('Engine.listRoles includes built-ins and custom roles from registry', async
   const roles = engine.listRoles();
   assert.ok(roles.includes('worker'), 'should include built-in worker');
   assert.ok(roles.includes('security-auditor'), 'should include custom role');
+});
+
+test('handleInsufficientBalance blocks the workstream and tears down its running services', async () => {
+  const { engine, store } = await buildEngine();
+
+  const ws = await store.createWorkstream({ title: 'billing test', goal: 'g' });
+
+  // Simulate a tracked service for this workstream, the way ServiceManager
+  // would persist it after start_service. A dead pid is enough to prove
+  // teardownWorkstream actually ran: doStop's "already dead" branch prunes
+  // the entry from the state file even without a live process to signal.
+  const stateFile = store.layout.workstreamServicesStateFile(ws.id);
+  await fs.mkdir(path.dirname(stateFile), { recursive: true });
+  await fs.writeFile(
+    stateFile,
+    JSON.stringify([
+      {
+        name: 'web',
+        pid: 999_999,
+        port: 41500,
+        startedAt: new Date().toISOString(),
+        script: 'dead',
+      },
+    ]),
+  );
+
+  const run: RunRecord = {
+    id: 'run-1',
+    role: 'worker',
+    task: 'do the thing',
+    workstreamId: ws.id,
+    status: 'failed',
+    toolCalls: [],
+    usage: emptyUsage(),
+    error: 'insufficient balance',
+    createdAt: new Date().toISOString(),
+  };
+
+  // afterRun is private, and is the sole caller of handleInsufficientBalance
+  // (from runOne, inside the scheduler). Calling it directly here - rather
+  // than driving a real run through the scheduler/executor to a failure -
+  // avoids mocking the underlying LLM network call that a full end-to-end
+  // path would require, while still exercising the exact wiring this fix
+  // touches (handleInsufficientBalance -> handleWorkstreamTerminal ->
+  // serviceManager.teardownWorkstream).
+  await (
+    engine as unknown as { afterRun: (run: RunRecord) => Promise<void> }
+  ).afterRun(run);
+
+  const updated = await store.getWorkstream(ws.id);
+  assert.equal(updated?.status, 'blocked');
+
+  // handleWorkstreamTerminal is invoked fire-and-forget (`void`), matching
+  // blockWorkstream's existing pattern - poll briefly for the async
+  // teardown to land instead of asserting immediately.
+  let rawState: unknown[] = [{ pending: true }];
+  const deadline = Date.now() + 3000;
+  while (Date.now() < deadline) {
+    rawState = JSON.parse(await fs.readFile(stateFile, 'utf-8'));
+    if (rawState.length === 0) break;
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  assert.deepEqual(
+    rawState,
+    [],
+    'teardownWorkstream should have pruned the tracked service entry - before the fix, handleInsufficientBalance never called handleWorkstreamTerminal, so this entry would still be there',
+  );
 });

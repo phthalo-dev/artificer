@@ -113,6 +113,10 @@ Default tiers are from the `async-economy` preset (the default). Other presets a
 - `get_status` — query workstream state
 - `query_memories` — search stored memories
 - `record_finding` — record a cross-cutting finding
+- `start_service` — start a named dev-server/service from `.artificer/workspace.json`, returning its port and URL
+- `stop_service` — stop a running named service and run its teardown script
+- `list_services` — list every service tracked on this workstream and its running/stopped state
+- `check_service` — fetch a running service's root URL and return its HTTP status and a truncated body
 - `read_tool_result` — read a previous tool result by ID
 
 **Inputs:** The plan artifact (via `read_plan`), workspace files, and build/test output.
@@ -142,6 +146,10 @@ Default tiers are from the `async-economy` preset (the default). Other presets a
 - `add_memory` — save a new memory
 - `record_finding` — record a cross-cutting finding
 - `update_status` — record progress to the workstream
+- `start_service` — start a named dev-server/service from `.artificer/workspace.json`, returning its port and URL
+- `stop_service` — stop a running named service and run its teardown script
+- `list_services` — list every service tracked on this workstream and its running/stopped state
+- `check_service` — fetch a running service's root URL and return its HTTP status and a truncated body
 - `read_tool_result` — read a previous tool result by ID
 
 **Inputs:** The plan artifact (via `read_plan`), workstream state (via `get_status`), and the specific task assigned by the orchestrator.
@@ -221,3 +229,7 @@ RUNTIME_TIER_PLANNER=high
 | `submit_review` | | | | yes | | |
 | `report_status` | | | | | yes | |
 | `fetch_url` | | | | | | yes |
+| `start_service` | | | | yes | yes | |
+| `stop_service` | | | | yes | yes | |
+| `list_services` | | | | yes | yes | |
+| `check_service` | | | | yes | yes | |
