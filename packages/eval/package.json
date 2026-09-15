@@ -25,12 +25,12 @@
   },
   "dependencies": {
     "@artificer-ai/runtime": "workspace:*",
-    "dotenv": "^16.4.5"
+    "dotenv": "16.6.1"
   },
   "devDependencies": {
-    "@types/node": "^20.11.5",
-    "tsx": "^4.19.2",
-    "typescript": "^5.3.3"
+    "@types/node": "20.19.35",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
   },
   "publishConfig": {
     "access": "public",
