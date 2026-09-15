@@ -59,6 +59,21 @@ async function waitForPidToDie(pid: number, timeoutMs = 3000): Promise<void> {
   }
 }
 
+async function waitForFileContent(
+  file: string,
+  timeoutMs = 3000,
+): Promise<string> {
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (fs.existsSync(file)) {
+      const content = fs.readFileSync(file, 'utf-8').trim();
+      if (content) return content;
+    }
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  throw new Error(`timed out waiting for content in ${file}`);
+}
+
 test('start spawns the run script and records state', async () => {
   const { store, config, ws, repoRoot } = await setup();
   const script = longLivedScript(repoRoot);
@@ -171,7 +186,7 @@ test('concurrent start calls for the same service do not race', async () => {
   process.kill(webStates[0].pid, 'SIGKILL');
 });
 
-test('concurrent start calls for two different services in the same workstream do not clobber each other\'s state entry', async () => {
+test("concurrent start calls for two different services in the same workstream do not clobber each other's state entry", async () => {
   const { store, config, ws, repoRoot } = await setup();
   const script = longLivedScript(repoRoot);
   writeServiceConfig(repoRoot, {
@@ -363,7 +378,7 @@ test('reconcileAll drops dead entries and keeps alive ones claimed', async () =>
   await fresh.stop(ws.id, 'web');
 });
 
-test('start releases a dead service\'s port on restart, so repeated crash+restart cycles do not exhaust a small port range', async () => {
+test("start releases a dead service's port on restart, so repeated crash+restart cycles do not exhaust a small port range", async () => {
   const { store, config, ws, repoRoot } = await setup();
   const script = longLivedScript(repoRoot);
   // Only two ports in range - if the dead entry's port were never released
@@ -437,4 +452,170 @@ test('stop releases the port of an already-dead service instead of leaking it', 
     );
     process.kill(finalEntry.pid, 'SIGKILL');
   }
+});
+
+test("rejects state entries with an untrusted pid (0, negative, or the runtime's own pid), keeping only the valid entry", async () => {
+  const { store, config, ws } = await setup();
+  const stateFile = store.layout.workstreamServicesStateFile(ws.id);
+  fs.mkdirSync(path.dirname(stateFile), { recursive: true });
+  fs.writeFileSync(
+    stateFile,
+    JSON.stringify([
+      {
+        name: 'zero-pid',
+        pid: 0,
+        port: 41400,
+        startedAt: new Date().toISOString(),
+        script: 'evil',
+      },
+      {
+        name: 'negative-pid',
+        pid: -1,
+        port: 41401,
+        startedAt: new Date().toISOString(),
+        script: 'evil',
+      },
+      {
+        name: 'runtime-own-pid',
+        pid: process.pid,
+        port: 41402,
+        startedAt: new Date().toISOString(),
+        script: 'evil',
+      },
+      {
+        name: 'valid',
+        pid: 999_999,
+        port: 41403,
+        startedAt: new Date().toISOString(),
+        script: 'fine',
+      },
+    ]),
+  );
+
+  const manager = new ServiceManager(store, config);
+  const listed = await manager.list(ws.id);
+  assert.equal(listed.length, 1);
+  assert.equal(listed[0].name, 'valid');
+});
+
+test('check() does not follow a redirect returned by the service - it resolves using the first response', async () => {
+  const { store, config, ws, repoRoot } = await setup();
+  const serverFile = path.join(repoRoot, 'redirecting-server.mjs');
+  fs.writeFileSync(
+    serverFile,
+    "import http from 'node:http';\n" +
+      'http.createServer((_, res) => {\n' +
+      "  res.writeHead(302, { Location: 'http://example.com' });\n" +
+      "  res.end('redirecting');\n" +
+      '}).listen(Number(process.env.ARTIFICER_SERVICE_PORT));\n',
+  );
+  writeServiceConfig(repoRoot, {
+    web: {
+      run: `${process.execPath} ${serverFile}`,
+      portRange: [41410, 41419],
+    },
+  });
+  const manager = new ServiceManager(store, config);
+  await manager.start(ws.id, 'web');
+  await new Promise((r) => setTimeout(r, 300));
+
+  const result = await manager.check(ws.id, 'web');
+  // If check() had followed the redirect, it would have tried to contact
+  // http://example.com - unreachable/blocked in this sandbox - and either
+  // hung until the 5s timeout (returning status: 'error') or, on a machine
+  // with real network access, silently returned example.com's status/body
+  // instead of the service's own 302. Either way it would NOT be 302 with
+  // this body.
+  assert.equal((result as { status: number }).status, 302);
+  assert.equal((result as { body: string }).body, 'redirecting');
+
+  await manager.stop(ws.id, 'web');
+});
+
+test(
+  'stop kills the whole process group, not just the tracked shell wrapper pid',
+  { skip: process.platform === 'win32' },
+  async () => {
+    const { store, config, ws, repoRoot } = await setup();
+    const pidFile = path.join(repoRoot, 'grandchild.pid');
+    // The run script backgrounds a real, independent node process (the
+    // "grandchild" from the shell wrapper's perspective) and writes its own
+    // pid to a file, then `wait`s on it - keeping the tracked wrapper pid
+    // (the `sh -c ...` process itself) alive so start() sees a long-lived
+    // service, exactly like a real `npm run dev` wrapping a dev server.
+    const runCommand = `${process.execPath} -e "setInterval(()=>{},1000)" & echo $! > ${pidFile} ; wait`;
+    writeServiceConfig(repoRoot, {
+      web: { run: runCommand, portRange: [41420, 41429] },
+    });
+    const manager = new ServiceManager(store, config);
+
+    const started = await manager.start(ws.id, 'web');
+    assert.equal(started.status, 'started');
+
+    const grandchildPid = Number(await waitForFileContent(pidFile));
+    assert.ok(Number.isInteger(grandchildPid) && grandchildPid > 0);
+    assert.ok(
+      isPidAliveForTest(grandchildPid),
+      'grandchild should be alive right after start',
+    );
+
+    const stopped = await manager.stop(ws.id, 'web');
+    assert.equal(stopped.status, 'stopped');
+
+    await waitForPidToDie(grandchildPid);
+    assert.ok(
+      !isPidAliveForTest(grandchildPid),
+      'grandchild must be dead - killing only the shell wrapper would leave it running',
+    );
+  },
+);
+
+test('setup and run both receive ARTIFICER_SERVICE_PORT/NAME, and setup sees them before run starts', async () => {
+  const { store, config, ws, repoRoot } = await setup();
+  const script = longLivedScript(repoRoot);
+  const setupMarker = path.join(repoRoot, 'setup-env.txt');
+  writeServiceConfig(repoRoot, {
+    web: {
+      setup: `echo "$ARTIFICER_SERVICE_PORT $ARTIFICER_SERVICE_NAME" > ${setupMarker}`,
+      run: `${process.execPath} ${script}`,
+      portRange: [41430, 41439],
+    },
+  });
+  const manager = new ServiceManager(store, config);
+  const result = await manager.start(ws.id, 'web');
+  assert.equal(result.status, 'started');
+  if (result.status !== 'started') return;
+
+  const written = fs.readFileSync(setupMarker, 'utf-8').trim();
+  assert.equal(written, `${result.port} web`);
+
+  process.kill(
+    JSON.parse(
+      fs.readFileSync(store.layout.workstreamServicesStateFile(ws.id), 'utf-8'),
+    )[0].pid,
+    'SIGKILL',
+  );
+});
+
+test('teardown receives ARTIFICER_SERVICE_PORT/NAME for the service being stopped', async () => {
+  const { store, config, ws, repoRoot } = await setup();
+  const script = longLivedScript(repoRoot);
+  const teardownMarker = path.join(repoRoot, 'teardown-env.txt');
+  writeServiceConfig(repoRoot, {
+    web: {
+      run: `${process.execPath} ${script}`,
+      teardown: `echo "$ARTIFICER_SERVICE_PORT $ARTIFICER_SERVICE_NAME" > ${teardownMarker}`,
+      portRange: [41440, 41449],
+    },
+  });
+  const manager = new ServiceManager(store, config);
+  const started = await manager.start(ws.id, 'web');
+  assert.equal(started.status, 'started');
+  if (started.status !== 'started') return;
+
+  const stopped = await manager.stop(ws.id, 'web');
+  assert.equal(stopped.status, 'stopped');
+
+  const written = fs.readFileSync(teardownMarker, 'utf-8').trim();
+  assert.equal(written, `${started.port} web`);
 });

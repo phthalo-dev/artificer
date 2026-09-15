@@ -54,7 +54,12 @@ function isAlive(pid: number): boolean {
  * untrusted input, not just typed with a bare assertion. In particular
  * `port` must be a real integer: `check()` interpolates it directly into a
  * URL, and a non-numeric string there (e.g. "1@evil.example.com") can be
- * used to redirect the request to an arbitrary host.
+ * used to redirect the request to an arbitrary host. Likewise `pid` must be
+ * a positive integer that isn't the runtime's own process id: `stop_service`
+ * and workstream teardown call `process.kill()` on it, and a crafted
+ * `pid: 0`, `pid: -1`, or `pid: process.pid` could otherwise be used to
+ * signal an entire process group, an arbitrary reachable process, or the
+ * runtime itself.
  */
 function isValidServiceState(value: unknown): value is ServiceState {
   if (!value || typeof value !== 'object') return false;
@@ -62,7 +67,11 @@ function isValidServiceState(value: unknown): value is ServiceState {
   return (
     typeof v.name === 'string' &&
     Number.isInteger(v.pid) &&
+    (v.pid as number) > 0 &&
+    v.pid !== process.pid &&
     Number.isInteger(v.port) &&
+    (v.port as number) > 0 &&
+    (v.port as number) < 65536 &&
     typeof v.startedAt === 'string' &&
     typeof v.script === 'string'
   );
@@ -201,6 +210,22 @@ export class ServiceManager {
       this.portAllocator.release(existing.port);
     }
 
+    // Allocate the port BEFORE setup (rather than after, as before) so that
+    // setup - like run - can see an accurate ARTIFICER_SERVICE_PORT via the
+    // shared env below. Harmless when svc.setup is falsy: it just means the
+    // port is ready in time for run either way.
+    const port = await this.portAllocator.allocate({
+      min: svc.portRange[0],
+      max: svc.portRange[1],
+    });
+    const serviceEnv = {
+      ...process.env,
+      ARTIFICER_SERVICE_NAME: name,
+      ARTIFICER_SERVICE_PORT: String(port),
+      ARTIFICER_SERVICE_URL: `http://127.0.0.1:${port}`,
+      ARTIFICER_WORKSPACE_DIR: workspaceDir,
+    };
+
     const setupMarker = path.join(
       workspaceDir,
       `.artificer-service-setup-${name}`,
@@ -209,19 +234,17 @@ export class ServiceManager {
       const result = await runShellCommand({
         command: svc.setup,
         cwd: repoRoot,
-        env: process.env,
+        env: serviceEnv,
       });
       if (result.output.startsWith('Command failed:') || result.timedOut) {
+        // The port was claimed above but nothing will ever use it now -
+        // release it, or every failed setup would leak a port permanently.
+        this.portAllocator.release(port);
         return { status: 'error', message: `setup failed: ${result.output}` };
       }
       fs.mkdirSync(workspaceDir, { recursive: true });
       fs.writeFileSync(setupMarker, '');
     }
-
-    const port = await this.portAllocator.allocate({
-      min: svc.portRange[0],
-      max: svc.portRange[1],
-    });
 
     const logFile = this.store.layout.workstreamServiceLogFile(
       workstreamId,
@@ -235,13 +258,7 @@ export class ServiceManager {
       shell: true,
       detached: true,
       stdio: ['ignore', logFd, logFd],
-      env: {
-        ...process.env,
-        ARTIFICER_SERVICE_NAME: name,
-        ARTIFICER_SERVICE_PORT: String(port),
-        ARTIFICER_SERVICE_URL: `http://127.0.0.1:${port}`,
-        ARTIFICER_WORKSPACE_DIR: workspaceDir,
-      },
+      env: serviceEnv,
     });
     child.unref();
     fs.closeSync(logFd);
@@ -376,7 +393,16 @@ export class ServiceManager {
         await runShellCommand({
           command: resolved.svc.teardown,
           cwd: resolved.repoRoot,
-          env: process.env,
+          // The port has already been released back to the allocator above
+          // - that's fine, this is just informational for the script so it
+          // knows which port it's cleaning up after, not a live claim.
+          env: {
+            ...process.env,
+            ARTIFICER_SERVICE_NAME: name,
+            ARTIFICER_SERVICE_PORT: String(existing.port),
+            ARTIFICER_SERVICE_URL: `http://127.0.0.1:${existing.port}`,
+            ARTIFICER_WORKSPACE_DIR: resolved.workspaceDir,
+          },
         });
       } catch (err) {
         console.error(`[services] teardown for "${name}" failed:`, err);
@@ -386,9 +412,25 @@ export class ServiceManager {
     return { status: 'stopped' };
   }
 
+  /**
+   * Services are spawned with `{ shell: true, detached: true }`, so the
+   * tracked pid is the shell wrapper (e.g. `/bin/sh -c "npm run dev"`) and
+   * the real server is a separate pid underneath it. `detached: true` makes
+   * the spawned process a process-group leader on POSIX; signaling -pid
+   * reaches the whole group (the shell wrapper AND whatever it spawned),
+   * not just the wrapper. Windows has no equivalent process-group semantics
+   * for a negative pid, so fall back to signaling the tracked pid directly
+   * there (best effort - a shell-wrapped command's real child may survive
+   * on Windows; this is a known platform gap).
+   */
+  private signalProcess(pid: number, signal: NodeJS.Signals): void {
+    const target = process.platform === 'win32' ? pid : -pid;
+    process.kill(target, signal);
+  }
+
   private async killWithGrace(pid: number): Promise<void> {
     try {
-      process.kill(pid, 'SIGTERM');
+      this.signalProcess(pid, 'SIGTERM');
     } catch {
       return;
     }
@@ -398,7 +440,7 @@ export class ServiceManager {
       await new Promise((r) => setTimeout(r, 200));
     }
     try {
-      process.kill(pid, 'SIGKILL');
+      this.signalProcess(pid, 'SIGKILL');
     } catch {
       /* already gone */
     }
@@ -420,8 +462,14 @@ export class ServiceManager {
       return { status: 'error', message: `"${name}" is not running.` };
     }
     try {
+      // check_service documents that it "never accepts a caller-supplied
+      // host or port" - but transparently following a redirect would let
+      // the LOCAL service's own response point the fetch at a second,
+      // arbitrary host (internal/metadata endpoints included). Resolve
+      // using the first response only; a 3xx comes back as-is.
       const res = await fetch(`http://127.0.0.1:${existing.port}`, {
         signal: AbortSignal.timeout(5000),
+        redirect: 'manual',
       });
       const text = await res.text();
       return { status: res.status, body: truncateText(text, 4000).text };
