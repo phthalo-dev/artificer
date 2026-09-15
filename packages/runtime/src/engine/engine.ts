@@ -77,6 +77,7 @@ import {
 import type { DispatchRoute } from './quota-types.js';
 import type { RoleName } from '../storage/types.js';
 import type { ToolRegistry } from '../api/tool-registry.js';
+import { ServiceManager } from '../services/service-manager.js';
 
 interface ActiveRun {
   runId: string;
@@ -111,6 +112,7 @@ export class Engine implements EngineApi {
   private readonly executor?: WorkerExecutor;
   private readonly registry: RoleRegistry;
   private readonly customRegistry?: ToolRegistry;
+  private readonly serviceManager: ServiceManager;
   private scheduleRunner?: ScheduleRunner;
   private quotaLedger?: QuotaLedger;
   private providerRouter?: ProviderRouter;
@@ -133,6 +135,7 @@ export class Engine implements EngineApi {
     this.identity = identity;
     this.memoryService = memoryService;
     this.registry = registry ?? new RoleRegistry();
+    this.serviceManager = new ServiceManager(store, config);
     this.customRegistry = customRegistry;
     this.executor = buildExecutor(config.executor);
     this.reinitializeQuota();
@@ -241,6 +244,27 @@ export class Engine implements EngineApi {
     await this.commitScheduleChange(`delete schedule ${id}`);
     await this.reloadSchedules();
     return { ok: true };
+  }
+
+  async startService(workstreamId: string, name: string) {
+    return this.serviceManager.start(workstreamId, name);
+  }
+
+  async stopService(workstreamId: string, name: string) {
+    return this.serviceManager.stop(workstreamId, name);
+  }
+
+  async listServices(workstreamId: string) {
+    return this.serviceManager.list(workstreamId);
+  }
+
+  async checkService(workstreamId: string, name: string) {
+    return this.serviceManager.check(workstreamId, name);
+  }
+
+  /** Reattach to services that were running before a runtime restart. */
+  async reconcileServices(): Promise<void> {
+    return this.serviceManager.reconcileAll();
   }
 
   private async commitScheduleChange(action: string): Promise<void> {
@@ -1101,6 +1125,9 @@ export class Engine implements EngineApi {
    * librarian distill (claim/entity extraction). Failures only log.
    */
   private async handleWorkstreamTerminal(ws: Workstream): Promise<void> {
+    await this.serviceManager.teardownWorkstream(ws.id).catch((err) => {
+      console.error(`[services] teardown failed for workstream ${ws.id}:`, err);
+    });
     if (!this.memoryService) return;
     try {
       await this.memoryService.onTerminal(ws);
@@ -1224,6 +1251,8 @@ export class Engine implements EngineApi {
           summary:
             `${ws.summary}\n\n[System] Paused: LLM call failed due to insufficient API balance (model: ${model}).`.trim(),
         });
+        const updated = await this.store.getWorkstream(run.workstreamId);
+        if (updated) void this.handleWorkstreamTerminal(updated);
       }
     }
 

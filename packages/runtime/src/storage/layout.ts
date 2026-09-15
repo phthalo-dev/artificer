@@ -110,6 +110,29 @@ export class Layout {
     return path.join(this.workstreamDir(workstreamId), 'distill-hash.txt');
   }
 
+  /** Tracked service processes (name/pid/port) for a workstream's workspace. */
+  workstreamServicesStateFile(workstreamId: string): string {
+    return path.join(
+      this.workstreamWorkspace(workstreamId),
+      '.artificer-services.json',
+    );
+  }
+
+  /** Directory holding captured stdout/stderr for a workstream's services. */
+  workstreamServiceLogsDir(workstreamId: string): string {
+    return path.join(
+      this.workstreamWorkspace(workstreamId),
+      '.artificer-service-logs',
+    );
+  }
+
+  workstreamServiceLogFile(workstreamId: string, name: string): string {
+    return path.join(
+      this.workstreamServiceLogsDir(workstreamId),
+      `${name}.log`,
+    );
+  }
+
   /** Cursor/state for the GitHub activity watcher (own PRs + notifications). */
   githubWatchStateFile(): string {
     return path.join(this.root, 'github-watch-state.json');

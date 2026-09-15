@@ -5,6 +5,7 @@ import path from 'node:path';
 import os from 'node:os';
 import { fileURLToPath } from 'node:url';
 import { createRuntime } from './create-runtime.js';
+import { Store } from '../storage/store.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
@@ -147,5 +148,54 @@ describe('createRuntime', () => {
     assert.equal(res.status, 200);
     const body = await res.json();
     assert.deepEqual(body, { text: 'hello channel' });
+  });
+
+  it('reconciles workspace services on startup, pruning dead entries', async () => {
+    const execDir = path.join(tmpDir, 'exec');
+
+    // Pre-populate a workstream and a services state file with a dead pid,
+    // using a throwaway Store pointed at the same execDir createRuntime()
+    // will build its own Store from - createRuntime doesn't expose a way
+    // to inject one, so the fixture has to be written to disk in advance.
+    const fixtureStore = new Store(execDir);
+    await fixtureStore.init();
+    const ws = await fixtureStore.createWorkstream({
+      title: 'reconcile test',
+      goal: 'g',
+    });
+    const stateFile = fixtureStore.layout.workstreamServicesStateFile(ws.id);
+    fs.mkdirSync(path.dirname(stateFile), { recursive: true });
+    fs.writeFileSync(
+      stateFile,
+      JSON.stringify([
+        {
+          name: 'web',
+          // Virtually guaranteed not to be a real running process.
+          pid: 999_999,
+          port: 41500,
+          startedAt: new Date().toISOString(),
+          script: 'dead',
+        },
+      ]),
+    );
+
+    const runtime = await createRuntime({
+      rootDir: tmpDir,
+      config: {
+        apiKey: 'test-key',
+        baseURL: 'http://localhost:9999',
+        execDir,
+      },
+    });
+
+    // Proves reconcileServices() actually ran during createRuntime() - not
+    // just that startup didn't throw. Before the fix, this dead entry would
+    // still be listed (createRuntime never called engine.reconcileServices()).
+    const listed = await runtime.engine.listServices(ws.id);
+    assert.deepEqual(
+      listed,
+      [],
+      'the dead service entry should have been pruned by startup reconciliation',
+    );
   });
 });
