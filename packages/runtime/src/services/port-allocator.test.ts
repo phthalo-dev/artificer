@@ -33,6 +33,50 @@ test('allocate throws when the range is exhausted', async () => {
   );
 });
 
+test('concurrent allocate calls never return the same port (check-then-act race)', async () => {
+  const allocator = new PortAllocator();
+  const N = 8;
+  const results = await Promise.all(
+    Array.from({ length: N }, () =>
+      allocator.allocate({ min: 41050, max: 41050 + N - 1 }),
+    ),
+  );
+  assert.equal(
+    new Set(results).size,
+    N,
+    `expected ${N} distinct ports, got ${JSON.stringify(results)}`,
+  );
+});
+
+test('concurrent allocate calls never return the same port, even when the underlying port probe is slow', async () => {
+  // A real net.createServer() probe gives concurrent calls an incidental
+  // second line of defense: two concurrent listen() calls for the exact
+  // same live port can't both succeed at the OS level, so the test above
+  // can pass even on the pre-fix code (confirmed by temporarily reverting
+  // the fix - see report). Stubbing the probe to report "free" after a
+  // delay isolates the in-memory claim-then-probe race itself: without
+  // claiming the candidate port BEFORE awaiting the probe, every
+  // concurrent caller's loop starts at `range.min`, sees it unclaimed, and
+  // converges on the same port once the stub resolves.
+  const allocator = new PortAllocator();
+  (
+    allocator as unknown as { isPortFree: (port: number) => Promise<boolean> }
+  ).isPortFree = (_port: number) =>
+    new Promise((resolve) => setTimeout(() => resolve(true), 5));
+
+  const N = 8;
+  const results = await Promise.all(
+    Array.from({ length: N }, () =>
+      allocator.allocate({ min: 41060, max: 41060 + N - 1 }),
+    ),
+  );
+  assert.equal(
+    new Set(results).size,
+    N,
+    `expected ${N} distinct ports, got ${JSON.stringify(results)}`,
+  );
+});
+
 test('allocate skips a port actually in use by another process', async () => {
   const blocker = net.createServer();
   await new Promise<void>((resolve) =>
