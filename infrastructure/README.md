@@ -4,7 +4,7 @@ Deploy the **runtime** + **UI console** to AWS. Send messages from your phone or
 
 **Expected idle cost:** ~$3–8/month (EBS + Elastic IP while stopped + SQS).
 
-> This is one of two self-hosting paths. If you don't need hibernate-on-idle AWS infra, [Deploying to production](../docs/guides/deploying-to-production.md) covers the simpler Fly.io / plain Docker route.
+> This is one of two self-hosting paths. If you don't need hibernate-on-idle AWS infra, [Deploying to production](../docs/content/docs/guides/deploying-to-production.md) covers the simpler Fly.io / plain Docker route.
 
 ## What gets deployed
 
