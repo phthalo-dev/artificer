@@ -63,8 +63,10 @@ cost.json
 # Git worktrees (local isolation)
 .worktrees/
 
-# Superpowers plans and specs are local-only — never commit them.
+# Superpowers plans, specs, and research notes are local-only — never commit them.
 # Specs: .docs/specs/YYYY-MM-DD-<topic>-design.md
 # Plans: .docs/plans/YYYY-MM-DD-<feature-name>.md
+# Research: .docs/research/YYYY-MM-DD-<topic>.md
 .docs/
 docs/superpowers/
+docs/research/
