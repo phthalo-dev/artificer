@@ -1,3 +1,8 @@
+---
+title: Managing Memories
+description: Memories are markdown files the agent writes to `identity/memories/` as it works.
+---
+
 # Managing Memories
 
 Memories are markdown files the agent writes to `identity/memories/` as it works. They are the agent's long-term notes — things it wants to remember across conversations. Because they live in the identity repo, they are git-tracked and come along when you clone or move the agent.
@@ -227,5 +232,5 @@ Memories are plain markdown — open them in any editor. You can edit, delete, o
 
 ## Related docs
 
-- [Setting up an agent identity repo](./agent-identity-setup.md) — identity repo structure
-- [Core concepts — memories](../getting-started/core-concepts.md#memories)
+- [Setting up an agent identity repo](/docs/guides/agent-identity-setup) — identity repo structure
+- [Core concepts — memories](/docs/getting-started/core-concepts#memories)

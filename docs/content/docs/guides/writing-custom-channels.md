@@ -1,3 +1,8 @@
+---
+title: Writing Custom Channels
+description: Channels are how messages get into the agent.
+---
+
 # Writing Custom Channels
 
 Channels are how messages get into the agent. The built-in Slack and Discord adapters cover the most common cases, but you can add any channel — a webhook from a GitHub Action, an SMS gateway, a custom HTTP endpoint — using `defineChannel()` from `@artificer-ai/runtime`.
@@ -162,5 +167,5 @@ The agent UI at `http://localhost:4100` shows the incoming message and any works
 
 ## Related docs
 
-- [Slack & Discord connections](./slack-discord-connections.md) — built-in channel adapters
-- [Core concepts — channels](../getting-started/core-concepts.md#channels)
+- [Slack & Discord connections](/docs/guides/slack-discord-connections) — built-in channel adapters
+- [Core concepts — channels](/docs/getting-started/core-concepts#channels)

@@ -1,3 +1,8 @@
+---
+title: Custom CLI Executors
+description: By default, Artificer's worker role runs as an internal LLM tool loop.
+---
+
 # Custom CLI Executors
 
 By default, Artificer's worker role runs as an internal LLM tool loop. You can swap it out for any local CLI agent that supports MCP — without writing any code — using the `type: "cli"` executor config.
@@ -218,6 +223,6 @@ If the CLI exits with a non-zero code, the run is marked failed and the stderr o
 
 ## Related docs
 
-- [Using Qwen Code as the Worker Executor](./qwen-code-executor.md) — a concrete walkthrough using the `cli` executor with Qwen Code
-- [Using opencode as the Worker Executor](./opencode-executor.md) — a dedicated (non-`cli`-type) executor, for CLIs whose MCP config doesn't fit this generic template
-- [Setting Up an Agent Identity Repo](./agent-identity-setup.md) — configure your agent project before adding an executor
+- [Using Qwen Code as the Worker Executor](/docs/guides/qwen-code-executor) — a concrete walkthrough using the `cli` executor with Qwen Code
+- [Using opencode as the Worker Executor](/docs/guides/opencode-executor) — a dedicated (non-`cli`-type) executor, for CLIs whose MCP config doesn't fit this generic template
+- [Setting Up an Agent Identity Repo](/docs/guides/agent-identity-setup) — configure your agent project before adding an executor

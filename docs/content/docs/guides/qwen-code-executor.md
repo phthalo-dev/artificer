@@ -1,3 +1,8 @@
+---
+title: Using Qwen Code as the Worker Executor
+description: This guide explains how to configure Artificer to use [Qwen Code](https://github.com/QwenLM/qwen-code) as its worker executor instead of the built-in LLM loop.
+---
+
 # Using Qwen Code as the Worker Executor
 
 This guide explains how to configure Artificer to use [Qwen Code](https://github.com/QwenLM/qwen-code) as its worker executor instead of the built-in LLM loop.
@@ -135,5 +140,5 @@ Check the run log in the Artificer UI. Worker runs should show `executor: cli:qw
 
 ## Related docs
 
-- [Custom CLI Executors](./custom-cli-executor.md) — full reference for the `cli` executor config, placeholders, and MCP tool contract
-- [Setting Up an Agent Identity Repo](./agent-identity-setup.md) — configure your agent project before adding an executor
+- [Custom CLI Executors](/docs/guides/custom-cli-executor) — full reference for the `cli` executor config, placeholders, and MCP tool contract
+- [Setting Up an Agent Identity Repo](/docs/guides/agent-identity-setup) — configure your agent project before adding an executor

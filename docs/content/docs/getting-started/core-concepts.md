@@ -1,3 +1,8 @@
+---
+title: Core Concepts
+description: Key terms used throughout the Artificer documentation.
+---
+
 # Core Concepts
 
 Key terms used throughout the Artificer documentation.
@@ -14,7 +19,7 @@ You can override the execution directory with `ARTIFICER_EXEC_DIR=./.artificer` 
 
 A workstream is the unit of ongoing work. When you ask the agent to do something non-trivial, it creates a workstream: plan, tasks, worker runs, and reviews all live there. The agent works through tasks in sequence, reviewing each result before moving to the next.
 
-You can have multiple workstreams running concurrently (controlled by `RUNTIME_CONCURRENCY`). Each runs in its own isolated workspace directory (a fresh clone of the relevant repo). Planner, worker, and reviewer prompts replay hash-stable context section bodies when content is unchanged — see [Hash-stable context sections](../introduction/how-it-works.md#hash-stable-context-sections).
+You can have multiple workstreams running concurrently (controlled by `RUNTIME_CONCURRENCY`). Each runs in its own isolated workspace directory (a fresh clone of the relevant repo). Planner, worker, and reviewer prompts replay hash-stable context section bodies when content is unchanged — see [Hash-stable context sections](/docs/introduction/how-it-works#hash-stable-context-sections).
 
 ## Roles
 
@@ -30,13 +35,13 @@ Each role picks a model by tier (`low`/`medium`/`high`). Override with `RUNTIME_
 
 ## Channels
 
-Channels are how messages get into the agent. The web UI at `http://localhost:4100` is always available. Add `agent/channels/slack.ts` or `agent/channels/discord.ts` to enable those — see the [Slack & Discord guide](../guides/slack-discord-connections.md).
+Channels are how messages get into the agent. The web UI at `http://localhost:4100` is always available. Add `agent/channels/slack.ts` or `agent/channels/discord.ts` to enable those — see the [Slack & Discord guide](/docs/guides/slack-discord-connections).
 
 You can also write custom channels using `defineChannel()` from `@artificer-ai/runtime`.
 
 ## Executors
 
-The executor is what actually does the worker role's work. By default it's Artificer's internal LLM tool loop (shell, file read/write, git, web fetch). You can swap it for any MCP-compatible CLI agent like Claude Code, Cursor, or Qwen Code — see the [Custom CLI Executors guide](../guides/custom-cli-executor.md).
+The executor is what actually does the worker role's work. By default it's Artificer's internal LLM tool loop (shell, file read/write, git, web fetch). You can swap it for any MCP-compatible CLI agent like Claude Code, Cursor, or Qwen Code — see the [Custom CLI Executors guide](/docs/guides/custom-cli-executor).
 
 The executor only applies to the worker role. The communicator, orchestrator, planner, and reviewer always use the internal loop.
 

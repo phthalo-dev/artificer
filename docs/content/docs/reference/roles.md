@@ -1,3 +1,8 @@
+---
+title: Roles Reference
+description: Each role is a single LLM tool-use loop.
+---
+
 # Roles Reference
 
 Each role is a single LLM tool-use loop. Roles are invoked by name; each has a fixed purpose, a default model tier, and a set of tools available to it.

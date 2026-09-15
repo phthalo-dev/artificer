@@ -1,3 +1,8 @@
+---
+title: Quickstart
+description: Get an agent running in under 5 minutes.
+---
+
 # Quickstart
 
 Get an agent running in under 5 minutes.
@@ -88,7 +93,7 @@ curl http://localhost:4100/api/state
 
 ## Next steps
 
-- [How it works](../introduction/how-it-works.md) — understand what's happening under the hood
-- [Agent identity setup](../guides/agent-identity-setup.md) — give the agent its own GitHub identity
-- [Slack & Discord connections](../guides/slack-discord-connections.md) — connect Slack or Discord
-- [Core concepts](./core-concepts.md) — key terms explained
+- [How it works](/docs/introduction/how-it-works) — understand what's happening under the hood
+- [Agent identity setup](/docs/guides/agent-identity-setup) — give the agent its own GitHub identity
+- [Slack & Discord connections](/docs/guides/slack-discord-connections) — connect Slack or Discord
+- [Core concepts](/docs/getting-started/core-concepts) — key terms explained

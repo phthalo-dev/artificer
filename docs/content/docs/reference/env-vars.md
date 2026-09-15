@@ -1,3 +1,8 @@
+---
+title: Environment Variables
+description: Environment variables configure the agent at runtime; set them in `.env` (development) or as container/platform secrets (production).
+---
+
 # Environment Variables
 
 Environment variables configure the agent at runtime; set them in `.env` (development) or as container/platform secrets (production).

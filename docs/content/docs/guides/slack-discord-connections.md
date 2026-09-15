@@ -1,3 +1,8 @@
+---
+title: Connect Slack & Discord
+description: This guide shows how to connect an Artificer agent to Slack and Discord so your team can message it like a colleague — via Slack DMs and `@mentions`, or Discord slash commands.
+---
+
 # Connect Slack & Discord
 
 This guide shows how to connect an Artificer agent to Slack and Discord so your team can message it like a colleague — via Slack DMs and `@mentions`, or Discord slash commands.
@@ -20,7 +25,7 @@ You will need:
   ```bash
   npm install -g @artificer-ai/cli
   ```
-- **An agent project** — if you do not have one yet, follow [Setting Up an Agent Identity Repo](./agent-identity-setup.md) (`artificer init my-agent`).
+- **An agent project** — if you do not have one yet, follow [Setting Up an Agent Identity Repo](/docs/guides/agent-identity-setup) (`artificer init my-agent`).
 - **An LLM API key** in your agent's `.env` (`LLM_API_KEY=...`) so the agent can actually respond.
 - **A public HTTPS URL** that reaches your running agent. Slack and Discord cannot send webhooks to `localhost`.
 
@@ -385,4 +390,4 @@ A few behaviors are worth knowing about while the integration matures:
 
 ## Related docs
 
-- [Setting Up an Agent Identity Repo](./agent-identity-setup.md) — create and configure your agent project
+- [Setting Up an Agent Identity Repo](/docs/guides/agent-identity-setup) — create and configure your agent project

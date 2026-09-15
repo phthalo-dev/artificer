@@ -1,3 +1,8 @@
+---
+title: Open-Weights Inference
+description: Artificer can route LLM traffic through OpenCode Zen for hosted open-weight models (Poolside Laguna S, Cohere North Mini Code, Kimi K3) or through Baseten Model APIs for Inkling and Kimi K3 under provider-native slugs.
+---
+
 # Open-Weights Inference
 
 Artificer can route LLM traffic through OpenCode Zen for hosted open-weight models (Poolside Laguna S, Cohere North Mini Code, Kimi K3) or through Baseten Model APIs for Inkling and Kimi K3 under provider-native slugs. Zen remains the default gateway; Baseten is opt-in via quota failover routes.

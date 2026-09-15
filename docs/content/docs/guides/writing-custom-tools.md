@@ -1,3 +1,8 @@
+---
+title: Writing Custom Tools
+description: Custom tools let you give the agent capabilities beyond its defaults — querying internal APIs, reading from a database, searching issue trackers, or anything else your team uses.
+---
+
 # Writing Custom Tools
 
 Custom tools let you give the agent capabilities beyond its defaults — querying internal APIs, reading from a database, searching issue trackers, or anything else your team uses. You add them as TypeScript files under `agent/tools/` in your identity repo.
@@ -59,7 +64,7 @@ Each field:
 
 Approval is deny-by-default. When `needsApproval` is `true` (or its function returns `true`), the runtime checks the tool policy before calling `execute`. With no matching rule, the handler does not run and the tool returns a structured JSON error with `kind: "approval_required"`; an explicit deny returns `kind: "approval_denied"`.
 
-Approval is policy-based, not an interactive pause: the runtime does not wait for a person in the middle of a tool call. Add an allow rule, then retry the call. The runtime exposes no model-facing API or tool for changing policy; policy mutations use the bearer-authenticated policy API. See [Tool approval policy](../reference/config.md#tool-approval-policy) for policy locations and management.
+Approval is policy-based, not an interactive pause: the runtime does not wait for a person in the middle of a tool call. Add an allow rule, then retry the call. The runtime exposes no model-facing API or tool for changing policy; policy mutations use the bearer-authenticated policy API. See [Tool approval policy](/docs/reference/config#tool-approval-policy) for policy locations and management.
 
 ## The `roles` field
 
@@ -160,5 +165,5 @@ At startup, `artificer dev` lists the tools it found and registers them for the 
 
 ## Related docs
 
-- [Core concepts — executors](../getting-started/core-concepts.md#executors)
-- [Custom CLI executors](./custom-cli-executor.md) — swap the worker role entirely
+- [Core concepts — executors](/docs/getting-started/core-concepts#executors)
+- [Custom CLI executors](/docs/guides/custom-cli-executor) — swap the worker role entirely

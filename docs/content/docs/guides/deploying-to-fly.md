@@ -1,3 +1,8 @@
+---
+title: Deploying to Fly.io
+description: This guide covers deploying an Artificer agent instance to [Fly.io](https://fly.io) — a good choice for personal or small-team self-hosting.
+---
+
 # Deploying to Fly.io
 
 This guide covers deploying an Artificer agent instance to [Fly.io](https://fly.io) — a good choice for personal or small-team self-hosting. You get always-on compute, a persistent volume for agent data, and HTTPS out of the box for around $3–5/month.

@@ -1,3 +1,8 @@
+---
+title: API Reference
+description: The agent exposes an HTTP API for sending messages, reading state, and managing workstreams.
+---
+
 # API Reference
 
 The agent exposes an HTTP API for sending messages, reading state, and managing workstreams. All `/api/*` routes require `Authorization: Bearer <ARTIFICER_API_KEY>` when the key is set; when unset, authentication is disabled.

@@ -1,3 +1,8 @@
+---
+title: Using opencode as the Worker Executor
+description: This guide explains how to configure Artificer to use [opencode](https://opencode.ai) as its worker executor instead of the built-in LLM loop.
+---
+
 # Using opencode as the Worker Executor
 
 This guide explains how to configure Artificer to use [opencode](https://opencode.ai) as its worker executor instead of the built-in LLM loop.
@@ -103,5 +108,5 @@ Start Artificer and send a message that triggers a workstream. Check the run log
 
 ## Related docs
 
-- [Custom CLI Executors](./custom-cli-executor.md) — the generic `cli` executor for CLIs that don't need a dedicated integration
-- [Setting Up an Agent Identity Repo](./agent-identity-setup.md) — configure your agent project before adding an executor
+- [Custom CLI Executors](/docs/guides/custom-cli-executor) — the generic `cli` executor for CLIs that don't need a dedicated integration
+- [Setting Up an Agent Identity Repo](/docs/guides/agent-identity-setup) — configure your agent project before adding an executor
