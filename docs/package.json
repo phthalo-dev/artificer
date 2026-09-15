@@ -1,0 +1,25 @@
+{
+  "name": "docs",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "check": "astro check",
+    "preview": "astro preview"
+  },
+  "dependencies": {
+    "@var-ui/astro": "^0.1.0",
+    "@var-ui/core": "^0.1.1",
+    "@var-ui/docs": "^0.1.0",
+    "astro": "^5.14.0"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.9",
+    "@typestyles/build-runner": "^0.5.2",
+    "@typestyles/vite": "^0.4.4",
+    "typescript": "^5.3.3",
+    "typestyles": "^0.23.1"
+  }
+}
