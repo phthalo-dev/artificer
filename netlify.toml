@@ -1,7 +1,7 @@
 [build]
-  command = "pnpm install --frozen-lockfile && pnpm --filter docs build"
+  command = "pnpm install --frozen-lockfile --ignore-scripts && pnpm --filter docs build"
   publish = "docs/dist"
 
 [build.environment]
   NODE_VERSION = "22"
-  PNPM_VERSION = "8.15.1"
+  PNPM_VERSION = "12.4.2"

@@ -145,6 +145,35 @@
         }
       }
     },
+    "workspaceServices": {
+      "type": "object",
+      "description": "Identity-repo overrides for workspace services declared by a target repo's .artificer/workspace.json — disable services or override their port ranges.",
+      "additionalProperties": false,
+      "properties": {
+        "disabled": {
+          "type": "array",
+          "description": "Names of services to disable even if declared by the target repo.",
+          "items": { "type": "string" }
+        },
+        "overrides": {
+          "type": "object",
+          "description": "Per-service field overrides, keyed by service name.",
+          "additionalProperties": {
+            "type": "object",
+            "additionalProperties": false,
+            "properties": {
+              "portRange": {
+                "type": "array",
+                "description": "Override the [min, max] port range for this service.",
+                "items": { "type": "integer" },
+                "minItems": 2,
+                "maxItems": 2
+              }
+            }
+          }
+        }
+      }
+    },
     "identity": {
       "type": "object",
       "description": "Identity git sync settings — controls automatic commit/push of memories and config changes.",

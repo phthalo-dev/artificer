@@ -22,7 +22,7 @@ frontend:
   phases:
     preBuild:
       commands:
-        - npm ci -g pnpm@8.15.1
+        - npm ci -g pnpm@12.4.2
         - pnpm install --frozen-lockfile
     build:
       commands:

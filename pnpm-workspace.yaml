@@ -3,3 +3,24 @@ packages:
   - 'packages/*'
   - 'infrastructure'
   - 'docs'
+
+overrides:
+  human-id: 4.1.3
+
+# Pin newly added dependencies to exact versions (no ^/~). Enforced in CI
+# by scripts/check-pinned-deps.mjs.
+saveExact: true
+
+# Delay installing versions published less than a day ago (npm's
+# min-release-age equivalent). Set explicitly so the check is strict —
+# pnpm's implicit 1440-minute default is non-strict for compatibility.
+minimumReleaseAge: 1440
+
+# esbuild's postinstall only wires a platform binary; pnpm already installs
+# the matching @esbuild/<platform> optional dependency, and esbuild resolves
+# that binary at require-time. Skip the script rather than running it.
+# sharp arrives via Astro (docs site). We do not use Astro's image CDN, so
+# skip its install script the same way.
+allowBuilds:
+  esbuild: false
+  sharp: false

@@ -5,6 +5,7 @@ import type {
   ArtificerConfig,
   ExecutorConfig,
   ResolvedIdentityConfig,
+  WorkspaceServicesConfig,
 } from './api/types.js';
 import { scanAgentDirectory } from './discover/discover.js';
 import type { DiagnosticsConfig } from './diagnostics/types.js';
@@ -150,6 +151,8 @@ export interface RuntimeConfig {
   identity?: ResolvedIdentityConfig;
   /** Worker executor backend. Defaults to 'llm' (internal tool loop). */
   executor?: ExecutorConfig;
+  /** Named dev-server/service scripts for worker/reviewer to start; overrides .artificer/workspace.json in the target repo. */
+  workspaceServices?: WorkspaceServicesConfig;
   /** Quota windows, budgets, and failover routing. */
   quota?: QuotaConfig;
   /**
@@ -418,6 +421,7 @@ export function mergeWithDefinition(
       ? resolveIdentityConfig(definition.identity)
       : base.identity,
     executor: definition.executor ?? base.executor,
+    workspaceServices: definition.workspaceServices ?? base.workspaceServices,
     quota: definition.quota ?? base.quota,
   };
 }
