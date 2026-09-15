@@ -523,7 +523,7 @@ The **code** decides what happens next. LLMs only run for generative steps.
 | Memory guide | `docs/guides/managing-memories.md` |
 | Skills API | `packages/runtime/src/api/define-skill.ts` |
 | Bench harness | `packages/runtime/bench/` |
-| Identity evals design | `docs/superpowers/specs/2026-08-11-identity-agent-evals-design.md` |
+| Identity evals guide | `docs/guides/agent-evals.md` |
 | Eve comparison | `docs/research/2026-06-22-eve-comparison.md` |
 
 ---

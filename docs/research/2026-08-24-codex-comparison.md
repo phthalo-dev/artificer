@@ -250,5 +250,5 @@ Do **not** start a Seatbelt/bwrap port or Guardian product surface until Tier 1 
 /Users/danielbanks/dev/artificer/packages/runtime/src/engine/workstream-machine.ts
 /Users/danielbanks/dev/artificer/packages/runtime/src/engine/call.ts
 /Users/danielbanks/dev/artificer/packages/runtime/src/tools/registry.ts
-/Users/danielbanks/dev/artificer/docs/superpowers/specs/2026-08-17-codemode-batched-tool-orchestration-design.md
+/Users/danielbanks/dev/artificer/docs/guides/writing-custom-tools.md
 ```
