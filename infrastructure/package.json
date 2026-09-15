@@ -17,14 +17,14 @@
     "lint": "prettier --check \"bin/**/*.ts\" \"lib/**/*.ts\""
   },
   "devDependencies": {
-    "@types/node": "^20.11.5",
-    "aws-cdk": "^2.150.0",
-    "esbuild": "^0.25.0",
-    "tsx": "^4.7.0",
-    "typescript": "^5.3.3"
+    "@types/node": "20.19.35",
+    "aws-cdk": "2.1108.0",
+    "esbuild": "0.25.12",
+    "tsx": "4.21.0",
+    "typescript": "5.9.3"
   },
   "dependencies": {
-    "aws-cdk-lib": "^2.150.0",
-    "constructs": "^10.3.0"
+    "aws-cdk-lib": "2.240.0",
+    "constructs": "10.5.1"
   }
 }
