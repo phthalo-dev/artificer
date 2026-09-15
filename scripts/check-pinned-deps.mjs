@@ -3,7 +3,7 @@
 // using a semver range (^, ~, *, >=, etc.) instead of an exact version.
 // Internal `workspace:*` references are exempt.
 //
-// This enforces the repo's `.npmrc` `save-exact=true` policy going forward:
+// This enforces the repo's `saveExact: true` policy in pnpm-workspace.yaml:
 // new/changed dependencies must be pinned exactly so `pnpm-lock.yaml` is the
 // only thing that can move a dependency version.
 
@@ -122,7 +122,7 @@ function main() {
 
   if (hasViolations) {
     console.error(
-      '\nDependencies must be pinned to exact versions (see .npmrc: save-exact=true).\n' +
+      '\nDependencies must be pinned to exact versions (see pnpm-workspace.yaml: saveExact: true).\n' +
         'Replace the ranges above with exact versions, or workspace:* for internal packages.'
     )
     process.exit(1)

@@ -50,3 +50,17 @@ test('parseWorkspaceGlobs extracts globs from a packages: list', () => {
   const yaml = `packages:\n  - 'apps/*'\n  - 'packages/*'\n  - 'infrastructure'\n`
   assert.deepEqual(parseWorkspaceGlobs(yaml), ['apps/*', 'packages/*', 'infrastructure'])
 })
+
+test('parseWorkspaceGlobs ignores sibling settings after the packages list', () => {
+  const yaml = `packages:
+  - 'apps/*'
+  - 'packages/*'
+  - 'infrastructure'
+
+saveExact: true
+minimumReleaseAge: 1440
+allowBuilds:
+  esbuild: false
+`
+  assert.deepEqual(parseWorkspaceGlobs(yaml), ['apps/*', 'packages/*', 'infrastructure'])
+})

@@ -3,7 +3,7 @@ FROM node:22-bookworm-slim
 
 WORKDIR /app
 
-RUN npm install -g pnpm@8.15.1
+RUN npm install -g pnpm@12.4.2
 
 COPY package.json pnpm-lock.yaml pnpm-workspace.yaml ./
 COPY packages/agent-gateway/package.json ./packages/agent-gateway/
