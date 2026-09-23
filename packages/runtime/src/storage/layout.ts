@@ -28,6 +28,30 @@ export class Layout {
     return path.join(this.root, 'workspace');
   }
 
+  get tracesDir(): string {
+    return path.join(this.root, 'traces');
+  }
+
+  get traceOutboxDir(): string {
+    return path.join(this.tracesDir, 'outbox');
+  }
+
+  traceDir(traceId: string): string {
+    return path.join(this.tracesDir, traceId);
+  }
+
+  traceFile(traceId: string): string {
+    return path.join(this.traceDir(traceId), 'trace.json');
+  }
+
+  traceEventsFile(traceId: string): string {
+    return path.join(this.traceDir(traceId), 'events.jsonl');
+  }
+
+  traceOutboxFile(eventId: string): string {
+    return path.join(this.traceOutboxDir, `${eventId}.json`);
+  }
+
   messageFile(id: string, createdAt: string): string {
     return path.join(this.messagesDir, `${createdAt}-${id}.json`);
   }
