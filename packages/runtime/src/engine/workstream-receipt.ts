@@ -24,6 +24,7 @@ const MAX_DETAIL_LENGTH = 1_000;
 const MAX_FILES = 200;
 const VALIDATION_COMMAND =
   /\b(?:test|tests|lint|type[- ]?check|build|check|verify|pytest|vitest|jest|mocha|cargo\s+test|go\s+test)\b/i;
+const SHELL_FAILURE_RE = /^Command (failed|timed out)/;
 
 export interface ReceiptStep {
   id: string;
@@ -132,13 +133,14 @@ interface GitChanges {
   commits: string[];
 }
 
-function clip(value: string | undefined, max = MAX_SUMMARY_LENGTH): string | undefined {
+function clip(
+  value: string | undefined,
+  max = MAX_SUMMARY_LENGTH,
+): string | undefined {
   if (!value) return undefined;
   const normalized = redact(value.trim());
   if (!normalized) return undefined;
-  return normalized.length <= max
-    ? normalized
-    : `${normalized.slice(0, max)}…`;
+  return normalized.length <= max ? normalized : `${normalized.slice(0, max)}…`;
 }
 
 function redact(value: string): string {
@@ -154,9 +156,12 @@ function redact(value: string): string {
     );
 }
 
-function sortByCreated<T extends { createdAt: string; id: string }>(items: T[]): T[] {
+function sortByCreated<T extends { createdAt: string; id: string }>(
+  items: T[],
+): T[] {
   return [...items].sort(
-    (a, b) => a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
+    (a, b) =>
+      a.createdAt.localeCompare(b.createdAt) || a.id.localeCompare(b.id),
   );
 }
 
@@ -170,7 +175,10 @@ function validTime(value: string | undefined): number | undefined {
   return Number.isFinite(time) ? time : undefined;
 }
 
-function durationMs(runs: RunRecord[], workstream: Workstream): number | undefined {
+function durationMs(
+  runs: RunRecord[],
+  workstream: Workstream,
+): number | undefined {
   const starts = runs
     .map((run) => validTime(run.startedAt ?? run.createdAt))
     .filter((value): value is number => value !== undefined);
@@ -180,7 +188,9 @@ function durationMs(runs: RunRecord[], workstream: Workstream): number | undefin
   if (starts.length === 0 || ends.length === 0) {
     const start = validTime(workstream.createdAt);
     const end = validTime(workstream.updatedAt);
-    return start !== undefined && end !== undefined ? Math.max(0, end - start) : undefined;
+    return start !== undefined && end !== undefined
+      ? Math.max(0, end - start)
+      : undefined;
   }
   return Math.max(0, Math.max(...ends) - Math.min(...starts));
 }
@@ -209,9 +219,7 @@ function buildSteps(tasks: Task[], runs: RunRecord[]): ReceiptStep[] {
   if (orderedTasks.length > 0) {
     return orderedTasks.map((task, index) => {
       const taskRuns = sortByCreated(
-        runs.filter(
-          (run) => run.taskId === task.id || run.id === task.runId,
-        ),
+        runs.filter((run) => run.taskId === task.id || run.id === task.runId),
       );
       const lastRun = taskRuns.at(-1);
       return {
@@ -224,7 +232,8 @@ function buildSteps(tasks: Task[], runs: RunRecord[]): ReceiptStep[] {
         runIds: taskRuns.map((run) => run.id),
         taskIds: [task.id],
         startedAt: taskRuns[0]?.startedAt ?? task.createdAt,
-        finishedAt: taskRuns.at(-1)?.finishedAt ??
+        finishedAt:
+          taskRuns.at(-1)?.finishedAt ??
           (task.status === 'done' || task.status === 'failed'
             ? task.updatedAt
             : undefined),
@@ -246,6 +255,20 @@ function buildSteps(tasks: Task[], runs: RunRecord[]): ReceiptStep[] {
   }));
 }
 
+function validationStatus(
+  invocation: RunRecord['toolCalls'][number],
+): ReceiptValidation['status'] {
+  if (invocation.error) return 'failed';
+  if (SHELL_FAILURE_RE.test(invocation.output ?? '')) return 'failed';
+  return 'passed';
+}
+
+function workstreamLocalUrl(workstreamId: string, publicUrl?: string): string {
+  const path = `/workstreams/${encodeURIComponent(workstreamId)}`;
+  if (!publicUrl) return path;
+  return `${publicUrl.replace(/\/$/, '')}${path}`;
+}
+
 function buildValidation(runs: RunRecord[]): ReceiptValidation[] {
   const validation: ReceiptValidation[] = [];
   for (const run of sortByCreated(runs)) {
@@ -265,7 +288,7 @@ function buildValidation(runs: RunRecord[]): ReceiptValidation[] {
       validation.push({
         label: clip(command, 160) ?? 'validation command',
         command: clip(command, 500),
-        status: invocation.error ? 'failed' : 'passed',
+        status: validationStatus(invocation),
         summary: clip(invocation.error ?? invocation.output, MAX_DETAIL_LENGTH),
         runId: run.id,
       });
@@ -274,7 +297,10 @@ function buildValidation(runs: RunRecord[]): ReceiptValidation[] {
   return validation;
 }
 
-async function gitOutput(repo: string, args: string[]): Promise<string | undefined> {
+async function gitOutput(
+  repo: string,
+  args: string[],
+): Promise<string | undefined> {
   try {
     const result = await execFileAsync('git', args, {
       cwd: repo,
@@ -293,7 +319,13 @@ function parseGitFiles(output: string | undefined): string[] {
     .split('\n')
     .map((line) => line.trim())
     .filter(Boolean)
-    .map((line) => line.replace(/^[ MARCUD?!]{1,2}\s+/, '').split(' -> ').at(-1) ?? line)
+    .map(
+      (line) =>
+        line
+          .replace(/^[ MARCUD?!]{1,2}\s+/, '')
+          .split(' -> ')
+          .at(-1) ?? line,
+    )
     .filter(Boolean);
 }
 
@@ -302,7 +334,9 @@ async function inspectGit(
   workstream: Workstream,
 ): Promise<GitChanges> {
   const empty: GitChanges = { files: [], commits: [] };
-  const repo = await findGitRepo(store.layout.workstreamWorkspace(workstream.id));
+  const repo = await findGitRepo(
+    store.layout.workstreamWorkspace(workstream.id),
+  );
   if (!repo) return empty;
 
   const [headCommit, branch, status, diff] = await Promise.all([
@@ -336,7 +370,9 @@ function buildSummary(
   runs: RunRecord[],
 ): { summary: string; nextAction?: string } {
   const latest = sortByCreated(runs).at(-1);
-  const summary = clip(workstream.summary) ?? runSummary(latest) ??
+  const summary =
+    clip(workstream.summary) ??
+    runSummary(latest) ??
     `Workstream is ${statusLabel(workstream.status)}.`;
   if (workstream.status === 'blocked' || workstream.status === 'failed') {
     return {
@@ -347,7 +383,10 @@ function buildSummary(
     };
   }
   if (workstream.status !== 'done' && workstream.status !== 'cancelled') {
-    return { summary, nextAction: 'Continue the next pending workstream step.' };
+    return {
+      summary,
+      nextAction: 'Continue the next pending workstream step.',
+    };
   }
   return { summary };
 }
@@ -387,7 +426,8 @@ function renderMarkdown(receipt: WorkstreamReceipt): string {
   if (receipt.changes.repositoryUrl) {
     lines.push(`- Repository: \`${receipt.changes.repositoryUrl}\``);
   }
-  if (receipt.changes.branch) lines.push(`- Branch: \`${receipt.changes.branch}\``);
+  if (receipt.changes.branch)
+    lines.push(`- Branch: \`${receipt.changes.branch}\``);
   if (receipt.changes.baseCommit) {
     lines.push(`- Base commit: \`${receipt.changes.baseCommit}\``);
   }
@@ -406,7 +446,9 @@ function renderMarkdown(receipt: WorkstreamReceipt): string {
   } else {
     for (const check of receipt.validation) {
       const command = check.command ? ` \`${check.command}\`` : '';
-      lines.push(`- **${check.status.toUpperCase()}**${command}${check.summary ? ` — ${check.summary}` : ''}`);
+      lines.push(
+        `- **${check.status.toUpperCase()}**${command}${check.summary ? ` — ${check.summary}` : ''}`,
+      );
     }
     lines.push('');
   }
@@ -422,12 +464,27 @@ function renderMarkdown(receipt: WorkstreamReceipt): string {
     lines.push('');
   }
 
+  lines.push('## Findings', '');
+  if (receipt.findings.length === 0) {
+    lines.push('No findings recorded.', '');
+  } else {
+    for (const finding of receipt.findings) {
+      const file = finding.file ? ` (\`${finding.file}\`)` : '';
+      lines.push(`- **${finding.role}**${file}: ${finding.summary}`);
+    }
+    lines.push('');
+  }
+
   lines.push('## Usage', '');
   lines.push(`- Runs: ${receipt.usage.runCount}`);
-  lines.push(`- Tokens: ${receipt.usage.inputTokens.toLocaleString()} in / ${receipt.usage.outputTokens.toLocaleString()} out`);
+  lines.push(
+    `- Tokens: ${receipt.usage.inputTokens.toLocaleString()} in / ${receipt.usage.outputTokens.toLocaleString()} out`,
+  );
   lines.push(`- Model requests: ${receipt.usage.modelRequests}`);
   if (receipt.usage.estimatedCostDollars !== undefined) {
-    lines.push(`- Estimated cost: $${receipt.usage.estimatedCostDollars.toFixed(6)}`);
+    lines.push(
+      `- Estimated cost: $${receipt.usage.estimatedCostDollars.toFixed(6)}`,
+    );
   }
   if (receipt.usage.durationMs !== undefined) {
     lines.push(`- Duration: ${Math.round(receipt.usage.durationMs / 1000)}s`);
@@ -438,7 +495,11 @@ function renderMarkdown(receipt: WorkstreamReceipt): string {
     lines.push('## Next action', '', receipt.nextAction, '');
   }
 
-  lines.push('## Links', '', `- [Open in Artificer](${receipt.links.localUrl})`);
+  lines.push(
+    '## Links',
+    '',
+    `- [Open in Artificer](${receipt.links.localUrl})`,
+  );
   if (receipt.links.externalUrl) {
     lines.push(`- [Open trace](${receipt.links.externalUrl})`);
   }
@@ -498,20 +559,22 @@ export class WorkstreamReceiptService {
   constructor(
     private readonly store: Store,
     private readonly traceRecorder: TraceRecorder,
+    private readonly publicUrl?: string,
   ) {}
 
   async refresh(workstreamId: string): Promise<WorkstreamReceiptResult | null> {
     return withReceiptChain(workstreamId, async () => {
       const workstream = await this.store.getWorkstream(workstreamId);
       if (!workstream) return null;
-      const [tasks, reviews, findings, runs, trace, changes] = await Promise.all([
-        this.store.listTasks(workstreamId),
-        this.store.listReviews(workstreamId),
-        this.store.listFindings(workstreamId),
-        this.store.listRunsForWorkstream(workstreamId),
-        this.traceRecorder.get(workstream.traceId ?? `trace_${workstreamId}`),
-        inspectGit(this.store, workstream),
-      ]);
+      const [tasks, reviews, findings, runs, trace, changes] =
+        await Promise.all([
+          this.store.listTasks(workstreamId),
+          this.store.listReviews(workstreamId),
+          this.store.listFindings(workstreamId),
+          this.store.listRunsForWorkstream(workstreamId),
+          this.traceRecorder.get(workstream.traceId ?? `trace_${workstreamId}`),
+          inspectGit(this.store, workstream),
+        ]);
       const receipt = buildReceipt({
         workstream,
         tasks,
@@ -520,9 +583,13 @@ export class WorkstreamReceiptService {
         runs,
         traceSequence: trace?.lastSequence,
         changes,
+        publicUrl: this.publicUrl,
       });
       const markdown = renderMarkdown(receipt);
-      await writeJsonAtomic(this.store.layout.receiptFile(workstreamId), receipt);
+      await writeJsonAtomic(
+        this.store.layout.receiptFile(workstreamId),
+        receipt,
+      );
       await writeTextAtomic(
         this.store.layout.receiptMarkdownFile(workstreamId),
         markdown,
@@ -531,7 +598,9 @@ export class WorkstreamReceiptService {
     });
   }
 
-  async ensureCurrent(workstreamId: string): Promise<WorkstreamReceiptResult | null> {
+  async ensureCurrent(
+    workstreamId: string,
+  ): Promise<WorkstreamReceiptResult | null> {
     const workstream = await this.store.getWorkstream(workstreamId);
     if (!workstream) return null;
     const receipt = await readJson<WorkstreamReceipt>(
@@ -580,7 +649,10 @@ export class WorkstreamReceiptService {
         },
       };
       const markdown = renderMarkdown(updated);
-      await writeJsonAtomic(this.store.layout.receiptFile(workstreamId), updated);
+      await writeJsonAtomic(
+        this.store.layout.receiptFile(workstreamId),
+        updated,
+      );
       await writeTextAtomic(
         this.store.layout.receiptMarkdownFile(workstreamId),
         markdown,
@@ -663,6 +735,7 @@ function buildReceipt(input: {
   runs: RunRecord[];
   traceSequence?: number;
   changes: GitChanges;
+  publicUrl?: string;
 }): WorkstreamReceipt {
   const { workstream, tasks, reviews, findings, runs, changes } = input;
   const orderedRuns = sortByCreated(runs);
@@ -707,14 +780,16 @@ function buildReceipt(input: {
       target: redact(review.target),
       approved: review.approved,
       severity: review.severity,
-      summary: clip(review.notes, MAX_DETAIL_LENGTH) ?? 'No review notes recorded.',
+      summary:
+        clip(review.notes, MAX_DETAIL_LENGTH) ?? 'No review notes recorded.',
       sourceReviewId: review.id,
     })),
     findings: sortByCreated(findings).map((finding) => ({
       id: finding.id,
       role: finding.role,
       file: finding.file,
-      summary: clip(finding.note, MAX_DETAIL_LENGTH) ?? 'No finding note recorded.',
+      summary:
+        clip(finding.note, MAX_DETAIL_LENGTH) ?? 'No finding note recorded.',
       sourceFindingId: finding.id,
     })),
     usage: {
@@ -726,7 +801,7 @@ function buildReceipt(input: {
       durationMs: durationMs(runs, workstream),
     },
     links: {
-      localUrl: `/workstreams/${encodeURIComponent(workstream.id)}`,
+      localUrl: workstreamLocalUrl(workstream.id, input.publicUrl),
     },
     provenance: {
       generatedFromTraceSequence: input.traceSequence,

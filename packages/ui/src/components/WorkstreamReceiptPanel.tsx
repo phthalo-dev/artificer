@@ -1,5 +1,5 @@
 import { IconCheck, IconCopy, IconDownload } from '@tabler/icons-react';
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Alert,
   Badge,
@@ -53,30 +53,6 @@ export function WorkstreamReceiptPanel({
     const timer = window.setTimeout(() => setCopied(false), 2000);
     return () => window.clearTimeout(timer);
   }, [copied]);
-
-  const markdownHref = useMemo(() => {
-    if (!data?.markdown) return null;
-    return URL.createObjectURL(
-      new Blob([data.markdown], { type: 'text/markdown;charset=utf-8' }),
-    );
-  }, [data?.markdown]);
-
-  const jsonHref = useMemo(() => {
-    if (!data?.receipt) return null;
-    return URL.createObjectURL(
-      new Blob([JSON.stringify(data.receipt, null, 2)], {
-        type: 'application/json',
-      }),
-    );
-  }, [data?.receipt]);
-
-  useEffect(
-    () => () => {
-      if (markdownHref) URL.revokeObjectURL(markdownHref);
-      if (jsonHref) URL.revokeObjectURL(jsonHref);
-    },
-    [jsonHref, markdownHref],
-  );
 
   if (isLoading) return <Loader size="sm" />;
   if (error || !data) {
@@ -140,7 +116,7 @@ export function WorkstreamReceiptPanel({
             {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
             {copied ? 'Copied' : 'Copy Markdown'}
           </Button>
-          {markdownHref && (
+          {markdown && (
             <Button
               variant="outline"
               size="sm"
@@ -156,22 +132,20 @@ export function WorkstreamReceiptPanel({
               Markdown
             </Button>
           )}
-          {jsonHref && (
-            <Button
-              variant="outline"
-              size="sm"
-              onPress={() =>
-                downloadBlob(
-                  JSON.stringify(receipt, null, 2),
-                  `receipt-${workstream.id}.json`,
-                  'application/json',
-                )
-              }
-            >
-              <IconDownload size={14} />
-              JSON
-            </Button>
-          )}
+          <Button
+            variant="outline"
+            size="sm"
+            onPress={() =>
+              downloadBlob(
+                JSON.stringify(receipt, null, 2),
+                `receipt-${workstream.id}.json`,
+                'application/json',
+              )
+            }
+          >
+            <IconDownload size={14} />
+            JSON
+          </Button>
         </Group>
       </Group>
 

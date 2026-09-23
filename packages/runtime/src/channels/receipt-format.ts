@@ -16,7 +16,9 @@ function stepProgress(steps: WorkstreamReceipt['steps']): string {
   return `${done}/${steps.length} steps complete`;
 }
 
-function validationLine(validation: WorkstreamReceipt['validation']): string | null {
+function validationLine(
+  validation: WorkstreamReceipt['validation'],
+): string | null {
   if (validation.length === 0) return null;
   const passed = validation.filter((check) => check.status === 'passed').length;
   const failed = validation.filter((check) => check.status === 'failed').length;
@@ -27,9 +29,7 @@ function validationLine(validation: WorkstreamReceipt['validation']): string | n
 function reviewLine(reviews: WorkstreamReceipt['reviews']): string | null {
   const latest = reviews.at(-1);
   if (!latest) return null;
-  return latest.approved
-    ? 'Review: approved'
-    : 'Review: changes requested';
+  return latest.approved ? 'Review: approved' : 'Review: changes requested';
 }
 
 function clip(text: string, max: number): string {

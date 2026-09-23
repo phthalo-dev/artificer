@@ -96,6 +96,59 @@ test('refresh records validation commands from run_shell tool calls', async () =
   assert.match(result!.receipt.validation[0]?.command ?? '', /pnpm test/);
 });
 
+test('refresh marks failed validation from run_shell output', async () => {
+  const { store, receipts } = await makeFixture();
+  const ws = await store.createWorkstream({
+    title: 'Failed validation',
+    goal: 'Run tests',
+    status: 'done',
+  });
+  const run: RunRecord = {
+    id: 'run_test_fail',
+    role: 'worker',
+    task: 'Run tests',
+    status: 'done',
+    workstreamId: ws.id,
+    createdAt: '2026-09-23T10:00:00.000Z',
+    toolCalls: [
+      {
+        name: 'run_shell',
+        input: { command: 'pnpm test packages/runtime' },
+        output: 'Command failed:\n3 tests failed',
+      },
+    ],
+  };
+  await store.saveRun(run);
+
+  const result = await receipts.refresh(ws.id);
+  assert.ok(result);
+  assert.equal(result!.receipt.validation[0]?.status, 'failed');
+});
+
+test('refresh uses publicUrl for receipt links when configured', async () => {
+  const root = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-receipt-'));
+  const store = new Store(root);
+  await store.init();
+  const traceRecorder = new TraceRecorder(store.layout, 'test-agent');
+  const receipts = new WorkstreamReceiptService(
+    store,
+    traceRecorder,
+    'https://artificer.example.com',
+  );
+  const ws = await store.createWorkstream({
+    title: 'Public links',
+    goal: 'Expose absolute URLs',
+    status: 'done',
+  });
+
+  const result = await receipts.refresh(ws.id);
+  assert.ok(result);
+  assert.equal(
+    result!.receipt.links.localUrl,
+    `https://artificer.example.com/workstreams/${encodeURIComponent(ws.id)}`,
+  );
+});
+
 test('ensureCurrent reuses cached receipt when source state is unchanged', async () => {
   const { store, receipts } = await makeFixture();
   const ws = await store.createWorkstream({

@@ -46,7 +46,10 @@ describe('deliverChannelMessage', () => {
     );
 
     assert.equal(fetchMock.mock.callCount(), 1);
-    const [url, init] = fetchMock.mock.calls[0].arguments as [string, RequestInit];
+    const [url, init] = fetchMock.mock.calls[0].arguments as [
+      string,
+      RequestInit,
+    ];
     assert.match(url, /app123\/token456/);
     assert.match(String(init?.body), /Done/);
   });
