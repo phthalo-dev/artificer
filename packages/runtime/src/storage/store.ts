@@ -284,6 +284,7 @@ export class Store {
         | 'repoUrl'
         | 'baseCommit'
         | 'quotaPausedStatus'
+        | 'channelContext'
       >
     >,
   ): Promise<Workstream | null> {

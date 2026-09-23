@@ -148,6 +148,10 @@ export function toolsForRole(
       ];
       break;
 
+    case 'receipt':
+      result = [];
+      break;
+
     default:
       result = [];
   }

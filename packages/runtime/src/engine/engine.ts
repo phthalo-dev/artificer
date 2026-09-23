@@ -20,9 +20,13 @@ import type { EngineApi, RuntimeEvent, SpawnCallInput } from '../context.js';
 import { resolveLanguageModel } from '../llm/provider.js';
 import { Store } from '../storage/store.js';
 import { TraceRecorder } from '../storage/trace-recorder.js';
+import { deliverChannelMessage } from '../channels/delivery.js';
+import { formatReceiptForChannel } from '../channels/receipt-format.js';
+import { WorkstreamReceiptService } from './workstream-receipt.js';
 import type { IdentityStore } from '../storage/identity-store.js';
 import type {
   Message,
+  MessageChannelContext,
   RunRecord,
   TraceMutation,
   Workstream,
@@ -108,6 +112,7 @@ export class Engine implements EngineApi {
   readonly identity?: IdentityStore;
   readonly config: RuntimeConfig;
   readonly traceRecorder: TraceRecorder;
+  readonly receipts: WorkstreamReceiptService;
   private readonly scheduler: Scheduler;
   private readonly events = new EventEmitter();
   private readonly active = new Map<string, ActiveRun>();
@@ -137,6 +142,11 @@ export class Engine implements EngineApi {
     this.store = store;
     this.identity = identity;
     this.traceRecorder = new TraceRecorder(store.layout, config.agentName);
+    this.receipts = new WorkstreamReceiptService(
+      store,
+      this.traceRecorder,
+      config.publicUrl,
+    );
     this.store.setTraceHook((mutation) => this.recordTraceEvent(mutation));
     this.memoryService = memoryService;
     this.registry = registry ?? new RoleRegistry();
@@ -168,11 +178,17 @@ export class Engine implements EngineApi {
         );
       }),
     );
+    for (const workstream of workstreams) {
+      await this.receipts.refresh(workstream.id);
+    }
   }
 
   async recordTraceEvent(event: TraceMutation): Promise<void> {
     try {
       await this.traceRecorder.record(event);
+      if (event.kind !== 'tool') {
+        await this.receipts.refresh(event.workstreamId);
+      }
     } catch (error) {
       console.error('[trace] failed to persist event:', error);
     }
@@ -427,10 +443,14 @@ export class Engine implements EngineApi {
 
   // --- Inbound messaging (the "person" surface) ---
 
-  async receiveMessage(content: string): Promise<Message> {
+  async receiveMessage(
+    content: string,
+    channelContext?: MessageChannelContext,
+  ): Promise<Message> {
     const message = await this.store.appendMessage({
       direction: 'inbound',
       content,
+      channelContext,
     });
     this.emit({ kind: 'message', at: message.createdAt, data: message });
 
@@ -502,7 +522,11 @@ export class Engine implements EngineApi {
 
     let taskId: string | undefined;
 
-    if (input.workstreamId && input.role !== 'orchestrator') {
+    if (
+      input.workstreamId &&
+      input.role !== 'orchestrator' &&
+      input.role !== 'receipt'
+    ) {
       const task = await this.store.createTask({
         workstreamId: input.workstreamId,
         role: input.role,
@@ -612,6 +636,12 @@ export class Engine implements EngineApi {
     this.emit({ kind: 'workstream', at: ws.createdAt, data: ws });
     if (input.originMessageId) {
       const originMessage = await this.store.getMessage(input.originMessageId);
+      if (originMessage?.channelContext) {
+        await this.store.updateWorkstream(ws.id, {
+          channelContext: originMessage.channelContext,
+        });
+        ws.channelContext = originMessage.channelContext;
+      }
       await this.recordTraceEvent({
         workstreamId: ws.id,
         traceId: ws.traceId,
@@ -638,6 +668,43 @@ export class Engine implements EngineApi {
       workstreamId,
     });
     this.emit({ kind: 'message', at: message.createdAt, data: message });
+    const channelContext = await this.resolveChannelContext(workstreamId);
+    if (channelContext) {
+      void deliverChannelMessage(channelContext, content).catch((error) => {
+        console.error('[channel] failed to deliver reply:', error);
+      });
+    }
+  }
+
+  private async resolveChannelContext(
+    workstreamId?: string,
+  ): Promise<MessageChannelContext | undefined> {
+    if (workstreamId) {
+      const ws = await this.store.getWorkstream(workstreamId);
+      if (ws?.channelContext) return ws.channelContext;
+    }
+    const messages = await this.store.listMessages();
+    for (let index = messages.length - 1; index >= 0; index -= 1) {
+      const candidate = messages[index];
+      if (candidate.direction === 'inbound' && candidate.channelContext) {
+        return candidate.channelContext;
+      }
+    }
+    return undefined;
+  }
+
+  private async buildCompletionReply(ws: Workstream): Promise<string> {
+    const result = await this.receipts.ensureCurrent(ws.id);
+    if (!result) {
+      return ws.summary
+        ? `Workstream "${ws.title}" is ${ws.status}.\n\n${ws.summary}`
+        : `Workstream "${ws.title}" is ${ws.status}.`;
+    }
+    return formatReceiptForChannel(
+      result.receipt,
+      result.markdown,
+      ws.channelContext,
+    );
   }
 
   /** Current model id for each complexity tier. */
@@ -1044,11 +1111,13 @@ export class Engine implements EngineApi {
         await this.store.updateWorkstream(workstreamId, { status: 'done' });
         await this.emitWorkstream(workstreamId);
         const doneWs = await this.store.getWorkstream(workstreamId);
-        const doneMsg = doneWs?.summary
-          ? `Workstream "${ws.title}" is complete.\n\n${doneWs.summary}`
-          : `Workstream "${ws.title}" is complete.`;
-        await this.reply(doneMsg, workstreamId);
-        if (doneWs) void this.handleWorkstreamTerminal(doneWs);
+        if (doneWs) {
+          await this.reply(
+            await this.buildCompletionReply(doneWs),
+            workstreamId,
+          );
+          void this.handleWorkstreamTerminal(doneWs);
+        }
         return;
       }
       case 'blocked':
@@ -1155,7 +1224,10 @@ export class Engine implements EngineApi {
     await this.store.updateWorkstream(id, { status: 'cancelled' });
     await this.emitWorkstream(id);
     const updated = await this.store.getWorkstream(id);
-    if (updated) void this.handleWorkstreamTerminal(updated);
+    if (updated) {
+      await this.reply(await this.buildCompletionReply(updated), updated.id);
+      void this.handleWorkstreamTerminal(updated);
+    }
     return true;
   }
 
@@ -1165,9 +1237,11 @@ export class Engine implements EngineApi {
       summary: `${ws.summary ?? ''}\n\n[System] ${reason}`.trim(),
     });
     await this.emitWorkstream(ws.id);
-    await this.reply(`Workstream "${ws.title}" paused: ${reason}`, ws.id);
     const updated = await this.store.getWorkstream(ws.id);
-    if (updated) void this.handleWorkstreamTerminal(updated);
+    if (updated) {
+      await this.reply(await this.buildCompletionReply(updated), ws.id);
+      void this.handleWorkstreamTerminal(updated);
+    }
   }
 
   /**
@@ -1178,6 +1252,16 @@ export class Engine implements EngineApi {
     await this.serviceManager.teardownWorkstream(ws.id).catch((err) => {
       console.error(`[services] teardown failed for workstream ${ws.id}:`, err);
     });
+    if (!this.config.evalMode) {
+      void this.receipts
+        .requestSummary(ws, (input) => this.spawnCall(input))
+        .catch((error) => {
+          console.error(
+            `[receipt] failed to spawn summary for ${ws.id}:`,
+            error,
+          );
+        });
+    }
     if (!this.memoryService) return;
     try {
       await this.memoryService.onTerminal(ws);
@@ -1212,6 +1296,33 @@ export class Engine implements EngineApi {
       const replied = run.toolCalls.some((t) => t.name === 'reply' && !t.error);
       const text = run.output?.trim();
       if (!replied && text) await this.reply(text, run.workstreamId);
+    }
+
+    if (run.role === 'receipt' && run.workstreamId) {
+      if (run.status === 'done' && run.output?.trim()) {
+        const updated = await this.receipts.applyGeneratedSummary(
+          run.workstreamId,
+          run.output,
+          run.id,
+        );
+        const ws = await this.store.getWorkstream(run.workstreamId);
+        if (updated && ws?.channelContext) {
+          const followUp = formatReceiptForChannel(
+            updated.receipt,
+            updated.markdown,
+            ws.channelContext,
+          );
+          void deliverChannelMessage(ws.channelContext, followUp).catch(
+            (error) => {
+              console.error(
+                '[channel] failed to deliver receipt summary:',
+                error,
+              );
+            },
+          );
+        }
+      }
+      return;
     }
 
     if (run.taskId && run.workstreamId) {

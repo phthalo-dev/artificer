@@ -63,6 +63,7 @@ for (const role of [
   'reviewer',
   'communicator',
   'librarian',
+  'receipt',
 ] as const) {
   test(`toolsForRole('${role}') does not include execute`, async () => {
     const ctx = await freshCtx(role);

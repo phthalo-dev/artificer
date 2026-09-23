@@ -67,6 +67,7 @@ const updateRoleTiersSchema = z.record(
     'reviewer',
     'worker',
     'librarian',
+    'receipt',
   ]),
   z.enum(['low', 'medium', 'high']),
 );
@@ -586,6 +587,21 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
       events,
       hasMore: trace.lastSequence > events.length,
     });
+  });
+
+  api.get('/workstreams/:id/receipt', async (c) => {
+    const id = c.req.param('id');
+    const format = c.req.query('format') ?? 'json';
+    if (format !== 'json' && format !== 'markdown') {
+      return c.json({ error: 'format must be json or markdown' }, 400);
+    }
+    const result = await engine.receipts.ensureCurrent(id);
+    if (!result) return c.json({ error: 'not found' }, 404);
+    if (format === 'markdown') {
+      c.header('content-type', 'text/markdown; charset=utf-8');
+      return c.body(result.markdown);
+    }
+    return c.json({ receipt: result.receipt, markdown: result.markdown });
   });
 
   api.get('/workstreams/:id', async (c) => {

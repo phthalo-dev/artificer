@@ -442,3 +442,34 @@ test('trace endpoints expose bounded durable workstream history', async () => {
     workstreamTraceBody.events.some((event) => event.kind === 'workstream'),
   );
 });
+
+test('workstream receipt endpoint returns structured and markdown formats', async () => {
+  const { engine, store } = await buildApp();
+  await engine.initializeTraces();
+  const workstream = await store.createWorkstream({
+    title: 'Receipt work',
+    goal: 'Generate a delivery receipt',
+  });
+  await store.writePlan(workstream.id, '# Plan\n\n1. Ship receipt');
+  await engine.receipts.refresh(workstream.id);
+  const app = createApp(engine);
+
+  const jsonRes = await app.request(
+    `/api/workstreams/${workstream.id}/receipt`,
+  );
+  assert.equal(jsonRes.status, 200);
+  const jsonBody = (await jsonRes.json()) as {
+    receipt: { workstreamId: string; goal: string; schemaVersion: number };
+    markdown: string;
+  };
+  assert.equal(jsonBody.receipt.workstreamId, workstream.id);
+  assert.equal(jsonBody.receipt.schemaVersion, 1);
+  assert.match(jsonBody.receipt.goal, /delivery receipt/);
+  assert.match(jsonBody.markdown, /^# Receipt work/m);
+
+  const markdownRes = await app.request(
+    `/api/workstreams/${workstream.id}/receipt?format=markdown`,
+  );
+  assert.equal(markdownRes.status, 200);
+  assert.match(await markdownRes.text(), /^# Receipt work/m);
+});

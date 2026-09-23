@@ -34,6 +34,7 @@ import { QuotaAlert } from '../components/QuotaBanner';
 import { TokenSpendByRole } from '../components/TokenSpendChart';
 import { ViewRawLink } from '../components/ViewRawLink';
 import { WorkstreamProgress } from '../components/WorkstreamProgress';
+import { WorkstreamReceiptPanel } from '../components/WorkstreamReceiptPanel';
 import { formatCost, formatDuration, formatTime } from '../format';
 import { earliestQuotaReset, formatUntil } from '../quota';
 
@@ -211,6 +212,7 @@ export function WorkstreamDetailPage() {
           <Tabs.Tab value="tasks">Tasks</Tabs.Tab>
           <Tabs.Tab value="reviews">Reviews</Tabs.Tab>
           <Tabs.Tab value="metrics">Metrics</Tabs.Tab>
+          <Tabs.Tab value="receipt">Receipt</Tabs.Tab>
         </Tabs.List>
 
         <Tabs.Panel value="trajectory" pt="md">
@@ -367,6 +369,10 @@ export function WorkstreamDetailPage() {
               <BreakdownTable label="Task" data={usage.byTask} />
             </div>
           </Stack>
+        </Tabs.Panel>
+
+        <Tabs.Panel value="receipt" pt="md">
+          <WorkstreamReceiptPanel workstream={ws} />
         </Tabs.Panel>
       </Tabs>
     </Stack>

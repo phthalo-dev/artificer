@@ -160,6 +160,8 @@ export interface RuntimeConfig {
    * no memory writes, learn/add_memory, identity git ops, or config persist.
    */
   evalMode?: boolean;
+  /** Public base URL for links in receipts and channel messages (no trailing slash). */
+  publicUrl?: string;
   codemode: CodemodeLimits;
 }
 
@@ -313,6 +315,7 @@ export function loadConfig(
     identityDir,
     apiAuthKey: env.ARTIFICER_API_KEY || undefined,
     evalMode: env.RUNTIME_EVAL_MODE === 'true',
+    publicUrl: env.ARTIFICER_PUBLIC_URL?.replace(/\/$/, '') || undefined,
     codemode: parseCodemodeLimits(env),
   };
 }

@@ -24,7 +24,29 @@ async function handleChannelPayload(
     return c.json({ ok: true });
   }
 
-  const result = await engine.receiveMessage(message.content);
+  const channelContext =
+    message.metadata && typeof message.metadata.channel === 'string'
+      ? {
+          name: message.metadata.channel,
+          metadata: message.metadata,
+          includeFullReceipt: Boolean(message.metadata.includeFullReceipt),
+          originContent:
+            typeof message.metadata.originContent === 'string'
+              ? message.metadata.originContent
+              : message.content,
+        }
+      : undefined;
+
+  if (message.metadata?._async) {
+    void engine.receiveMessage(message.content, channelContext);
+    const formatted = await channel.format({
+      content: '',
+      metadata: message.metadata,
+    });
+    return c.json(formatted);
+  }
+
+  const result = await engine.receiveMessage(message.content, channelContext);
   const formatted = await channel.format({
     content: result.content ?? '',
     metadata: message.metadata,
