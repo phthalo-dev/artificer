@@ -157,7 +157,17 @@ export class Engine implements EngineApi {
   }
 
   async initializeTraces(): Promise<void> {
-    await this.traceRecorder.backfill(await this.store.listWorkstreams());
+    const workstreams = await this.store.listWorkstreams();
+    await this.traceRecorder.backfill(workstreams);
+    await Promise.all(
+      workstreams.map(async (workstream) => {
+        if (workstream.traceId) return;
+        await this.store.persistTraceId(
+          workstream.id,
+          `trace_${workstream.id}`,
+        );
+      }),
+    );
   }
 
   async recordTraceEvent(event: TraceMutation): Promise<void> {
@@ -601,13 +611,18 @@ export class Engine implements EngineApi {
     });
     this.emit({ kind: 'workstream', at: ws.createdAt, data: ws });
     if (input.originMessageId) {
+      const originMessage = await this.store.getMessage(input.originMessageId);
       await this.recordTraceEvent({
         workstreamId: ws.id,
         traceId: ws.traceId,
         kind: 'message',
         sourceId: input.originMessageId,
+        at: originMessage?.createdAt,
         actor: { kind: 'user' },
-        data: { direction: 'inbound', messageId: input.originMessageId },
+        data: {
+          direction: 'inbound',
+          content: originMessage?.content ?? ws.goal,
+        },
       });
     }
     void this.memoryService?.onCreated(ws);

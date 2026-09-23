@@ -180,11 +180,7 @@ export class Store {
 
   private async recordTrace(mutation: TraceMutation): Promise<void> {
     if (!this.traceHook) return;
-    try {
-      await this.traceHook(mutation);
-    } catch (error) {
-      console.error('[trace] failed to record mutation:', error);
-    }
+    await this.traceHook(mutation);
   }
 
   async init(): Promise<void> {
@@ -195,7 +191,6 @@ export class Store {
       ensureDir(this.layout.memoriesDir),
       ensureDir(this.layout.workspaceDir),
       ensureDir(this.layout.tracesDir),
-      ensureDir(this.layout.traceOutboxDir),
     ]);
   }
 
@@ -229,6 +224,11 @@ export class Store {
 
   async listMessages(): Promise<Message[]> {
     return listJson<Message>(this.layout.messagesDir);
+  }
+
+  async getMessage(id: string): Promise<Message | null> {
+    const messages = await this.listMessages();
+    return messages.find((message) => message.id === id) ?? null;
   }
 
   // --- Workstreams ---
@@ -297,9 +297,24 @@ export class Store {
       kind: 'workstream',
       sourceId: updated.id,
       at: updated.updatedAt,
-      data: { event: 'updated', workstream: updated },
+      data: {
+        event: 'updated',
+        patch,
+        status: updated.status,
+        updatedAt: updated.updatedAt,
+      },
     });
     return updated;
+  }
+
+  /** Persist a stable trace id without emitting a trace mutation. */
+  async persistTraceId(workstreamId: string, traceId: string): Promise<void> {
+    const existing = await this.getWorkstream(workstreamId);
+    if (!existing || existing.traceId) return;
+    await writeJson(this.layout.workstreamFile(workstreamId), {
+      ...existing,
+      traceId,
+    });
   }
 
   async listWorkstreams(): Promise<Workstream[]> {

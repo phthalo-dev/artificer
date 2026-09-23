@@ -146,6 +146,40 @@ test('backfills an existing workstream with a deterministic initial event', asyn
   assert.equal((await recorder.get('trace_ws_test'))?.eventCount, 1);
 });
 
+test('record repairs stale metadata before assigning the next sequence', async () => {
+  const { layout, recorder } = await makeRecorder();
+  await recorder.ensureForWorkstream(workstream());
+  await recorder.record({
+    workstreamId: 'ws_test',
+    traceId: 'trace_test',
+    kind: 'workstream',
+    data: { event: 'one' },
+  });
+
+  const traceFile = layout.traceFile('trace_test');
+  const trace = JSON.parse(await fs.readFile(traceFile, 'utf8')) as {
+    eventCount: number;
+    lastSequence: number;
+  };
+  trace.eventCount = 0;
+  trace.lastSequence = 0;
+  await fs.writeFile(traceFile, JSON.stringify(trace), 'utf8');
+
+  const next = await recorder.record({
+    workstreamId: 'ws_test',
+    traceId: 'trace_test',
+    kind: 'workstream',
+    data: { event: 'two' },
+  });
+  assert.equal(next?.sequence, 2);
+
+  const events = await recorder.listEvents('trace_test', { limit: 10 });
+  assert.deepEqual(
+    events.map((event) => event.sequence),
+    [1, 2],
+  );
+});
+
 test('reconcile repairs trace counters after an interrupted metadata write', async () => {
   const { layout, recorder } = await makeRecorder();
   await recorder.ensureForWorkstream(workstream());
@@ -168,4 +202,18 @@ test('reconcile repairs trace counters after an interrupted metadata write', asy
   const repaired = await recorder.reconcile('trace_test');
   assert.equal(repaired?.eventCount, 1);
   assert.equal(repaired?.lastSequence, 1);
+});
+
+test('calls TraceSink.ensureTrace when creating a new trace record', async () => {
+  const { layout } = await makeRecorder();
+  let ensured = false;
+  const sinkRecorder = new TraceRecorder(layout, 'test-agent', {
+    ensureTrace: async () => {
+      ensured = true;
+      return { externalId: 'ext_1' };
+    },
+    appendEvents: async () => {},
+  });
+  await sinkRecorder.ensureForWorkstream(workstream());
+  assert.equal(ensured, true);
 });

@@ -373,6 +373,32 @@ test('Engine creates an identity memory when a workstream is started', async () 
   assert.ok(ws!.content.includes('Do something useful'));
 });
 
+test('createDirectWorkstream records durable trace events end-to-end', async () => {
+  const { engine } = await buildApp();
+  await engine.initializeTraces();
+  const { workstream } = await engine.createDirectWorkstream({
+    title: 'Traced work',
+    goal: 'Ship the feature',
+    autostart: false,
+  });
+
+  const traceId = workstream.traceId!;
+  const trace = await engine.traceRecorder.get(traceId);
+  assert.ok(trace);
+  const events = await engine.traceRecorder.listEvents(traceId, { limit: 50 });
+  assert.ok(
+    events.some(
+      (event) => event.kind === 'workstream' && event.data.event === 'created',
+    ),
+  );
+  assert.ok(
+    events.some(
+      (event) =>
+        event.kind === 'message' && event.data.content === 'Ship the feature',
+    ),
+  );
+});
+
 test('trace endpoints expose bounded durable workstream history', async () => {
   const { engine, store } = await buildApp();
   const workstream = await store.createWorkstream({
