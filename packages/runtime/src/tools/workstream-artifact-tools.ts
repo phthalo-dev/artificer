@@ -62,7 +62,10 @@ export function createWorkstreamArtifactTools(ctx: ToolContext): ToolDef[] {
       inputSchema: {
         type: 'object',
         properties: {
-          key: { type: 'string', description: 'Artifact key, e.g. plan or report.' },
+          key: {
+            type: 'string',
+            description: 'Artifact key, e.g. plan or report.',
+          },
           workstreamId: {
             type: 'string',
             description: 'Workstream id. Defaults to the current workstream.',
@@ -89,7 +92,8 @@ export function createWorkstreamArtifactTools(ctx: ToolContext): ToolDef[] {
           key: { type: 'string', description: 'Artifact key.' },
           version: {
             type: 'string',
-            description: 'Version id, e.g. v1. Defaults to the current version.',
+            description:
+              'Version id, e.g. v1. Defaults to the current version.',
           },
           limit: {
             type: 'number',
@@ -125,9 +129,7 @@ export function createWorkstreamArtifactTools(ctx: ToolContext): ToolDef[] {
           contentType.includes('markdown')
             ? content.toString('utf8')
             : `[binary ${content.byteLength} bytes, sha256 in metadata]`;
-        return truncated
-          ? `${text}\n\n[truncated at ${limit} bytes]`
-          : text;
+        return truncated ? `${text}\n\n[truncated at ${limit} bytes]` : text;
       },
     },
     {
@@ -195,12 +197,16 @@ export function createWorkstreamArtifactTools(ctx: ToolContext): ToolDef[] {
         const wsId = workstreamId(input);
         if (!wsId) return 'Error: no workstream specified.';
         try {
-          const { version } = await artifacts.createVersion(wsId, String(input.key), {
-            content: String(input.content),
-            contentType: input.contentType as string | undefined,
-            idempotencyKey: input.idempotencyKey as string | undefined,
-            createdByRunId: run.id,
-          });
+          const { version } = await artifacts.createVersion(
+            wsId,
+            String(input.key),
+            {
+              content: String(input.content),
+              contentType: input.contentType as string | undefined,
+              idempotencyKey: input.idempotencyKey as string | undefined,
+              createdByRunId: run.id,
+            },
+          );
           return `Version ${version.version} uploaded (${version.byteSize} bytes, sha256 ${version.sha256.slice(0, 12)}…).`;
         } catch (err) {
           return `Error: ${err instanceof Error ? err.message : String(err)}`;

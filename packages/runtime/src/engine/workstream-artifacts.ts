@@ -181,45 +181,47 @@ export class WorkstreamArtifactService {
     workstreamId: string,
     input: CreateArtifactInput,
   ): Promise<WorkstreamArtifact> {
-    safeWorkstreamId(workstreamId);
-    validateArtifactKey(input.key);
-    const ws = await this.store.getWorkstream(workstreamId);
-    if (!ws) throw new Error('Workstream not found');
+    return withArtifactChain(workstreamId, input.key, async () => {
+      safeWorkstreamId(workstreamId);
+      validateArtifactKey(input.key);
+      const ws = await this.store.getWorkstream(workstreamId);
+      if (!ws) throw new Error('Workstream not found');
 
-    const existing = await this.get(workstreamId, input.key);
-    if (existing) {
-      throw new Error(`Artifact "${input.key}" already exists`);
-    }
+      const existing = await this.get(workstreamId, input.key);
+      if (existing) {
+        throw new Error(`Artifact "${input.key}" already exists`);
+      }
 
-    const ts = now();
-    const artifact: WorkstreamArtifact = {
-      schemaVersion: 1,
-      id: newId('art'),
-      workstreamId,
-      traceId: input.traceId ?? ws.traceId,
-      key: input.key,
-      name: input.name,
-      description: input.description,
-      contentType: input.contentType,
-      createdAt: ts,
-      updatedAt: ts,
-      approvalStatus: 'not_requested',
-      visibility: input.visibility ?? 'private',
-      versions: [],
-    };
+      const ts = now();
+      const artifact: WorkstreamArtifact = {
+        schemaVersion: 1,
+        id: newId('art'),
+        workstreamId,
+        traceId: input.traceId ?? ws.traceId,
+        key: input.key,
+        name: input.name,
+        description: input.description,
+        contentType: input.contentType,
+        createdAt: ts,
+        updatedAt: ts,
+        approvalStatus: 'not_requested',
+        visibility: input.visibility ?? 'private',
+        versions: [],
+      };
 
-    await ensureDir(this.layout().artifactDir(workstreamId, input.key));
-    await writeJsonAtomic(
-      this.layout().artifactFile(workstreamId, input.key),
-      artifact,
-    );
-    await this.recordTrace({
-      workstreamId,
-      kind: 'artifact',
-      sourceId: artifact.id,
-      data: { event: 'created', artifact: this.summary(artifact) },
+      await ensureDir(this.layout().artifactDir(workstreamId, input.key));
+      await writeJsonAtomic(
+        this.layout().artifactFile(workstreamId, input.key),
+        artifact,
+      );
+      await this.recordTrace({
+        workstreamId,
+        kind: 'artifact',
+        sourceId: artifact.id,
+        data: { event: 'created', artifact: this.summary(artifact) },
+      });
+      return artifact;
     });
-    return artifact;
   }
 
   async patch(
@@ -248,7 +250,10 @@ export class WorkstreamArtifactService {
     });
   }
 
-  async archive(workstreamId: string, key: string): Promise<WorkstreamArtifact> {
+  async archive(
+    workstreamId: string,
+    key: string,
+  ): Promise<WorkstreamArtifact> {
     return withArtifactChain(workstreamId, key, async () => {
       const artifact = await this.requireArtifact(workstreamId, key);
       if (artifact.archivedAt) return artifact;
@@ -268,7 +273,10 @@ export class WorkstreamArtifactService {
     });
   }
 
-  async restore(workstreamId: string, key: string): Promise<WorkstreamArtifact> {
+  async restore(
+    workstreamId: string,
+    key: string,
+  ): Promise<WorkstreamArtifact> {
     return withArtifactChain(workstreamId, key, async () => {
       const artifact = await this.requireArtifact(workstreamId, key);
       if (!artifact.archivedAt) return artifact;
@@ -292,7 +300,10 @@ export class WorkstreamArtifactService {
     workstreamId: string,
     key: string,
     input: CreateArtifactVersionInput,
-  ): Promise<{ artifact: WorkstreamArtifact; version: ArtifactVersionSummary }> {
+  ): Promise<{
+    artifact: WorkstreamArtifact;
+    version: ArtifactVersionSummary;
+  }> {
     return withArtifactChain(workstreamId, key, async () => {
       const artifact = await this.requireArtifact(workstreamId, key);
       if (artifact.archivedAt) {
@@ -315,11 +326,7 @@ export class WorkstreamArtifactService {
         versionId,
       );
       assertUnderRoot(this.artifactRoot(workstreamId, key), versionDir);
-      const contentPath = this.resolveContentPath(
-        workstreamId,
-        key,
-        versionId,
-      );
+      const contentPath = this.resolveContentPath(workstreamId, key, versionId);
       const versionFile = this.layout().artifactVersionFile(
         workstreamId,
         key,
@@ -438,7 +445,11 @@ export class WorkstreamArtifactService {
   ): Promise<WorkstreamArtifact> {
     return withArtifactChain(workstreamId, key, async () => {
       const artifact = await this.requireArtifact(workstreamId, key);
-      const versionRecord = await this.requireVersion(workstreamId, key, version);
+      const versionRecord = await this.requireVersion(
+        workstreamId,
+        key,
+        version,
+      );
       if (versionRecord.state !== 'ready' && versionRecord.state !== 'draft') {
         throw new Error('Only ready or draft versions can request approval');
       }
@@ -478,7 +489,11 @@ export class WorkstreamArtifactService {
   ): Promise<WorkstreamArtifact> {
     return withArtifactChain(workstreamId, key, async () => {
       const artifact = await this.requireArtifact(workstreamId, key);
-      const versionRecord = await this.requireVersion(workstreamId, key, version);
+      const versionRecord = await this.requireVersion(
+        workstreamId,
+        key,
+        version,
+      );
       if (versionRecord.state === 'rejected') {
         throw new Error('Cannot approve a rejected version');
       }
@@ -558,7 +573,11 @@ export class WorkstreamArtifactService {
       if (artifact.archivedAt) {
         throw new Error('Cannot release a version of an archived artifact');
       }
-      const versionRecord = await this.requireVersion(workstreamId, key, version);
+      const versionRecord = await this.requireVersion(
+        workstreamId,
+        key,
+        version,
+      );
       const approvalRequired =
         artifact.approvalStatus === 'pending' ||
         artifact.approvalStatus === 'approved' ||

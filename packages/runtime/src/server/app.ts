@@ -117,13 +117,14 @@ const createArtifactVersionSchema = z.object({
   content: z.string(),
   contentType: z.string().min(1).optional(),
   idempotencyKey: z.string().min(1).optional(),
-  metadata: z
-    .record(z.union([z.string(), z.number(), z.boolean()]))
-    .optional(),
+  metadata: z.record(z.union([z.string(), z.number(), z.boolean()])).optional(),
   sourcePath: z.string().optional(),
 });
 
-function artifactError(c: { json: (body: unknown, status?: number) => Response }, error: unknown) {
+function artifactError(
+  c: { json: (body: unknown, status?: number) => Response },
+  error: unknown,
+) {
   const message = error instanceof Error ? error.message : String(error);
   const status =
     message.includes('not found') || message.includes('Workstream not found')
@@ -815,6 +816,25 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
           c.header('x-artificer-truncated', 'true');
         }
         return c.body(new Uint8Array(content));
+      } catch (error) {
+        return artifactError(c, error);
+      }
+    },
+  );
+
+  api.post(
+    '/workstreams/:id/artifacts/:key/versions/:version/request-approval',
+    async (c) => {
+      const workstreamId = c.req.param('id');
+      const key = c.req.param('key');
+      const version = c.req.param('version');
+      try {
+        const artifact = await engine.artifacts.requestApproval(
+          workstreamId,
+          key,
+          version,
+        );
+        return c.json({ artifact });
       } catch (error) {
         return artifactError(c, error);
       }
