@@ -84,6 +84,8 @@ export function toolsForRole(
           'search_workstream_artifacts',
           'get_workstream_artifact',
           'read_workstream_artifact_version',
+          'archive_workstream_artifact',
+          'restore_workstream_artifact',
         ]),
         ...byName(files, ['read_file', 'list_files']),
       ];
