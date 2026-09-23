@@ -346,6 +346,8 @@ export async function executeCall(
       data: { ...invocation, runId: run.id },
     });
     if (run.workstreamId) {
+      // Intentionally not awaited: tool callbacks must stay fast, and
+      // withTraceChain still serializes events for this trace id.
       void engine.recordTraceEvent({
         workstreamId: run.workstreamId,
         kind: 'tool',

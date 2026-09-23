@@ -32,10 +32,6 @@ export class Layout {
     return path.join(this.root, 'traces');
   }
 
-  get traceOutboxDir(): string {
-    return path.join(this.tracesDir, 'outbox');
-  }
-
   traceDir(traceId: string): string {
     return path.join(this.tracesDir, traceId);
   }
@@ -46,10 +42,6 @@ export class Layout {
 
   traceEventsFile(traceId: string): string {
     return path.join(this.traceDir(traceId), 'events.jsonl');
-  }
-
-  traceOutboxFile(eventId: string): string {
-    return path.join(this.traceOutboxDir, `${eventId}.json`);
   }
 
   messageFile(id: string, createdAt: string): string {

@@ -248,7 +248,8 @@ function updateRecordFromMutation(
   record: TraceRecord,
   mutation: TraceMutation,
 ): TraceRecord {
-  const source = (mutation.data?.workstream ?? mutation.data) as
+  const data = mutation.data;
+  const source = (data?.patch ?? data?.workstream ?? data) as
     | Record<string, unknown>
     | undefined;
   if (!source || typeof source !== 'object') return record;
@@ -310,10 +311,11 @@ export class TraceRecorder {
     const traceId = await this.resolveTraceId(mutation);
     const normalizedMutation = { ...mutation, traceId };
     return withTraceChain(traceId, async () => {
-      const trace = await this.ensureRecordLocked(
+      let trace = await this.ensureRecordLocked(
         traceId,
         recordFromMutation(normalizedMutation, this.agentName),
       );
+      trace = await this.syncCounters(traceId, trace);
       const event: TraceEvent = {
         schemaVersion: 1,
         id: newTraceEventId(),
@@ -355,6 +357,11 @@ export class TraceRecorder {
     });
   }
 
+  /**
+   * Ensures every workstream has a trace journal. For workstreams that
+   * predate tracing, this writes a single marker event — it does not replay
+   * historical messages, runs, or other artifacts.
+   */
   async backfill(workstreams: Workstream[]): Promise<void> {
     for (const workstream of workstreams) {
       const traceId = traceIdFor(workstream.id, workstream.traceId);
@@ -447,12 +454,7 @@ export class TraceRecorder {
 
     const records: TraceRecord[] = [];
     for (const entry of entries) {
-      if (
-        !entry.isDirectory() ||
-        entry.name.startsWith('.') ||
-        entry.name === 'outbox'
-      )
-        continue;
+      if (!entry.isDirectory() || entry.name.startsWith('.')) continue;
       if (!/^[A-Za-z0-9._-]+$/.test(entry.name)) continue;
       const record = await readJson<TraceRecord>(
         this.layout.traceFile(entry.name),
@@ -539,7 +541,34 @@ export class TraceRecorder {
     if (existing) return existing;
     await ensureDir(this.layout.traceDir(traceId));
     await writeJsonAtomic(this.layout.traceFile(traceId), fallback);
+    if (this.sink) {
+      try {
+        await this.sink.ensureTrace(fallback);
+      } catch (error) {
+        console.error('[trace] sink ensure failed:', error);
+      }
+    }
     return fallback;
+  }
+
+  private async syncCounters(
+    traceId: string,
+    trace: TraceRecord,
+  ): Promise<TraceRecord> {
+    const stats = await this.scanEvents(traceId);
+    if (
+      trace.eventCount === stats.count &&
+      trace.lastSequence === stats.lastSequence
+    ) {
+      return trace;
+    }
+    const repaired = {
+      ...trace,
+      eventCount: stats.count,
+      lastSequence: stats.lastSequence,
+    };
+    await writeJsonAtomic(this.layout.traceFile(traceId), repaired);
+    return repaired;
   }
 
   private async scanEvents(
