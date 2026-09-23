@@ -443,6 +443,64 @@ test('trace endpoints expose bounded durable workstream history', async () => {
   );
 });
 
+test('artifact endpoints manage versioned workstream deliverables', async () => {
+  const { engine, store } = await buildApp();
+  await engine.initializeTraces();
+  const workstream = await store.createWorkstream({
+    title: 'Artifact work',
+    goal: 'Store versioned deliverables',
+  });
+  const app = createApp(engine);
+  const base = `/api/workstreams/${workstream.id}/artifacts`;
+
+  const createRes = await app.request(base, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      key: 'report',
+      name: 'Final report',
+      contentType: 'text/markdown',
+    }),
+  });
+  assert.equal(createRes.status, 201);
+
+  const versionRes = await app.request(`${base}/report/versions`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({ content: '# Report\n\nShipped.' }),
+  });
+  assert.equal(versionRes.status, 201);
+  const versionBody = (await versionRes.json()) as {
+    version: { version: string; sha256: string };
+  };
+  assert.equal(versionBody.version.version, 'v1');
+
+  const contentRes = await app.request(
+    `${base}/report/versions/v1/content`,
+  );
+  assert.equal(contentRes.status, 200);
+  assert.match(await contentRes.text(), /Shipped/);
+
+  const releaseRes = await app.request(
+    `${base}/report/versions/v1/release`,
+    { method: 'POST' },
+  );
+  assert.equal(releaseRes.status, 200);
+  const released = (await releaseRes.json()) as {
+    artifact: { currentVersion: string };
+  };
+  assert.equal(released.artifact.currentVersion, 'v1');
+
+  const listRes = await app.request(base);
+  assert.equal(listRes.status, 200);
+  const listBody = (await listRes.json()) as {
+    artifacts: Array<{ key: string; versionCount?: number; versions: unknown[] }>;
+  };
+  assert.equal(listBody.artifacts.length, 1);
+  assert.equal(listBody.artifacts[0]?.key, 'report');
+  assert.equal(listBody.artifacts[0]?.versions.length, 1);
+});
+
 test('workstream receipt endpoint returns structured and markdown formats', async () => {
   const { engine, store } = await buildApp();
   await engine.initializeTraces();
