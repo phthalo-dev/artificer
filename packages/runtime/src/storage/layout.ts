@@ -60,6 +60,14 @@ export class Layout {
     return path.join(this.workstreamDir(id), 'plan.md');
   }
 
+  receiptFile(workstreamId: string): string {
+    return path.join(this.workstreamDir(workstreamId), 'receipt.json');
+  }
+
+  receiptMarkdownFile(workstreamId: string): string {
+    return path.join(this.workstreamDir(workstreamId), 'receipt.md');
+  }
+
   tasksDir(workstreamId: string): string {
     return path.join(this.workstreamDir(workstreamId), 'tasks');
   }

@@ -65,6 +65,7 @@ export type WorkstreamStatus =
 
 export interface Workstream {
   id: string;
+  traceId?: string;
   title: string;
   goal: string;
   status: WorkstreamStatus;
@@ -186,6 +187,106 @@ export interface WorkstreamProgress {
   consecutiveFailedRuns: RetryCounter;
   plannerAttempts: RetryCounter;
   totalRuns: RetryCounter;
+}
+
+export interface ReceiptStep {
+  id: string;
+  order: number;
+  role: string;
+  label: string;
+  status: 'pending' | 'running' | 'done' | 'failed' | 'skipped';
+  summary?: string;
+  runIds: string[];
+  taskIds: string[];
+  startedAt?: string;
+  finishedAt?: string;
+}
+
+export interface ReceiptChanges {
+  repositoryUrl?: string;
+  baseCommit?: string;
+  headCommit?: string;
+  branch?: string;
+  files: string[];
+  commits: string[];
+  pullRequestUrl?: string;
+}
+
+export interface ReceiptValidation {
+  label: string;
+  command?: string;
+  status: 'passed' | 'failed' | 'skipped' | 'unknown';
+  summary?: string;
+  runId?: string;
+}
+
+export interface ReceiptReview {
+  id: string;
+  stage?: 'plan' | 'work';
+  target: string;
+  approved: boolean;
+  severity?: 'critical' | 'important' | 'minor' | 'none';
+  summary: string;
+  sourceReviewId: string;
+}
+
+export interface ReceiptFinding {
+  id: string;
+  role: string;
+  file?: string;
+  summary: string;
+  sourceFindingId: string;
+}
+
+export interface ReceiptUsage {
+  runCount: number;
+  inputTokens: number;
+  outputTokens: number;
+  modelRequests: number;
+  estimatedCostDollars?: number;
+  durationMs?: number;
+}
+
+export interface ReceiptLinks {
+  localUrl: string;
+  externalUrl?: string;
+  artifactUrls?: string[];
+}
+
+export interface ReceiptProvenance {
+  generatedFromTraceSequence?: number;
+  generatedByRunId?: string;
+  sourceUpdatedAt: string;
+  redactionPolicyVersion: string;
+}
+
+export interface WorkstreamReceipt {
+  schemaVersion: 1;
+  id: string;
+  workstreamId: string;
+  traceId?: string;
+  title: string;
+  goal: string;
+  status: WorkstreamStatus;
+  summary: string;
+  nextAction?: string;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  steps: ReceiptStep[];
+  changes: ReceiptChanges;
+  validation: ReceiptValidation[];
+  reviews: ReceiptReview[];
+  findings: ReceiptFinding[];
+  usage: ReceiptUsage;
+  links: ReceiptLinks;
+  provenance: ReceiptProvenance;
+}
+
+export interface WorkstreamReceiptResponse {
+  receipt: WorkstreamReceipt;
+  markdown: string;
 }
 
 export interface WorkstreamDetail {

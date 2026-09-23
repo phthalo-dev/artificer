@@ -4,9 +4,19 @@ export type RoleName =
   | 'planner'
   | 'reviewer'
   | 'worker'
-  | 'librarian';
+  | 'librarian'
+  | 'receipt';
 
 export type MessageDirection = 'inbound' | 'outbound';
+
+export interface MessageChannelContext {
+  name: string;
+  metadata: Record<string, unknown>;
+  /** When true, terminal replies include the full receipt markdown. */
+  includeFullReceipt?: boolean;
+  /** Original inbound text, used to detect "full receipt" requests. */
+  originContent?: string;
+}
 
 export interface Message {
   id: string;
@@ -15,6 +25,8 @@ export interface Message {
   createdAt: string;
   /** Set when the message is associated with a specific workstream. */
   workstreamId?: string;
+  /** Present when the message arrived through a channel adapter. */
+  channelContext?: MessageChannelContext;
 }
 
 export type WorkstreamStatus =
@@ -50,6 +62,8 @@ export interface Workstream {
    * since correctness is graded from the local patch, never a live push.
    */
   submitPr?: boolean;
+  /** Channel to deliver async replies for work started from Slack/Discord. */
+  channelContext?: MessageChannelContext;
   createdAt: string;
   updatedAt: string;
 }

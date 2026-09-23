@@ -26,6 +26,7 @@ describe('slackChannel', () => {
     assert.equal(msg.content, 'Hey, can you fix the auth bug?');
     assert.equal(msg.metadata?.interaction, 'dm');
     assert.equal(msg.metadata?.channelId, 'D123ABC');
+    assert.equal(msg.metadata?._async, true);
   });
 
   it('classifies an @mention as interaction type "mention"', async () => {

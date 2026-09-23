@@ -23,6 +23,7 @@ export const DEFAULT_ROLE_TIER: Record<RoleName, ModelTier> = {
   reviewer: 'low',
   worker: 'medium',
   librarian: 'low',
+  receipt: 'low',
 };
 
 export function isModelTier(value: unknown): value is ModelTier {

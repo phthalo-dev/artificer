@@ -43,16 +43,20 @@ export function slackChannel(): ArtificerChannel {
 
       const interaction = classifyInteraction(event);
 
+      const content = (event.text as string) ?? '';
       return {
-        content: (event.text as string) ?? '',
+        content,
         metadata: {
           channel: 'slack',
+          _async: true,
           interaction,
           channelId: event.channel,
           userId: event.user,
           threadTs: event.thread_ts ?? event.ts,
           messageTs: event.ts,
           channelType: event.channel_type,
+          includeFullReceipt: /\bfull\s+receipt\b/i.test(content),
+          originContent: content,
         },
       };
     },

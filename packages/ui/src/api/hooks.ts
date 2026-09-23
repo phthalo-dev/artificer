@@ -19,6 +19,7 @@ import type {
   UsageOverview,
   Workstream,
   WorkstreamDetail,
+  WorkstreamReceiptResponse,
 } from './types';
 
 export function useRuntimeState() {
@@ -66,6 +67,16 @@ export function useWorkstream(id: string | undefined) {
     queryKey: ['workstream', id],
     queryFn: () => api.get<WorkstreamDetail>(`/workstreams/${id}`),
     refetchInterval: 2500,
+    enabled: Boolean(id),
+  });
+}
+
+export function useWorkstreamReceipt(id: string | undefined) {
+  return useQuery({
+    queryKey: ['workstream-receipt', id],
+    queryFn: () =>
+      api.get<WorkstreamReceiptResponse>(`/workstreams/${id}/receipt`),
+    refetchInterval: 3000,
     enabled: Boolean(id),
   });
 }

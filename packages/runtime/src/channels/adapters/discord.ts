@@ -43,12 +43,15 @@ export function discordChannel(): ArtificerChannel {
           content,
           metadata: {
             channel: 'discord',
+            _async: true,
             channelId: payload.channel_id,
             userId: user?.id,
             username: user?.username,
             interactionToken: payload.token,
             interactionId: payload.id,
             command: data?.name,
+            includeFullReceipt: /\bfull\s+receipt\b/i.test(content),
+            originContent: content,
           },
         };
       }

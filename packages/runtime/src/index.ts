@@ -22,6 +22,21 @@ export type { ModelPreset } from './engine/presets.js';
 export { Store } from './storage/store.js';
 export { TraceRecorder } from './storage/trace-recorder.js';
 export type { TraceSink } from './storage/trace-recorder.js';
+export { WorkstreamReceiptService } from './engine/workstream-receipt.js';
+export { buildReceiptSummaryTask } from './engine/workstream-receipt.js';
+export { formatReceiptForChannel } from './channels/receipt-format.js';
+export type {
+  ReceiptChanges,
+  ReceiptFinding,
+  ReceiptLinks,
+  ReceiptProvenance,
+  ReceiptReview,
+  ReceiptStep,
+  ReceiptUsage,
+  ReceiptValidation,
+  WorkstreamReceipt,
+  WorkstreamReceiptResult,
+} from './engine/workstream-receipt.js';
 export { createApp } from './server/app.js';
 export type * from './storage/types.js';
 export { defineTool } from './api/define-tool.js';

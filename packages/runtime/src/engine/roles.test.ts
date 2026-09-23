@@ -87,6 +87,13 @@ test('planner also queries topic memories beyond preferences', () => {
   );
 });
 
+test('receipt summarizer stays bounded and fact-based', () => {
+  const system = getRole('receipt').system('TestAgent');
+  assert.match(system, /2-4 sentences/i);
+  assert.match(system, /Never claim tests passed/i);
+  assert.match(system, /chain-of-thought/i);
+});
+
 test('librarian prefers claim/entity kinds and related links', () => {
   const system = getRole('librarian').system('TestAgent');
 
