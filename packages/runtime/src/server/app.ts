@@ -495,6 +495,99 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     return c.json({ workstreams });
   });
 
+  api.get('/traces', async (c) => {
+    const rawLimit = c.req.query('limit');
+    const parsedLimit = rawLimit === undefined ? 100 : Number(rawLimit);
+    if (
+      !Number.isInteger(parsedLimit) ||
+      parsedLimit < 1 ||
+      parsedLimit > 200
+    ) {
+      return c.json(
+        { error: 'limit must be an integer between 1 and 200' },
+        400,
+      );
+    }
+    const traces = await engine.traceRecorder.list({ limit: parsedLimit });
+    return c.json({ traces });
+  });
+
+  api.get('/traces/:id', async (c) => {
+    try {
+      const trace = await engine.traceRecorder.get(c.req.param('id'));
+      if (!trace) return c.json({ error: 'not found' }, 404);
+      return c.json({ trace });
+    } catch (error) {
+      return c.json(
+        { error: error instanceof Error ? error.message : String(error) },
+        400,
+      );
+    }
+  });
+
+  api.get('/traces/:id/events', async (c) => {
+    const rawOffset = c.req.query('offset');
+    const rawLimit = c.req.query('limit');
+    const offset = rawOffset === undefined ? 0 : Number(rawOffset);
+    const limit = rawLimit === undefined ? 100 : Number(rawLimit);
+    if (
+      !Number.isInteger(offset) ||
+      offset < 0 ||
+      !Number.isInteger(limit) ||
+      limit < 1 ||
+      limit > 200
+    ) {
+      return c.json(
+        {
+          error:
+            'offset must be >= 0 and limit must be an integer between 1 and 200',
+        },
+        400,
+      );
+    }
+    try {
+      const trace = await engine.traceRecorder.get(c.req.param('id'));
+      if (!trace) return c.json({ error: 'not found' }, 404);
+      const events = await engine.traceRecorder.listEvents(trace.id, {
+        offset,
+        limit,
+      });
+      return c.json({
+        trace,
+        events,
+        offset,
+        limit,
+        hasMore: trace.lastSequence > offset + events.length,
+      });
+    } catch (error) {
+      return c.json(
+        { error: error instanceof Error ? error.message : String(error) },
+        400,
+      );
+    }
+  });
+
+  api.get('/workstreams/:id/trace', async (c) => {
+    const workstream = await engine.store.getWorkstream(c.req.param('id'));
+    if (!workstream) return c.json({ error: 'not found' }, 404);
+    const traceId = workstream.traceId ?? `trace_${workstream.id}`;
+    let trace = await engine.traceRecorder.get(traceId);
+    if (!trace) {
+      await engine.traceRecorder.backfill([workstream]);
+      trace = await engine.traceRecorder.get(traceId);
+    }
+    if (!trace) return c.json({ error: 'trace not found' }, 404);
+    const events = await engine.traceRecorder.listEvents(trace.id, {
+      offset: 0,
+      limit: 200,
+    });
+    return c.json({
+      trace,
+      events,
+      hasMore: trace.lastSequence > events.length,
+    });
+  });
+
   api.get('/workstreams/:id', async (c) => {
     const id = c.req.param('id');
     const workstream = await engine.store.getWorkstream(id);
