@@ -20,6 +20,8 @@ export {
 } from './engine/presets.js';
 export type { ModelPreset } from './engine/presets.js';
 export { Store } from './storage/store.js';
+export { TraceRecorder } from './storage/trace-recorder.js';
+export type { TraceSink } from './storage/trace-recorder.js';
 export { createApp } from './server/app.js';
 export type * from './storage/types.js';
 export { defineTool } from './api/define-tool.js';
@@ -98,6 +100,7 @@ export async function startRuntime(): Promise<void> {
     : undefined;
   await identity?.init();
   const engine = new Engine(config, store, undefined, undefined, identity);
+  await engine.initializeTraces();
   await engine.reconcileServices();
   const scheduleRunner = createScheduleRunnerForEngine(engine);
 

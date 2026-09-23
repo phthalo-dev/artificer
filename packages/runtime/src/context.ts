@@ -13,7 +13,12 @@ import type {
 } from './services/service-manager.js';
 import type { Store } from './storage/store.js';
 import type { IdentityStore } from './storage/identity-store.js';
-import type { RunRecord, ToolInvocation, Workstream } from './storage/types.js';
+import type {
+  RunRecord,
+  ToolInvocation,
+  TraceMutation,
+  Workstream,
+} from './storage/types.js';
 import type { PolicyRule } from './tools/tool-policy.js';
 import type { ToolPlan } from './tools/tool-plan.js';
 
@@ -66,6 +71,7 @@ export interface EngineApi {
   }): Promise<Workstream>;
   reply(content: string, workstreamId?: string): Promise<void>;
   emit(event: RuntimeEvent): void;
+  recordTraceEvent(event: TraceMutation): Promise<void>;
   listRoles(): string[];
   getProviderConfig(): ProviderConfigSnapshot;
   updateProviderConfig(update: ProviderConfigUpdate): Promise<string>;
