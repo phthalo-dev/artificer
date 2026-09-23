@@ -27,6 +27,8 @@ import {
   type Task,
   type Workstream,
   type WorkstreamStatus,
+  type TraceMutation,
+  type TraceMutationHandler,
 } from './types.js';
 
 function now(): string {
@@ -154,6 +156,7 @@ function normalizeFinding(
  */
 export class Store {
   readonly layout: Layout;
+  private traceHook?: TraceMutationHandler;
 
   /**
    * In-memory cache of the parsed history/index.json array. `Store` is the
@@ -171,6 +174,15 @@ export class Store {
     this.layout = new Layout(execDir);
   }
 
+  setTraceHook(hook?: TraceMutationHandler): void {
+    this.traceHook = hook;
+  }
+
+  private async recordTrace(mutation: TraceMutation): Promise<void> {
+    if (!this.traceHook) return;
+    await this.traceHook(mutation);
+  }
+
   async init(): Promise<void> {
     await Promise.all([
       ensureDir(this.layout.messagesDir),
@@ -178,6 +190,7 @@ export class Store {
       ensureDir(this.layout.runsDir),
       ensureDir(this.layout.memoriesDir),
       ensureDir(this.layout.workspaceDir),
+      ensureDir(this.layout.tracesDir),
     ]);
   }
 
@@ -191,11 +204,31 @@ export class Store {
       this.layout.messageFile(message.id, message.createdAt),
       message,
     );
+    if (message.workstreamId) {
+      await this.recordTrace({
+        workstreamId: message.workstreamId,
+        kind: 'message',
+        sourceId: message.id,
+        at: message.createdAt,
+        actor: {
+          kind: message.direction === 'inbound' ? 'user' : 'agent',
+        },
+        data: {
+          direction: message.direction,
+          content: message.content,
+        },
+      });
+    }
     return message;
   }
 
   async listMessages(): Promise<Message[]> {
     return listJson<Message>(this.layout.messagesDir);
+  }
+
+  async getMessage(id: string): Promise<Message | null> {
+    const messages = await this.listMessages();
+    return messages.find((message) => message.id === id) ?? null;
   }
 
   // --- Workstreams ---
@@ -212,6 +245,7 @@ export class Store {
     const ts = now();
     const workstream: Workstream = {
       id: newId('ws'),
+      traceId: newId('trace'),
       title: input.title,
       goal: input.goal,
       status: input.status ?? 'pending',
@@ -224,6 +258,14 @@ export class Store {
     };
     await writeJson(this.layout.workstreamFile(workstream.id), workstream);
     await ensureDir(this.layout.workstreamWorkspace(workstream.id));
+    await this.recordTrace({
+      workstreamId: workstream.id,
+      traceId: workstream.traceId,
+      kind: 'workstream',
+      sourceId: workstream.id,
+      at: workstream.createdAt,
+      data: { event: 'created', workstream },
+    });
     return workstream;
   }
 
@@ -249,7 +291,30 @@ export class Store {
     if (!existing) return null;
     const updated: Workstream = { ...existing, ...patch, updatedAt: now() };
     await writeJson(this.layout.workstreamFile(id), updated);
+    await this.recordTrace({
+      workstreamId: updated.id,
+      traceId: updated.traceId,
+      kind: 'workstream',
+      sourceId: updated.id,
+      at: updated.updatedAt,
+      data: {
+        event: 'updated',
+        patch,
+        status: updated.status,
+        updatedAt: updated.updatedAt,
+      },
+    });
     return updated;
+  }
+
+  /** Persist a stable trace id without emitting a trace mutation. */
+  async persistTraceId(workstreamId: string, traceId: string): Promise<void> {
+    const existing = await this.getWorkstream(workstreamId);
+    if (!existing || existing.traceId) return;
+    await writeJson(this.layout.workstreamFile(workstreamId), {
+      ...existing,
+      traceId,
+    });
   }
 
   async listWorkstreams(): Promise<Workstream[]> {
@@ -269,6 +334,15 @@ export class Store {
     const file = this.layout.planFile(workstreamId);
     await ensureDir(path.dirname(file));
     await fs.writeFile(file, content, 'utf8');
+    await this.recordTrace({
+      workstreamId,
+      kind: 'workstream',
+      sourceId: workstreamId,
+      data: {
+        event: 'plan_written',
+        content,
+      },
+    });
   }
 
   async readPlan(workstreamId: string): Promise<string | null> {
@@ -299,6 +373,14 @@ export class Store {
       updatedAt: ts,
     };
     await writeJson(this.layout.taskFile(task.workstreamId, task.id), task);
+    await this.recordTrace({
+      workstreamId: task.workstreamId,
+      kind: 'task',
+      sourceId: task.id,
+      taskId: task.id,
+      parentRunId: task.parentRunId,
+      data: { event: 'created', task },
+    });
     return task;
   }
 
@@ -312,6 +394,14 @@ export class Store {
     if (!existing) return null;
     const updated: Task = { ...existing, ...patch, updatedAt: now() };
     await writeJson(file, updated);
+    await this.recordTrace({
+      workstreamId: updated.workstreamId,
+      kind: 'task',
+      sourceId: updated.id,
+      taskId: updated.id,
+      parentRunId: updated.parentRunId,
+      data: { event: 'updated', task: updated },
+    });
     return updated;
   }
 
@@ -336,6 +426,12 @@ export class Store {
       this.layout.reviewFile(review.workstreamId, review.id),
       review,
     );
+    await this.recordTrace({
+      workstreamId: review.workstreamId,
+      kind: 'review',
+      sourceId: review.id,
+      data: { event: 'created', review },
+    });
     return review;
   }
 
@@ -358,6 +454,12 @@ export class Store {
       this.layout.findingFile(finding.workstreamId, finding.id),
       finding,
     );
+    await this.recordTrace({
+      workstreamId: finding.workstreamId,
+      kind: 'finding',
+      sourceId: finding.id,
+      data: { event: 'created', finding },
+    });
     return finding;
   }
 
@@ -403,6 +505,25 @@ export class Store {
       createdAt: now(),
     };
     await writeJson(this.layout.runFile(run.id), run);
+    if (run.workstreamId) {
+      await this.recordTrace({
+        workstreamId: run.workstreamId,
+        kind: 'run',
+        sourceId: run.id,
+        runId: run.id,
+        parentRunId: run.parentRunId,
+        taskId: run.taskId,
+        data: {
+          event: 'created',
+          id: run.id,
+          role: run.role,
+          task: run.task,
+          model: run.model,
+          status: run.status,
+          createdAt: run.createdAt,
+        },
+      });
+    }
     return run;
   }
 

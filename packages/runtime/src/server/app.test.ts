@@ -372,3 +372,73 @@ test('Engine creates an identity memory when a workstream is started', async () 
   assert.equal(ws!.title, 'Test workstream');
   assert.ok(ws!.content.includes('Do something useful'));
 });
+
+test('createDirectWorkstream records durable trace events end-to-end', async () => {
+  const { engine } = await buildApp();
+  await engine.initializeTraces();
+  const { workstream } = await engine.createDirectWorkstream({
+    title: 'Traced work',
+    goal: 'Ship the feature',
+    autostart: false,
+  });
+
+  const traceId = workstream.traceId!;
+  const trace = await engine.traceRecorder.get(traceId);
+  assert.ok(trace);
+  const events = await engine.traceRecorder.listEvents(traceId, { limit: 50 });
+  assert.ok(
+    events.some(
+      (event) => event.kind === 'workstream' && event.data.event === 'created',
+    ),
+  );
+  assert.ok(
+    events.some(
+      (event) =>
+        event.kind === 'message' && event.data.content === 'Ship the feature',
+    ),
+  );
+});
+
+test('trace endpoints expose bounded durable workstream history', async () => {
+  const { engine, store } = await buildApp();
+  const workstream = await store.createWorkstream({
+    title: 'Traceable work',
+    goal: 'Record the workstream history',
+  });
+  await store.writePlan(workstream.id, '# Plan\n\n1. Record events');
+  const app = createApp(engine);
+
+  const listRes = await app.request('/api/traces');
+  assert.equal(listRes.status, 200);
+  const listBody = (await listRes.json()) as {
+    traces: Array<{ id: string; workstreamId: string }>;
+  };
+  assert.equal(listBody.traces.length, 1);
+  assert.equal(listBody.traces[0]?.workstreamId, workstream.id);
+
+  const traceId = listBody.traces[0]!.id;
+  const eventsRes = await app.request(
+    `/api/traces/${traceId}/events?offset=0&limit=1`,
+  );
+  assert.equal(eventsRes.status, 200);
+  const eventsBody = (await eventsRes.json()) as {
+    events: Array<{ sequence: number }>;
+    hasMore: boolean;
+  };
+  assert.equal(eventsBody.events.length, 1);
+  assert.equal(eventsBody.events[0]?.sequence, 1);
+  assert.equal(eventsBody.hasMore, true);
+
+  const workstreamTraceRes = await app.request(
+    `/api/workstreams/${workstream.id}/trace`,
+  );
+  assert.equal(workstreamTraceRes.status, 200);
+  const workstreamTraceBody = (await workstreamTraceRes.json()) as {
+    trace: { id: string };
+    events: Array<{ kind: string }>;
+  };
+  assert.equal(workstreamTraceBody.trace.id, traceId);
+  assert.ok(
+    workstreamTraceBody.events.some((event) => event.kind === 'workstream'),
+  );
+});

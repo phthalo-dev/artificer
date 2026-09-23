@@ -345,6 +345,26 @@ export async function executeCall(
       at: invocation.at,
       data: { ...invocation, runId: run.id },
     });
+    if (run.workstreamId) {
+      // Intentionally not awaited: tool callbacks must stay fast, and
+      // withTraceChain still serializes events for this trace id.
+      void engine.recordTraceEvent({
+        workstreamId: run.workstreamId,
+        kind: 'tool',
+        sourceId: `${run.id}:tool:${run.toolCalls.length}`,
+        runId: run.id,
+        parentRunId: run.parentRunId,
+        taskId: run.taskId,
+        actor: { kind: 'role', role: run.role },
+        data: {
+          name: invocation.name,
+          at: invocation.at,
+          failed: Boolean(invocation.error),
+          error: invocation.error,
+          output: invocation.output,
+        },
+      });
+    }
     void store.saveRun(run);
   };
 
@@ -364,6 +384,24 @@ export async function executeCall(
   run.startedAt = new Date().toISOString();
   await store.saveRun(run);
   engine.emit({ kind: 'run', at: run.startedAt, data: { ...run } });
+  if (run.workstreamId) {
+    await engine.recordTraceEvent({
+      workstreamId: run.workstreamId,
+      kind: 'run',
+      sourceId: run.id,
+      runId: run.id,
+      parentRunId: run.parentRunId,
+      taskId: run.taskId,
+      actor: { kind: 'role', role: run.role },
+      data: {
+        event: 'started',
+        role: run.role,
+        task: run.task,
+        model: run.model,
+        startedAt: run.startedAt,
+      },
+    });
+  }
 
   try {
     const userMessage = await buildContext(
@@ -496,6 +534,26 @@ export async function executeCall(
     run.finishedAt = new Date().toISOString();
     await store.saveRun(run);
     engine.emit({ kind: 'run', at: run.finishedAt, data: { ...run } });
+    if (run.workstreamId) {
+      await engine.recordTraceEvent({
+        workstreamId: run.workstreamId,
+        kind: 'run',
+        sourceId: `${run.id}:finished`,
+        runId: run.id,
+        parentRunId: run.parentRunId,
+        taskId: run.taskId,
+        actor: { kind: 'role', role: run.role },
+        data: {
+          event: 'finished',
+          role: run.role,
+          status: run.status,
+          output: run.output,
+          usage: run.usage,
+          startedAt: run.startedAt,
+          finishedAt: run.finishedAt,
+        },
+      });
+    }
     return run;
   } catch (err) {
     run.status = 'failed';
@@ -504,6 +562,26 @@ export async function executeCall(
     console.error(`[run:${run.id}] ${run.role} failed:`, run.error);
     await store.saveRun(run);
     engine.emit({ kind: 'run', at: run.finishedAt, data: { ...run } });
+    if (run.workstreamId) {
+      await engine.recordTraceEvent({
+        workstreamId: run.workstreamId,
+        kind: 'run',
+        sourceId: `${run.id}:finished`,
+        runId: run.id,
+        parentRunId: run.parentRunId,
+        taskId: run.taskId,
+        actor: { kind: 'role', role: run.role },
+        data: {
+          event: 'finished',
+          role: run.role,
+          status: run.status,
+          error: run.error,
+          usage: run.usage,
+          startedAt: run.startedAt,
+          finishedAt: run.finishedAt,
+        },
+      });
+    }
     return run;
   }
 }

@@ -19,10 +19,12 @@ const exec = promisify(execFile);
 import type { EngineApi, RuntimeEvent, SpawnCallInput } from '../context.js';
 import { resolveLanguageModel } from '../llm/provider.js';
 import { Store } from '../storage/store.js';
+import { TraceRecorder } from '../storage/trace-recorder.js';
 import type { IdentityStore } from '../storage/identity-store.js';
 import type {
   Message,
   RunRecord,
+  TraceMutation,
   Workstream,
   WorkstreamStatus,
 } from '../storage/types.js';
@@ -105,6 +107,7 @@ export class Engine implements EngineApi {
   readonly store: Store;
   readonly identity?: IdentityStore;
   readonly config: RuntimeConfig;
+  readonly traceRecorder: TraceRecorder;
   private readonly scheduler: Scheduler;
   private readonly events = new EventEmitter();
   private readonly active = new Map<string, ActiveRun>();
@@ -133,6 +136,8 @@ export class Engine implements EngineApi {
     this.config = config;
     this.store = store;
     this.identity = identity;
+    this.traceRecorder = new TraceRecorder(store.layout, config.agentName);
+    this.store.setTraceHook((mutation) => this.recordTraceEvent(mutation));
     this.memoryService = memoryService;
     this.registry = registry ?? new RoleRegistry();
     this.serviceManager = new ServiceManager(store, config);
@@ -149,6 +154,28 @@ export class Engine implements EngineApi {
 
   getQuotaSnapshot(): ReturnType<QuotaLedger['snapshot']> | undefined {
     return this.quotaLedger?.snapshot();
+  }
+
+  async initializeTraces(): Promise<void> {
+    const workstreams = await this.store.listWorkstreams();
+    await this.traceRecorder.backfill(workstreams);
+    await Promise.all(
+      workstreams.map(async (workstream) => {
+        if (workstream.traceId) return;
+        await this.store.persistTraceId(
+          workstream.id,
+          `trace_${workstream.id}`,
+        );
+      }),
+    );
+  }
+
+  async recordTraceEvent(event: TraceMutation): Promise<void> {
+    try {
+      await this.traceRecorder.record(event);
+    } catch (error) {
+      console.error('[trace] failed to persist event:', error);
+    }
   }
 
   attachScheduleRunner(runner: ScheduleRunner): void {
@@ -541,6 +568,14 @@ export class Engine implements EngineApi {
       status: 'pending',
     });
     this.emit({ kind: 'workstream', at: ws.createdAt, data: ws });
+    await this.recordTraceEvent({
+      workstreamId: ws.id,
+      traceId: ws.traceId,
+      kind: 'message',
+      sourceId: message.id,
+      actor: { kind: 'user' },
+      data: { direction: 'inbound', content: input.goal },
+    });
 
     void this.memoryService?.onCreated(ws);
     if (input.autostart !== false) {
@@ -575,6 +610,21 @@ export class Engine implements EngineApi {
       status: 'pending',
     });
     this.emit({ kind: 'workstream', at: ws.createdAt, data: ws });
+    if (input.originMessageId) {
+      const originMessage = await this.store.getMessage(input.originMessageId);
+      await this.recordTraceEvent({
+        workstreamId: ws.id,
+        traceId: ws.traceId,
+        kind: 'message',
+        sourceId: input.originMessageId,
+        at: originMessage?.createdAt,
+        actor: { kind: 'user' },
+        data: {
+          direction: 'inbound',
+          content: originMessage?.content ?? ws.goal,
+        },
+      });
+    }
     void this.memoryService?.onCreated(ws);
 
     await this.stepWorkstream(ws.id, input.originMessageId, input.parentRunId);

@@ -30,6 +30,8 @@ export type WorkstreamStatus =
 
 export interface Workstream {
   id: string;
+  /** Stable local trace identity for this workstream. */
+  traceId?: string;
   title: string;
   /** The original request / objective driving this workstream. */
   goal: string;
@@ -161,6 +163,79 @@ export interface RunRecord {
   startedAt?: string;
   finishedAt?: string;
 }
+
+export type TraceEventKind =
+  | 'message'
+  | 'workstream'
+  | 'task'
+  | 'run'
+  | 'tool'
+  | 'review'
+  | 'finding'
+  | 'approval'
+  | 'quota'
+  | 'receipt'
+  | 'artifact';
+
+export interface TraceRecord {
+  schemaVersion: 1;
+  id: string;
+  workstreamId: string;
+  originMessageId?: string;
+  agentName: string;
+  title: string;
+  goal?: string;
+  status: WorkstreamStatus;
+  summary?: string;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  repo?: {
+    remoteUrl?: string;
+    baseCommit?: string;
+    branch?: string;
+    headCommit?: string;
+  };
+  receiptId?: string;
+  eventCount: number;
+  lastSequence: number;
+  backfilled?: boolean;
+}
+
+export interface TraceEvent {
+  schemaVersion: 1;
+  id: string;
+  traceId: string;
+  sequence: number;
+  at: string;
+  kind: TraceEventKind;
+  sourceId?: string;
+  runId?: string;
+  parentRunId?: string;
+  taskId?: string;
+  actor?: {
+    kind: 'user' | 'agent' | 'role' | 'system';
+    id?: string;
+    role?: string;
+  };
+  data: Record<string, unknown>;
+}
+
+export interface TraceMutation {
+  workstreamId: string;
+  traceId?: string;
+  at?: string;
+  kind: TraceEventKind;
+  sourceId?: string;
+  runId?: string;
+  parentRunId?: string;
+  taskId?: string;
+  actor?: TraceEvent['actor'];
+  data?: Record<string, unknown>;
+}
+
+export type TraceMutationHandler = (mutation: TraceMutation) => Promise<void>;
 
 /** Typed edge between memories (frontmatter `related`). */
 export type MemoryEdgeType =
