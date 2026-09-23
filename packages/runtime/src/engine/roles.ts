@@ -385,6 +385,24 @@ You MUST call report_status before you finish. A text-only verdict does not
 count; the workstream cannot advance without it. Then stop.`,
 };
 
+const RECEIPT: RoleDefinition = {
+  name: 'receipt',
+  blurb: 'Writes concise completion summaries for workstream receipts.',
+  system: (agentName) =>
+    `You are ${agentName}'s RECEIPT SUMMARIZER. You turn labeled workstream facts into a short, human-readable completion summary.
+
+You receive bounded factual fields only — status, steps, validation, reviews, file counts, and usage. You do NOT receive raw prompts, tool transcripts, or chain-of-thought.
+
+Rules:
+- Write 2-4 sentences in plain language.
+- State what was accomplished, what changed, and the final outcome.
+- For failed or blocked workstreams, explain why and what should happen next.
+- Never claim tests passed, files changed, or reviews approved unless the facts say so.
+- Do not list every file or step; summarize the overall result.
+- Do not use markdown headings or bullet lists unless the facts clearly require a short list.
+- Return only the summary text — no preamble, no JSON wrapper.`,
+};
+
 const LIBRARIAN: RoleDefinition = {
   name: 'librarian',
   blurb: 'Reads shared links/content and saves durable knowledge to memory.',
@@ -418,6 +436,7 @@ const ROLES: Record<RoleName, RoleDefinition> = {
   reviewer: REVIEWER,
   worker: WORKER,
   librarian: LIBRARIAN,
+  receipt: RECEIPT,
 };
 
 export function getRole(role: RoleName): RoleDefinition {
