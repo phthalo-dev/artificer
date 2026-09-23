@@ -16,6 +16,7 @@ const ROLES: RoleName[] = [
   'reviewer',
   'worker',
   'librarian',
+  'receipt',
 ];
 
 /** Cost-first async defaults: cheap coordination, medium workers, high for escalation only. */
@@ -26,6 +27,7 @@ const ASYNC_ECONOMY_ROLES: Record<RoleName, ModelTier> = {
   reviewer: 'low',
   worker: 'medium',
   librarian: 'low',
+  receipt: 'low',
 };
 
 export const MODEL_PRESETS: ModelPreset[] = [
@@ -82,6 +84,7 @@ export const MODEL_PRESETS: ModelPreset[] = [
       reviewer: 'medium',
       worker: 'high',
       librarian: 'medium',
+      receipt: 'low',
     },
   },
   {
@@ -101,6 +104,7 @@ export const MODEL_PRESETS: ModelPreset[] = [
       reviewer: 'medium',
       worker: 'high',
       librarian: 'medium',
+      receipt: 'low',
     },
   },
   // --- OpenCode Go (LLM_BASE_URL=https://opencode.ai/zen/go/v1) ---

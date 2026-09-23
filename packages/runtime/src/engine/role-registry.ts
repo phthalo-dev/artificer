@@ -9,6 +9,7 @@ const BUILT_IN_NAMES = [
   'worker',
   'reviewer',
   'librarian',
+  'receipt',
 ] as const;
 
 export class RoleRegistry {
