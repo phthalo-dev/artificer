@@ -1,9 +1,6 @@
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import {
-  formatReceiptForChannel,
-  wantsFullReceipt,
-} from './receipt-format.js';
+import { formatReceiptForChannel, wantsFullReceipt } from './receipt-format.js';
 import type { WorkstreamReceipt } from '../engine/workstream-receipt.js';
 
 const baseReceipt: WorkstreamReceipt = {
@@ -88,7 +85,10 @@ describe('formatReceiptForChannel', () => {
   });
 
   it('detects full receipt requests in origin content', () => {
-    assert.equal(wantsFullReceipt('please send the full receipt when done'), true);
+    assert.equal(
+      wantsFullReceipt('please send the full receipt when done'),
+      true,
+    );
     assert.equal(wantsFullReceipt('fix the auth bug'), false);
   });
 });

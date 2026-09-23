@@ -591,6 +591,7 @@ export const mockModelConfig: ModelConfig = {
     reviewer: 'low',
     worker: 'medium',
     librarian: 'low',
+    receipt: 'low',
   },
   activePresetId: 'balanced',
   presets: [
@@ -610,6 +611,7 @@ export const mockModelConfig: ModelConfig = {
         reviewer: 'low',
         worker: 'medium',
         librarian: 'low',
+    receipt: 'low',
       },
     },
     {
@@ -628,6 +630,7 @@ export const mockModelConfig: ModelConfig = {
         reviewer: 'low',
         worker: 'medium',
         librarian: 'low',
+    receipt: 'low',
       },
     },
   ],

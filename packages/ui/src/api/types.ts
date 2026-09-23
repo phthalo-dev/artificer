@@ -6,7 +6,8 @@ export type RoleName =
   | 'planner'
   | 'reviewer'
   | 'worker'
-  | 'librarian';
+  | 'librarian'
+  | 'receipt';
 
 export type MemoryKind =
   | 'note'

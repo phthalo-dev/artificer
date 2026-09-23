@@ -142,7 +142,11 @@ export class Engine implements EngineApi {
     this.store = store;
     this.identity = identity;
     this.traceRecorder = new TraceRecorder(store.layout, config.agentName);
-    this.receipts = new WorkstreamReceiptService(store, this.traceRecorder);
+    this.receipts = new WorkstreamReceiptService(
+      store,
+      this.traceRecorder,
+      config.publicUrl,
+    );
     this.store.setTraceHook((mutation) => this.recordTraceEvent(mutation));
     this.memoryService = memoryService;
     this.registry = registry ?? new RoleRegistry();
@@ -690,7 +694,7 @@ export class Engine implements EngineApi {
   }
 
   private async buildCompletionReply(ws: Workstream): Promise<string> {
-    const result = await this.receipts.refresh(ws.id);
+    const result = await this.receipts.ensureCurrent(ws.id);
     if (!result) {
       return ws.summary
         ? `Workstream "${ws.title}" is ${ws.status}.\n\n${ws.summary}`
@@ -1108,7 +1112,10 @@ export class Engine implements EngineApi {
         await this.emitWorkstream(workstreamId);
         const doneWs = await this.store.getWorkstream(workstreamId);
         if (doneWs) {
-          await this.reply(await this.buildCompletionReply(doneWs), workstreamId);
+          await this.reply(
+            await this.buildCompletionReply(doneWs),
+            workstreamId,
+          );
           void this.handleWorkstreamTerminal(doneWs);
         }
         return;
@@ -1217,7 +1224,10 @@ export class Engine implements EngineApi {
     await this.store.updateWorkstream(id, { status: 'cancelled' });
     await this.emitWorkstream(id);
     const updated = await this.store.getWorkstream(id);
-    if (updated) void this.handleWorkstreamTerminal(updated);
+    if (updated) {
+      await this.reply(await this.buildCompletionReply(updated), updated.id);
+      void this.handleWorkstreamTerminal(updated);
+    }
     return true;
   }
 
@@ -1297,10 +1307,17 @@ export class Engine implements EngineApi {
         );
         const ws = await this.store.getWorkstream(run.workstreamId);
         if (updated && ws?.channelContext) {
-          const followUp = `Updated summary:\n\n${updated.receipt.summary}`;
+          const followUp = formatReceiptForChannel(
+            updated.receipt,
+            updated.markdown,
+            ws.channelContext,
+          );
           void deliverChannelMessage(ws.channelContext, followUp).catch(
             (error) => {
-              console.error('[channel] failed to deliver receipt summary:', error);
+              console.error(
+                '[channel] failed to deliver receipt summary:',
+                error,
+              );
             },
           );
         }

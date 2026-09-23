@@ -17,11 +17,7 @@ import {
   color,
 } from '../ds';
 import { useParams } from 'react-router-dom';
-import {
-  useCancelWorkstream,
-  useUsage,
-  useWorkstream,
-} from '../api/hooks';
+import { useCancelWorkstream, useUsage, useWorkstream } from '../api/hooks';
 import type { ReviewSeverity, RunRecord, Workstream } from '../api/types';
 import {
   BenchTrajectory,
