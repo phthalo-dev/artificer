@@ -23,6 +23,7 @@ import { TraceRecorder } from '../storage/trace-recorder.js';
 import { deliverChannelMessage } from '../channels/delivery.js';
 import { formatReceiptForChannel } from '../channels/receipt-format.js';
 import { WorkstreamReceiptService } from './workstream-receipt.js';
+import { WorkstreamArtifactService } from './workstream-artifacts.js';
 import type { IdentityStore } from '../storage/identity-store.js';
 import type {
   Message,
@@ -113,6 +114,7 @@ export class Engine implements EngineApi {
   readonly config: RuntimeConfig;
   readonly traceRecorder: TraceRecorder;
   readonly receipts: WorkstreamReceiptService;
+  readonly artifacts: WorkstreamArtifactService;
   private readonly scheduler: Scheduler;
   private readonly events = new EventEmitter();
   private readonly active = new Map<string, ActiveRun>();
@@ -146,6 +148,9 @@ export class Engine implements EngineApi {
       store,
       this.traceRecorder,
       config.publicUrl,
+    );
+    this.artifacts = new WorkstreamArtifactService(store, (mutation) =>
+      this.recordTraceEvent(mutation),
     );
     this.store.setTraceHook((mutation) => this.recordTraceEvent(mutation));
     this.memoryService = memoryService;

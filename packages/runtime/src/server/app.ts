@@ -89,6 +89,54 @@ const startWorkstreamSchema = z.object({
   messageId: z.string().min(1),
 });
 
+const artifactKeySchema = z
+  .string()
+  .min(1)
+  .regex(/^[a-z0-9][a-z0-9._-]*$/, 'invalid artifact key');
+
+const createArtifactSchema = z.object({
+  key: artifactKeySchema,
+  name: z.string().min(1),
+  description: z.string().optional(),
+  contentType: z.string().min(1),
+  visibility: z.enum(['private', 'link', 'public']).optional(),
+});
+
+const patchArtifactSchema = z
+  .object({
+    name: z.string().min(1).optional(),
+    description: z.string().optional(),
+    contentType: z.string().min(1).optional(),
+    visibility: z.enum(['private', 'link', 'public']).optional(),
+  })
+  .refine((v) => v.name || v.description || v.contentType || v.visibility, {
+    message: 'provide at least one field to update',
+  });
+
+const createArtifactVersionSchema = z.object({
+  content: z.string(),
+  contentType: z.string().min(1).optional(),
+  idempotencyKey: z.string().min(1).optional(),
+  metadata: z
+    .record(z.union([z.string(), z.number(), z.boolean()]))
+    .optional(),
+  sourcePath: z.string().optional(),
+});
+
+function artifactError(c: { json: (body: unknown, status?: number) => Response }, error: unknown) {
+  const message = error instanceof Error ? error.message : String(error);
+  const status =
+    message.includes('not found') || message.includes('Workstream not found')
+      ? 404
+      : message.includes('already exists') ||
+          message.includes('Invalid') ||
+          message.includes('Cannot') ||
+          message.includes('must be')
+        ? 400
+        : 409;
+  return c.json({ error: message }, status);
+}
+
 const PROVIDER_LABEL: Record<LlmSdkPackage, string> = {
   '@ai-sdk/anthropic': 'Anthropic',
   '@ai-sdk/openai': 'OpenAI',
@@ -603,6 +651,232 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     }
     return c.json({ receipt: result.receipt, markdown: result.markdown });
   });
+
+  api.get('/workstreams/:id/artifacts', async (c) => {
+    const workstreamId = c.req.param('id');
+    const workstream = await engine.store.getWorkstream(workstreamId);
+    if (!workstream) return c.json({ error: 'not found' }, 404);
+    try {
+      const artifacts = await engine.artifacts.list(workstreamId);
+      return c.json({ artifacts });
+    } catch (error) {
+      return artifactError(c, error);
+    }
+  });
+
+  api.post('/workstreams/:id/artifacts', async (c) => {
+    const workstreamId = c.req.param('id');
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = createArtifactSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+    try {
+      const artifact = await engine.artifacts.create(workstreamId, parsed.data);
+      return c.json({ artifact }, 201);
+    } catch (error) {
+      return artifactError(c, error);
+    }
+  });
+
+  api.get('/workstreams/:id/artifacts/:key', async (c) => {
+    const workstreamId = c.req.param('id');
+    const key = c.req.param('key');
+    try {
+      const artifact = await engine.artifacts.get(workstreamId, key);
+      if (!artifact) return c.json({ error: 'not found' }, 404);
+      return c.json({ artifact });
+    } catch (error) {
+      return artifactError(c, error);
+    }
+  });
+
+  api.patch('/workstreams/:id/artifacts/:key', async (c) => {
+    const workstreamId = c.req.param('id');
+    const key = c.req.param('key');
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = patchArtifactSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+    try {
+      const artifact = await engine.artifacts.patch(
+        workstreamId,
+        key,
+        parsed.data,
+      );
+      return c.json({ artifact });
+    } catch (error) {
+      return artifactError(c, error);
+    }
+  });
+
+  api.post('/workstreams/:id/artifacts/:key/archive', async (c) => {
+    const workstreamId = c.req.param('id');
+    const key = c.req.param('key');
+    try {
+      const artifact = await engine.artifacts.archive(workstreamId, key);
+      return c.json({ artifact });
+    } catch (error) {
+      return artifactError(c, error);
+    }
+  });
+
+  api.post('/workstreams/:id/artifacts/:key/restore', async (c) => {
+    const workstreamId = c.req.param('id');
+    const key = c.req.param('key');
+    try {
+      const artifact = await engine.artifacts.restore(workstreamId, key);
+      return c.json({ artifact });
+    } catch (error) {
+      return artifactError(c, error);
+    }
+  });
+
+  api.get('/workstreams/:id/artifacts/:key/versions', async (c) => {
+    const workstreamId = c.req.param('id');
+    const key = c.req.param('key');
+    try {
+      const artifact = await engine.artifacts.get(workstreamId, key);
+      if (!artifact) return c.json({ error: 'not found' }, 404);
+      return c.json({ versions: artifact.versions });
+    } catch (error) {
+      return artifactError(c, error);
+    }
+  });
+
+  api.post('/workstreams/:id/artifacts/:key/versions', async (c) => {
+    const workstreamId = c.req.param('id');
+    const key = c.req.param('key');
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = createArtifactVersionSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+    try {
+      const result = await engine.artifacts.createVersion(workstreamId, key, {
+        content: parsed.data.content,
+        contentType: parsed.data.contentType,
+        idempotencyKey: parsed.data.idempotencyKey,
+        metadata: parsed.data.metadata,
+        sourcePath: parsed.data.sourcePath,
+      });
+      return c.json(result, 201);
+    } catch (error) {
+      return artifactError(c, error);
+    }
+  });
+
+  api.get('/workstreams/:id/artifacts/:key/versions/:version', async (c) => {
+    const workstreamId = c.req.param('id');
+    const key = c.req.param('key');
+    const version = c.req.param('version');
+    try {
+      const versionRecord = await engine.artifacts.getVersion(
+        workstreamId,
+        key,
+        version,
+      );
+      if (!versionRecord) return c.json({ error: 'not found' }, 404);
+      return c.json({ version: versionRecord });
+    } catch (error) {
+      return artifactError(c, error);
+    }
+  });
+
+  api.get(
+    '/workstreams/:id/artifacts/:key/versions/:version/content',
+    async (c) => {
+      const workstreamId = c.req.param('id');
+      const key = c.req.param('key');
+      const version = c.req.param('version');
+      const rawLimit = c.req.query('limit');
+      const limit =
+        rawLimit === undefined ? undefined : Number.parseInt(rawLimit, 10);
+      if (
+        limit !== undefined &&
+        (!Number.isInteger(limit) || limit < 1 || limit > 1_048_576)
+      ) {
+        return c.json(
+          { error: 'limit must be an integer between 1 and 1048576' },
+          400,
+        );
+      }
+      try {
+        const { content, contentType, truncated } =
+          await engine.artifacts.readVersionContent(
+            workstreamId,
+            key,
+            version,
+            limit,
+          );
+        c.header('content-type', contentType);
+        if (truncated) {
+          c.header('x-artificer-truncated', 'true');
+        }
+        return c.body(new Uint8Array(content));
+      } catch (error) {
+        return artifactError(c, error);
+      }
+    },
+  );
+
+  api.post(
+    '/workstreams/:id/artifacts/:key/versions/:version/approve',
+    async (c) => {
+      const workstreamId = c.req.param('id');
+      const key = c.req.param('key');
+      const version = c.req.param('version');
+      try {
+        const artifact = await engine.artifacts.approveVersion(
+          workstreamId,
+          key,
+          version,
+        );
+        return c.json({ artifact });
+      } catch (error) {
+        return artifactError(c, error);
+      }
+    },
+  );
+
+  api.post(
+    '/workstreams/:id/artifacts/:key/versions/:version/reject',
+    async (c) => {
+      const workstreamId = c.req.param('id');
+      const key = c.req.param('key');
+      const version = c.req.param('version');
+      try {
+        const artifact = await engine.artifacts.rejectVersion(
+          workstreamId,
+          key,
+          version,
+        );
+        return c.json({ artifact });
+      } catch (error) {
+        return artifactError(c, error);
+      }
+    },
+  );
+
+  api.post(
+    '/workstreams/:id/artifacts/:key/versions/:version/release',
+    async (c) => {
+      const workstreamId = c.req.param('id');
+      const key = c.req.param('key');
+      const version = c.req.param('version');
+      try {
+        const artifact = await engine.artifacts.releaseVersion(
+          workstreamId,
+          key,
+          version,
+        );
+        return c.json({ artifact });
+      } catch (error) {
+        return artifactError(c, error);
+      }
+    },
+  );
 
   api.get('/workstreams/:id', async (c) => {
     const id = c.req.param('id');
