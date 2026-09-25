@@ -11,6 +11,26 @@ export interface MockRequest {
 export interface MockResponse {
   status: number;
   body?: unknown;
+  contentType?: string;
+  rawBody?: string;
+}
+
+function workstreamRoute(pathname: string): {
+  id: string;
+  subpath: string | null;
+} | null {
+  const match = pathname.match(/^\/workstreams\/([^/]+)(?:\/(.*))?$/);
+  if (!match) return null;
+  return { id: match[1], subpath: match[2] ?? null };
+}
+
+function artifactRoute(subpath: string): {
+  key: string;
+  rest: string | null;
+} | null {
+  const match = subpath.match(/^artifacts\/([^/]+)(?:\/(.*))?$/);
+  if (!match) return null;
+  return { key: match[1], rest: match[2] ?? null };
 }
 
 export function handleMockRequest(req: MockRequest): MockResponse {
@@ -48,19 +68,111 @@ export function handleMockRequest(req: MockRequest): MockResponse {
     return { status: 200, body: { workstreams: mockStore.workstreams } };
   }
 
-  if (method === 'GET' && pathname.startsWith('/workstreams/')) {
-    const id = pathname.slice('/workstreams/'.length);
-    const detail = mockStore.workstreamDetails[id];
-    if (!detail) return { status: 404, body: { error: 'not found' } };
-    return { status: 200, body: detail };
-  }
+  const wsRoute = workstreamRoute(pathname);
+  if (wsRoute) {
+    const { id, subpath } = wsRoute;
 
-  if (method === 'POST' && pathname.endsWith('/cancel')) {
-    const id = pathname.slice('/workstreams/'.length, -'/cancel'.length);
-    const ok = mockStore.cancelWorkstream(id);
-    if (!ok)
-      return { status: 404, body: { error: 'not found or already terminal' } };
-    return { status: 200, body: { ok: true } };
+    if (method === 'GET' && subpath === null) {
+      const detail = mockStore.workstreamDetails[id];
+      if (!detail) return { status: 404, body: { error: 'not found' } };
+      return { status: 200, body: detail };
+    }
+
+    if (method === 'GET' && subpath === 'trace') {
+      const trace = mockStore.getWorkstreamTrace(id);
+      if (!trace) return { status: 404, body: { error: 'trace not found' } };
+      return { status: 200, body: trace };
+    }
+
+    if (method === 'GET' && subpath === 'receipt') {
+      const receipt = mockStore.getWorkstreamReceipt(id);
+      if (!receipt) return { status: 404, body: { error: 'not found' } };
+      if (searchParams.get('format') === 'markdown') {
+        return {
+          status: 200,
+          contentType: 'text/markdown; charset=utf-8',
+          rawBody: receipt.markdown,
+        };
+      }
+      return { status: 200, body: receipt };
+    }
+
+    if (subpath === 'artifacts' && method === 'GET') {
+      return { status: 200, body: { artifacts: mockStore.listArtifacts(id) } };
+    }
+
+    if (subpath?.startsWith('artifacts/')) {
+      const artifactPath = artifactRoute(subpath);
+      if (!artifactPath) {
+        return { status: 404, body: { error: 'not found' } };
+      }
+      const { key, rest } = artifactPath;
+
+      if (method === 'GET' && rest === null) {
+        const artifact = mockStore.getArtifact(id, key);
+        if (!artifact) return { status: 404, body: { error: 'not found' } };
+        return { status: 200, body: { artifact } };
+      }
+
+      if (rest === 'versions' && method === 'GET') {
+        const artifact = mockStore.getArtifact(id, key);
+        if (!artifact) return { status: 404, body: { error: 'not found' } };
+        return { status: 200, body: { versions: artifact.versions } };
+      }
+
+      const versionContentMatch = rest?.match(/^versions\/([^/]+)\/content$/);
+      if (method === 'GET' && versionContentMatch) {
+        const version = versionContentMatch[1];
+        const payload = mockStore.getArtifactContent(id, key, version);
+        if (!payload) return { status: 404, body: { error: 'not found' } };
+        return {
+          status: 200,
+          contentType: payload.contentType,
+          rawBody: payload.content,
+        };
+      }
+
+      const versionActionMatch = rest?.match(
+        /^versions\/([^/]+)\/(request-approval|approve|release)$/,
+      );
+      if (method === 'POST' && versionActionMatch) {
+        const version = versionActionMatch[1];
+        const action = versionActionMatch[2];
+        try {
+          if (action === 'request-approval') {
+            const artifact = mockStore.requestArtifactApproval(id, key);
+            if (!artifact) return { status: 404, body: { error: 'not found' } };
+            return { status: 200, body: { artifact } };
+          }
+          if (action === 'approve') {
+            const artifact = mockStore.approveArtifactVersion(id, key, version);
+            if (!artifact) return { status: 404, body: { error: 'not found' } };
+            return { status: 200, body: { artifact } };
+          }
+          const artifact = mockStore.releaseArtifactVersion(id, key, version);
+          if (!artifact) return { status: 404, body: { error: 'not found' } };
+          return { status: 200, body: { artifact } };
+        } catch (error) {
+          return {
+            status: 400,
+            body: {
+              error: error instanceof Error ? error.message : String(error),
+            },
+          };
+        }
+      }
+    }
+
+    if (method === 'POST' && subpath === 'cancel') {
+      const ok = mockStore.cancelWorkstream(id);
+      if (!ok) {
+        return {
+          status: 404,
+          body: { error: 'not found or already terminal' },
+        };
+      }
+      return { status: 200, body: { ok: true } };
+    }
   }
 
   if (method === 'GET' && pathname === '/usage') {

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState } from 'react';
-import { api, baseOrigin, sendWork } from './client';
+import { api, baseOrigin, fetchArtifactContent, sendWork } from './client';
 import { getApiKey } from './auth';
 import type {
   BenchOverview,
@@ -18,8 +18,10 @@ import type {
   RuntimeState,
   UsageOverview,
   Workstream,
+  WorkstreamArtifact,
   WorkstreamDetail,
   WorkstreamReceiptResponse,
+  WorkstreamTraceResponse,
 } from './types';
 
 export function useRuntimeState() {
@@ -78,6 +80,100 @@ export function useWorkstreamReceipt(id: string | undefined) {
       api.get<WorkstreamReceiptResponse>(`/workstreams/${id}/receipt`),
     refetchInterval: 3000,
     enabled: Boolean(id),
+  });
+}
+
+export function useWorkstreamTrace(id: string | undefined) {
+  return useQuery({
+    queryKey: ['workstream-trace', id],
+    queryFn: () => api.get<WorkstreamTraceResponse>(`/workstreams/${id}/trace`),
+    refetchInterval: 3000,
+    enabled: Boolean(id),
+  });
+}
+
+export function useWorkstreamArtifacts(id: string | undefined) {
+  return useQuery({
+    queryKey: ['workstream-artifacts', id],
+    queryFn: () =>
+      api.get<{ artifacts: WorkstreamArtifact[] }>(
+        `/workstreams/${id}/artifacts`,
+      ),
+    refetchInterval: 5000,
+    enabled: Boolean(id),
+    select: (d) => d.artifacts,
+  });
+}
+
+export function useArtifactContent(
+  workstreamId: string | undefined,
+  key: string | undefined,
+  version: string | undefined,
+) {
+  return useQuery({
+    queryKey: ['artifact-content', workstreamId, key, version],
+    queryFn: () => fetchArtifactContent(workstreamId!, key!, version!),
+    enabled: Boolean(workstreamId && key && version),
+  });
+}
+
+export function useApproveArtifactVersion(
+  workstreamId: string | undefined,
+  key: string | undefined,
+  version: string | undefined,
+) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.post<{ artifact: WorkstreamArtifact }>(
+        `/workstreams/${workstreamId}/artifacts/${key}/versions/${version}/approve`,
+        {},
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['workstream-artifacts', workstreamId],
+      });
+    },
+  });
+}
+
+export function useReleaseArtifactVersion(
+  workstreamId: string | undefined,
+  key: string | undefined,
+  version: string | undefined,
+) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.post<{ artifact: WorkstreamArtifact }>(
+        `/workstreams/${workstreamId}/artifacts/${key}/versions/${version}/release`,
+        {},
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['workstream-artifacts', workstreamId],
+      });
+    },
+  });
+}
+
+export function useRequestArtifactApproval(
+  workstreamId: string | undefined,
+  key: string | undefined,
+  version: string | undefined,
+) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () =>
+      api.post<{ artifact: WorkstreamArtifact }>(
+        `/workstreams/${workstreamId}/artifacts/${key}/versions/${version}/request-approval`,
+        {},
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({
+        queryKey: ['workstream-artifacts', workstreamId],
+      });
+    },
   });
 }
 

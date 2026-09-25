@@ -4,10 +4,15 @@ import type {
   ModelConfig,
   QuotaConfig,
   Workstream,
+  WorkstreamArtifact,
   WorkstreamDetail,
+  WorkstreamReceiptResponse,
+  WorkstreamTraceResponse,
 } from '../api/types';
 import {
   buildUsageOverview,
+  mockArtifactContent,
+  mockArtifacts,
   mockBenchOverview,
   mockBenchRunDetail,
   mockBenchSuites,
@@ -16,6 +21,8 @@ import {
   mockModelConfig,
   mockQuotaConfig,
   mockQuotaSnapshot,
+  mockReceipts,
+  mockTraces,
   mockWorkstreamDetails,
   mockWorkstreams,
 } from './data';
@@ -208,6 +215,86 @@ export class MockStore {
 
   getBenchSuites() {
     return mockBenchSuites;
+  }
+
+  getWorkstreamTrace(workstreamId: string): WorkstreamTraceResponse | null {
+    const trace = mockTraces[workstreamId];
+    return trace ? clone(trace) : null;
+  }
+
+  getWorkstreamReceipt(workstreamId: string): WorkstreamReceiptResponse | null {
+    const receipt = mockReceipts[workstreamId];
+    return receipt ? clone(receipt) : null;
+  }
+
+  listArtifacts(workstreamId: string): WorkstreamArtifact[] {
+    return clone(mockArtifacts[workstreamId] ?? []);
+  }
+
+  getArtifact(workstreamId: string, key: string): WorkstreamArtifact | null {
+    const artifact = this.listArtifacts(workstreamId).find(
+      (a) => a.key === key,
+    );
+    return artifact ? clone(artifact) : null;
+  }
+
+  getArtifactContent(
+    workstreamId: string,
+    key: string,
+    version: string,
+  ): { content: string; contentType: string } | null {
+    const content = mockArtifactContent[`${workstreamId}:${key}:${version}`];
+    const artifact = this.getArtifact(workstreamId, key);
+    const versionRecord = artifact?.versions.find((v) => v.version === version);
+    if (!content || !versionRecord) return null;
+    return { content, contentType: versionRecord.contentType };
+  }
+
+  requestArtifactApproval(
+    workstreamId: string,
+    key: string,
+  ): WorkstreamArtifact | null {
+    const artifacts = mockArtifacts[workstreamId];
+    if (!artifacts) return null;
+    const artifact = artifacts.find((a) => a.key === key);
+    if (!artifact) return null;
+    artifact.approvalStatus = 'pending';
+    return clone(artifact);
+  }
+
+  approveArtifactVersion(
+    workstreamId: string,
+    key: string,
+    version: string,
+  ): WorkstreamArtifact | null {
+    const artifact = mockArtifacts[workstreamId]?.find((a) => a.key === key);
+    if (!artifact) return null;
+    const versionRecord = artifact.versions.find((v) => v.version === version);
+    if (!versionRecord) return null;
+    artifact.approvalStatus = 'approved';
+    versionRecord.state = 'approved';
+    return clone(artifact);
+  }
+
+  releaseArtifactVersion(
+    workstreamId: string,
+    key: string,
+    version: string,
+  ): WorkstreamArtifact | null {
+    const artifact = mockArtifacts[workstreamId]?.find((a) => a.key === key);
+    if (!artifact) return null;
+    const versionRecord = artifact.versions.find((v) => v.version === version);
+    if (!versionRecord) return null;
+    if (
+      versionRecord.state !== 'approved' &&
+      artifact.approvalStatus !== 'approved'
+    ) {
+      throw new Error('Version must be approved before release');
+    }
+    versionRecord.state = 'released';
+    versionRecord.releasedAt = new Date().toISOString();
+    artifact.currentVersion = version;
+    return clone(artifact);
   }
 
   getBenchRun(instanceId: string) {
