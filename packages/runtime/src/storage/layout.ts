@@ -68,6 +68,52 @@ export class Layout {
     return path.join(this.workstreamDir(workstreamId), 'receipt.md');
   }
 
+  artifactsDir(workstreamId: string): string {
+    return path.join(this.workstreamDir(workstreamId), 'artifacts');
+  }
+
+  artifactDir(workstreamId: string, key: string): string {
+    return path.join(this.artifactsDir(workstreamId), key);
+  }
+
+  artifactFile(workstreamId: string, key: string): string {
+    return path.join(this.artifactDir(workstreamId, key), 'artifact.json');
+  }
+
+  artifactVersionsDir(workstreamId: string, key: string): string {
+    return path.join(this.artifactDir(workstreamId, key), 'versions');
+  }
+
+  artifactVersionDir(
+    workstreamId: string,
+    key: string,
+    version: string,
+  ): string {
+    return path.join(this.artifactVersionsDir(workstreamId, key), version);
+  }
+
+  artifactVersionFile(
+    workstreamId: string,
+    key: string,
+    version: string,
+  ): string {
+    return path.join(
+      this.artifactVersionDir(workstreamId, key, version),
+      'version.json',
+    );
+  }
+
+  artifactVersionContentFile(
+    workstreamId: string,
+    key: string,
+    version: string,
+  ): string {
+    return path.join(
+      this.artifactVersionDir(workstreamId, key, version),
+      'content',
+    );
+  }
+
   tasksDir(workstreamId: string): string {
     return path.join(this.workstreamDir(workstreamId), 'tasks');
   }
