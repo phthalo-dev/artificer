@@ -1,6 +1,6 @@
 {
   "name": "@artificer-ai/eval",
-  "version": "0.1.0",
+  "version": "0.1.1",
   "description": "Artificer identity eval driver and maintainer bench harness",
   "type": "module",
   "engines": {
