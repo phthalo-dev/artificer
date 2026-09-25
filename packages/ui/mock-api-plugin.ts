@@ -16,6 +16,16 @@ function sendJson(res: ServerResponse, status: number, body: unknown) {
   res.end(JSON.stringify(body));
 }
 
+function sendRaw(
+  res: ServerResponse,
+  status: number,
+  contentType: string,
+  body: string,
+) {
+  res.writeHead(status, { 'Content-Type': contentType });
+  res.end(body);
+}
+
 function handleEvents(req: IncomingMessage, res: ServerResponse) {
   res.writeHead(200, {
     'Content-Type': 'text/event-stream',
@@ -94,6 +104,16 @@ export function mockApiPlugin(): Plugin {
           searchParams: url.searchParams,
           body: parsedBody,
         });
+
+        if (result.rawBody !== undefined) {
+          sendRaw(
+            res,
+            result.status,
+            result.contentType ?? 'text/plain; charset=utf-8',
+            result.rawBody,
+          );
+          return;
+        }
 
         sendJson(res, result.status, result.body ?? {});
       });

@@ -90,3 +90,46 @@ export const api = {
     request<T>(path, { method: 'PUT', body: JSON.stringify(body) }),
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
 };
+
+export interface ArtifactContentResult {
+  content: string;
+  contentType: string;
+  truncated: boolean;
+}
+
+/** Fetches raw artifact version bytes (not JSON). */
+export async function fetchArtifactContent(
+  workstreamId: string,
+  key: string,
+  version: string,
+): Promise<ArtifactContentResult> {
+  const authKey = getApiKey();
+  const res = await fetch(
+    `${RUNTIME_URL}/workstreams/${encodeURIComponent(workstreamId)}/artifacts/${encodeURIComponent(key)}/versions/${encodeURIComponent(version)}/content`,
+    {
+      headers: authKey ? { authorization: `Bearer ${authKey}` } : {},
+    },
+  );
+  if (!res.ok) {
+    let detail = res.statusText;
+    try {
+      const body = await res.json();
+      detail = body?.error ? JSON.stringify(body.error) : detail;
+    } catch {
+      // non-JSON error body
+    }
+    throw new ApiError(detail, res.status);
+  }
+  const contentType =
+    res.headers.get('content-type') ?? 'application/octet-stream';
+  const truncated = res.headers.get('x-artificer-truncated') === 'true';
+  const buffer = await res.arrayBuffer();
+  const content =
+    contentType.startsWith('text/') ||
+    contentType.includes('json') ||
+    contentType.includes('markdown') ||
+    contentType.includes('javascript')
+      ? new TextDecoder().decode(buffer)
+      : `[binary content, ${buffer.byteLength} bytes]`;
+  return { content, contentType, truncated };
+}
