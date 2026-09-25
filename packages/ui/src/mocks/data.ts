@@ -12,8 +12,12 @@ import type {
   UsageSummary,
   QuotaSnapshot,
   QuotaConfig,
+  TraceEvent,
   Workstream,
+  WorkstreamArtifact,
   WorkstreamDetail,
+  WorkstreamReceiptResponse,
+  WorkstreamTraceResponse,
 } from '../api/types';
 
 export const MOCK_WORKSTREAM_IDS = {
@@ -309,6 +313,7 @@ function byTask(runs: RunRecord[]): Record<string, UsageSummary> {
 export const mockWorkstreams: Workstream[] = [
   {
     id: MOCK_WORKSTREAM_IDS.active,
+    traceId: `trace_${MOCK_WORKSTREAM_IDS.active}`,
     title: 'Auth refactor: JWT sessions',
     goal: 'Replace cookie sessions with JWT access + refresh tokens and update login flow.',
     status: 'in_progress',
@@ -320,6 +325,7 @@ export const mockWorkstreams: Workstream[] = [
   },
   {
     id: MOCK_WORKSTREAM_IDS.done,
+    traceId: `trace_${MOCK_WORKSTREAM_IDS.done}`,
     title: 'Docs cleanup',
     goal: 'Remove stale README sections and align API docs with current endpoints.',
     status: 'done',
@@ -329,6 +335,7 @@ export const mockWorkstreams: Workstream[] = [
   },
   {
     id: MOCK_WORKSTREAM_IDS.planning,
+    traceId: `trace_${MOCK_WORKSTREAM_IDS.planning}`,
     title: 'Public API v2 design',
     goal: 'Draft OpenAPI spec and migration guide for v2 breaking changes.',
     status: 'paused_quota',
@@ -1002,4 +1009,462 @@ export const mockQuotaConfig: QuotaConfig = {
       ),
     },
   ],
+};
+
+function traceEvent(
+  partial: Pick<TraceEvent, 'id' | 'traceId' | 'sequence' | 'at' | 'kind'> &
+    Partial<TraceEvent>,
+): TraceEvent {
+  return {
+    schemaVersion: 1,
+    data: {},
+    ...partial,
+  };
+}
+
+const activeTraceId = `trace_${MOCK_WORKSTREAM_IDS.active}`;
+const doneTraceId = `trace_${MOCK_WORKSTREAM_IDS.done}`;
+
+export const mockTraces: Record<string, WorkstreamTraceResponse> = {
+  [MOCK_WORKSTREAM_IDS.active]: {
+    trace: {
+      schemaVersion: 1,
+      id: activeTraceId,
+      workstreamId: MOCK_WORKSTREAM_IDS.active,
+      originMessageId: MOCK_MESSAGE_IDS.refactor,
+      agentName: 'Artificer (mock)',
+      title: mockWorkstreams[0].title,
+      goal: mockWorkstreams[0].goal,
+      status: 'in_progress',
+      summary: mockWorkstreams[0].summary,
+      createdAt: T0,
+      updatedAt: T3,
+      startedAt: T0,
+      repo: {
+        remoteUrl: mockWorkstreams[0].repoUrl,
+        branch: 'feat/jwt-auth',
+      },
+      eventCount: 8,
+      lastSequence: 8,
+    },
+    events: [
+      traceEvent({
+        id: 'evt-1',
+        traceId: activeTraceId,
+        sequence: 1,
+        at: T0,
+        kind: 'message',
+        data: {
+          direction: 'inbound',
+          content:
+            'Please refactor auth to use JWT sessions with refresh token rotation.',
+        },
+      }),
+      traceEvent({
+        id: 'evt-2',
+        traceId: activeTraceId,
+        sequence: 2,
+        at: T0,
+        kind: 'workstream',
+        sourceId: MOCK_WORKSTREAM_IDS.active,
+        data: {
+          event: 'created',
+          status: 'planning',
+          title: mockWorkstreams[0].title,
+        },
+      }),
+      traceEvent({
+        id: 'evt-3',
+        traceId: activeTraceId,
+        sequence: 3,
+        at: T1,
+        kind: 'run',
+        runId: 'run-plan-1',
+        parentRunId: 'run-orch-1',
+        actor: { kind: 'role', role: 'planner' },
+        data: {
+          role: 'planner',
+          status: 'done',
+          task: 'Draft migration plan for JWT sessions',
+        },
+      }),
+      traceEvent({
+        id: 'evt-4',
+        traceId: activeTraceId,
+        sequence: 4,
+        at: T2,
+        kind: 'review',
+        data: {
+          target: 'Migration plan',
+          approved: true,
+          severity: 'minor',
+        },
+      }),
+      traceEvent({
+        id: 'evt-5',
+        traceId: activeTraceId,
+        sequence: 5,
+        at: T2,
+        kind: 'artifact',
+        data: { key: 'plan', version: 'v1', action: 'created' },
+      }),
+      traceEvent({
+        id: 'evt-6',
+        traceId: activeTraceId,
+        sequence: 6,
+        at: T2,
+        kind: 'run',
+        runId: 'run-worker-1',
+        parentRunId: 'run-plan-1',
+        actor: { kind: 'role', role: 'worker' },
+        data: {
+          role: 'worker',
+          status: 'running',
+          task: 'Implement JWT middleware and update login handler',
+        },
+      }),
+      traceEvent({
+        id: 'evt-7',
+        traceId: activeTraceId,
+        sequence: 7,
+        at: T3,
+        kind: 'tool',
+        runId: 'run-worker-1',
+        data: { name: 'run_tests', error: '1 test failed' },
+      }),
+      traceEvent({
+        id: 'evt-8',
+        traceId: activeTraceId,
+        sequence: 8,
+        at: T3,
+        kind: 'workstream',
+        sourceId: MOCK_WORKSTREAM_IDS.active,
+        data: { event: 'updated', status: 'in_progress' },
+      }),
+    ],
+    hasMore: false,
+  },
+  [MOCK_WORKSTREAM_IDS.done]: {
+    trace: {
+      schemaVersion: 1,
+      id: doneTraceId,
+      workstreamId: MOCK_WORKSTREAM_IDS.done,
+      agentName: 'Artificer (mock)',
+      title: mockWorkstreams[1].title,
+      goal: mockWorkstreams[1].goal,
+      status: 'done',
+      summary: mockWorkstreams[1].summary,
+      createdAt: mockWorkstreams[1].createdAt,
+      updatedAt: mockWorkstreams[1].updatedAt,
+      finishedAt: mockWorkstreams[1].updatedAt,
+      eventCount: 3,
+      lastSequence: 3,
+    },
+    events: [
+      traceEvent({
+        id: 'evt-d1',
+        traceId: doneTraceId,
+        sequence: 1,
+        at: mockWorkstreams[1].createdAt,
+        kind: 'workstream',
+        data: { event: 'created', status: 'in_progress' },
+      }),
+      traceEvent({
+        id: 'evt-d2',
+        traceId: doneTraceId,
+        sequence: 2,
+        at: '2026-06-25T16:00:00.000Z',
+        kind: 'artifact',
+        data: { key: 'report', version: 'v1', action: 'released' },
+      }),
+      traceEvent({
+        id: 'evt-d3',
+        traceId: doneTraceId,
+        sequence: 3,
+        at: mockWorkstreams[1].updatedAt,
+        kind: 'receipt',
+        data: { schemaVersion: 1 },
+      }),
+    ],
+    hasMore: false,
+  },
+};
+
+export const mockReceipts: Record<string, WorkstreamReceiptResponse> = {
+  [MOCK_WORKSTREAM_IDS.active]: {
+    receipt: {
+      schemaVersion: 1,
+      id: 'rcpt-auth-refactor',
+      workstreamId: MOCK_WORKSTREAM_IDS.active,
+      traceId: activeTraceId,
+      title: mockWorkstreams[0].title,
+      goal: mockWorkstreams[0].goal,
+      status: 'in_progress',
+      summary: mockWorkstreams[0].summary,
+      nextAction: 'Fix failing auth integration test and rerun the suite.',
+      createdAt: T0,
+      updatedAt: T3,
+      startedAt: T0,
+      steps: [
+        {
+          id: 'step-1',
+          order: 1,
+          role: 'planner',
+          label: 'Draft migration plan',
+          status: 'done',
+          summary: 'JWT + refresh rotation plan approved.',
+          runIds: ['run-plan-1'],
+          taskIds: ['task-plan-1'],
+          startedAt: T1,
+          finishedAt: T2,
+        },
+        {
+          id: 'step-2',
+          order: 2,
+          role: 'worker',
+          label: 'Implement JWT middleware',
+          status: 'running',
+          summary: 'Middleware written; one auth test failing.',
+          runIds: ['run-worker-1'],
+          taskIds: ['task-worker-1'],
+          startedAt: T2,
+        },
+      ],
+      changes: {
+        repositoryUrl: mockWorkstreams[0].repoUrl,
+        branch: 'feat/jwt-auth',
+        files: [
+          'src/auth/jwt.ts',
+          'src/auth/session.ts',
+          'src/routes/login.ts',
+        ],
+        commits: ['abc1234 feat(auth): add JWT middleware'],
+      },
+      validation: [
+        {
+          label: 'auth tests',
+          command: 'pnpm test auth',
+          status: 'failed',
+          summary: '3 passed, 1 failed',
+          runId: 'run-worker-1',
+        },
+      ],
+      reviews: [
+        {
+          id: 'rcpt-rev-1',
+          stage: 'plan',
+          target: 'Migration plan',
+          approved: true,
+          severity: 'minor',
+          summary: 'Approved with rotation interval note.',
+          sourceReviewId: 'rev-1',
+        },
+      ],
+      findings: [],
+      usage: {
+        runCount: 4,
+        inputTokens: 32100,
+        outputTokens: 7400,
+        modelRequests: 4,
+        estimatedCostDollars: 0.204,
+        durationMs: 28 * 60 * 1000,
+      },
+      links: {
+        localUrl: `/workstreams/${MOCK_WORKSTREAM_IDS.active}`,
+        artifactUrls: [
+          `/workstreams/${MOCK_WORKSTREAM_IDS.active}/artifacts/plan`,
+        ],
+      },
+      provenance: {
+        generatedFromTraceSequence: 8,
+        sourceUpdatedAt: T3,
+        redactionPolicyVersion: '2026-03-01',
+      },
+    },
+    markdown: `# ${mockWorkstreams[0].title}
+
+**Status:** in progress
+
+Planning complete. Worker is implementing middleware; one auth test still failing.
+
+## Next action
+
+Fix failing auth integration test and rerun the suite.
+
+## Changes
+
+- \`src/auth/jwt.ts\`
+- \`src/auth/session.ts\`
+- \`src/routes/login.ts\`
+`,
+  },
+  [MOCK_WORKSTREAM_IDS.done]: {
+    receipt: {
+      schemaVersion: 1,
+      id: 'rcpt-docs-cleanup',
+      workstreamId: MOCK_WORKSTREAM_IDS.done,
+      traceId: doneTraceId,
+      title: mockWorkstreams[1].title,
+      goal: mockWorkstreams[1].goal,
+      status: 'done',
+      summary: mockWorkstreams[1].summary,
+      createdAt: mockWorkstreams[1].createdAt,
+      updatedAt: mockWorkstreams[1].updatedAt,
+      startedAt: mockWorkstreams[1].createdAt,
+      finishedAt: mockWorkstreams[1].updatedAt,
+      steps: [
+        {
+          id: 'step-docs-1',
+          order: 1,
+          role: 'worker',
+          label: 'Update documentation',
+          status: 'done',
+          summary: '12 pages updated.',
+          runIds: [],
+          taskIds: ['task-docs-1'],
+          finishedAt: mockWorkstreams[1].updatedAt,
+        },
+      ],
+      changes: {
+        files: ['README.md', 'docs/api/webhooks.md'],
+        commits: ['def5678 docs: remove stale webhook references'],
+      },
+      validation: [],
+      reviews: [],
+      findings: [],
+      usage: {
+        runCount: 2,
+        inputTokens: 4200,
+        outputTokens: 1800,
+        modelRequests: 2,
+        estimatedCostDollars: 0.024,
+        durationMs: 2.5 * 60 * 60 * 1000,
+      },
+      links: {
+        localUrl: `/workstreams/${MOCK_WORKSTREAM_IDS.done}`,
+      },
+      provenance: {
+        generatedFromTraceSequence: 3,
+        sourceUpdatedAt: mockWorkstreams[1].updatedAt,
+        redactionPolicyVersion: '2026-03-01',
+      },
+    },
+    markdown: `# ${mockWorkstreams[1].title}
+
+**Status:** done
+
+Updated 12 doc pages; removed deprecated webhook section.
+`,
+  },
+};
+
+export const mockArtifacts: Record<string, WorkstreamArtifact[]> = {
+  [MOCK_WORKSTREAM_IDS.active]: [
+    {
+      schemaVersion: 1,
+      id: 'art-plan-auth',
+      workstreamId: MOCK_WORKSTREAM_IDS.active,
+      traceId: activeTraceId,
+      key: 'plan',
+      name: 'Migration plan',
+      description: 'Approved plan for JWT session migration.',
+      contentType: 'text/markdown',
+      createdAt: T1,
+      updatedAt: T2,
+      currentVersion: 'v1',
+      approvalStatus: 'approved',
+      visibility: 'private',
+      versions: [
+        {
+          version: 'v1',
+          contentType: 'text/markdown',
+          sha256:
+            'a1b2c3d4e5f6789012345678901234567890abcd1234567890abcd123456',
+          byteSize: 512,
+          createdAt: T2,
+          createdByRunId: 'run-plan-1',
+          sourceTraceSequence: 5,
+          state: 'released',
+          releasedAt: T2,
+        },
+      ],
+    },
+    {
+      schemaVersion: 1,
+      id: 'art-diff-auth',
+      workstreamId: MOCK_WORKSTREAM_IDS.active,
+      traceId: activeTraceId,
+      key: 'diff',
+      name: 'Working diff',
+      contentType: 'text/plain',
+      createdAt: T2,
+      updatedAt: T3,
+      approvalStatus: 'not_requested',
+      visibility: 'private',
+      versions: [
+        {
+          version: 'v1',
+          contentType: 'text/plain',
+          sha256:
+            'fedcba0987654321fedcba0987654321fedcba0987654321fedcba0987654321',
+          byteSize: 2048,
+          createdAt: T3,
+          createdByRunId: 'run-worker-1',
+          sourceTraceSequence: 7,
+          state: 'ready',
+        },
+      ],
+    },
+  ],
+  [MOCK_WORKSTREAM_IDS.done]: [
+    {
+      schemaVersion: 1,
+      id: 'art-report-docs',
+      workstreamId: MOCK_WORKSTREAM_IDS.done,
+      traceId: doneTraceId,
+      key: 'report',
+      name: 'Docs cleanup report',
+      contentType: 'text/markdown',
+      createdAt: '2026-06-25T16:00:00.000Z',
+      updatedAt: mockWorkstreams[1].updatedAt,
+      currentVersion: 'v1',
+      approvalStatus: 'approved',
+      visibility: 'link',
+      versions: [
+        {
+          version: 'v1',
+          contentType: 'text/markdown',
+          sha256:
+            '1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
+          byteSize: 768,
+          createdAt: '2026-06-25T16:00:00.000Z',
+          state: 'released',
+          releasedAt: mockWorkstreams[1].updatedAt,
+        },
+      ],
+    },
+  ],
+};
+
+export const mockArtifactContent: Record<string, string> = {
+  [`${MOCK_WORKSTREAM_IDS.active}:plan:v1`]: `# Auth refactor plan
+
+1. Add \`JwtService\` with access + refresh token pair generation
+2. Replace \`SessionStore\` middleware with JWT validation
+3. Update login/logout routes and client cookie handling
+4. Migrate existing sessions on first login (grace period 14 days)
+5. Add integration tests for rotation + revocation`,
+  [`${MOCK_WORKSTREAM_IDS.active}:diff:v1`]: `diff --git a/src/auth/jwt.ts b/src/auth/jwt.ts
+new file mode 100644
+--- /dev/null
++++ b/src/auth/jwt.ts
+@@ -0,0 +1,84 @@
++export class JwtService {
++  // ...
++}`,
+  [`${MOCK_WORKSTREAM_IDS.done}:report:v1`]: `# Docs cleanup report
+
+- Updated README quickstart
+- Removed deprecated webhook section from API docs
+- Aligned endpoint examples with v1.4 schema`,
 };
