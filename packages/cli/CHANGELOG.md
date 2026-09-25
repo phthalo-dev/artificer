@@ -1,5 +1,24 @@
 # @artificer-ai/cli
 
+## 0.11.0
+
+### Minor Changes
+
+- d6c4aa0: Add `artificer import-history` to seed preference memories from Claude Code, Cursor, Codex, and OpenCode session logs.
+- e5364be: Add human-readable workstream receipts: deterministic JSON/Markdown delivery records, a receipt API and UI tab, compact Slack/Discord completion replies, and an optional receipt summarizer role for polished summaries.
+
+### Patch Changes
+
+- Updated dependencies [df79b42]
+- Updated dependencies [99aa41b]
+- Updated dependencies [07156ef]
+- Updated dependencies [d6c4aa0]
+- Updated dependencies [6374dd4]
+- Updated dependencies [ed89882]
+- Updated dependencies [e5364be]
+  - @artificer-ai/runtime@0.11.0
+  - @artificer-ai/eval@0.1.1
+
 ## 0.10.0
 
 ### Minor Changes
