@@ -23,6 +23,16 @@ export { Store } from './storage/store.js';
 export { TraceRecorder } from './storage/trace-recorder.js';
 export type { TraceSink } from './storage/trace-recorder.js';
 export { WorkstreamReceiptService } from './engine/workstream-receipt.js';
+export { WorkstreamArtifactService } from './engine/workstream-artifacts.js';
+export type {
+  ArtifactApprovalStatus,
+  ArtifactPublisher,
+  ArtifactVersionRecord,
+  ArtifactVersionState,
+  ArtifactVersionSummary,
+  ArtifactVisibility,
+  WorkstreamArtifact,
+} from './storage/artifact-types.js';
 export { buildReceiptSummaryTask } from './engine/workstream-receipt.js';
 export { formatReceiptForChannel } from './channels/receipt-format.js';
 export type {

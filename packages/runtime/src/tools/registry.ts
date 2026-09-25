@@ -4,6 +4,7 @@ import type { ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
 import type { RoleName } from '../storage/types.js';
 import { createArtifactTools } from './artifacts.js';
+import { createWorkstreamArtifactTools } from './workstream-artifact-tools.js';
 import {
   createCommunicatorTools,
   createMessageHistoryTools,
@@ -48,6 +49,7 @@ export function toolsForRole(
   const shell = createShellTool(ctx);
   const git = createGitTools(ctx);
   const artifacts = createArtifactTools(ctx);
+  const workstreamArtifacts = createWorkstreamArtifactTools(ctx);
   const fetchTools = createFetchTools(ctx);
   const toolResultRead = createToolResultReadTools(ctx);
   const providerConfig = createProviderConfigTools(ctx);
@@ -78,6 +80,13 @@ export function toolsForRole(
         ...searchGrepOnly,
         ...toolResultRead,
         ...byName(artifacts, ['read_plan']),
+        ...byName(workstreamArtifacts, [
+          'search_workstream_artifacts',
+          'get_workstream_artifact',
+          'read_workstream_artifact_version',
+          'archive_workstream_artifact',
+          'restore_workstream_artifact',
+        ]),
         ...byName(files, ['read_file', 'list_files']),
       ];
       break;
@@ -91,6 +100,14 @@ export function toolsForRole(
         ...shell,
         ...git,
         ...byName(artifacts, ['write_plan', 'read_plan']),
+        ...byName(workstreamArtifacts, [
+          'search_workstream_artifacts',
+          'get_workstream_artifact',
+          'read_workstream_artifact_version',
+          'create_workstream_artifact',
+          'create_artifact_version',
+          'request_artifact_approval',
+        ]),
         ...history,
         ...byName(orchestrator, [
           'get_status',
@@ -110,6 +127,13 @@ export function toolsForRole(
         ...git,
         ...services,
         ...byName(artifacts, ['read_plan', 'submit_review']),
+        ...byName(workstreamArtifacts, [
+          'search_workstream_artifacts',
+          'get_workstream_artifact',
+          'read_workstream_artifact_version',
+          'request_artifact_approval',
+          'release_workstream_artifact',
+        ]),
         ...byName(orchestrator, [
           'get_status',
           'query_memories',

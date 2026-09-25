@@ -11,6 +11,7 @@ import type {
   ServiceStartResult,
   ServiceStopResult,
 } from './services/service-manager.js';
+import type { WorkstreamArtifactService } from './engine/workstream-artifacts.js';
 import type { Store } from './storage/store.js';
 import type { IdentityStore } from './storage/identity-store.js';
 import type {
@@ -58,6 +59,7 @@ export type RuntimeEvent =
  */
 export interface EngineApi {
   readonly store: Store;
+  readonly artifacts: WorkstreamArtifactService;
   readonly identity?: IdentityStore;
   readonly config: RuntimeConfig;
   spawnCall(input: SpawnCallInput): Promise<{ runId: string; taskId?: string }>;
