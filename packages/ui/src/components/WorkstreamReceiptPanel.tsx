@@ -4,6 +4,7 @@ import {
   Alert,
   Badge,
   Button,
+  Code,
   Group,
   Loader,
   Paper,
@@ -12,9 +13,10 @@ import {
   notifications,
 } from '../ds';
 import { useWorkstreamReceipt } from '../api/hooks';
-import type { Workstream } from '../api/types';
+import type { ReceiptValidation, Workstream } from '../api/types';
 import { MarkdownContent } from './MarkdownContent';
-import { formatTime } from '../format';
+import { StatusBadge } from './StatusBadge';
+import { formatCost, formatDuration, formatTime } from '../format';
 
 function downloadBlob(content: string, filename: string, type: string) {
   const blob = new Blob([content], { type });
@@ -39,6 +41,16 @@ function receiptFreshness(
   }
   return { label: 'Stale', color: 'yellow' };
 }
+
+const VALIDATION_COLORS: Record<
+  ReceiptValidation['status'],
+  'green' | 'red' | 'gray' | 'yellow'
+> = {
+  passed: 'green',
+  failed: 'red',
+  skipped: 'gray',
+  unknown: 'yellow',
+};
 
 export function WorkstreamReceiptPanel({
   workstream,
@@ -161,7 +173,141 @@ export function WorkstreamReceiptPanel({
         </Alert>
       )}
 
-      <Paper p="md">
+      {receipt.steps.length > 0 && (
+        <Paper p="md" withBorder>
+          <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb="sm">
+            Steps
+          </Text>
+          <Stack gap="xs">
+            {receipt.steps.map((step) => (
+              <Group key={step.id} justify="space-between" align="flex-start">
+                <Stack gap={2} style={{ flex: 1 }}>
+                  <Group gap="xs">
+                    <Text size="sm" fw={600}>
+                      {step.order}. {step.label}
+                    </Text>
+                    <Badge color="gray" size="sm" variant="light">
+                      {step.role}
+                    </Badge>
+                    <StatusBadge status={step.status} />
+                  </Group>
+                  {step.summary && (
+                    <Text size="sm" c="dimmed">
+                      {step.summary}
+                    </Text>
+                  )}
+                </Stack>
+                {step.finishedAt && (
+                  <Text size="xs" c="dimmed">
+                    {formatTime(step.finishedAt)}
+                  </Text>
+                )}
+              </Group>
+            ))}
+          </Stack>
+        </Paper>
+      )}
+
+      {(receipt.changes.files.length > 0 ||
+        receipt.changes.commits.length > 0 ||
+        receipt.changes.pullRequestUrl) && (
+        <Paper p="md" withBorder>
+          <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb="sm">
+            Repository changes
+          </Text>
+          <Stack gap="xs">
+            {receipt.changes.branch && (
+              <Text size="sm">
+                branch: <Code>{receipt.changes.branch}</Code>
+              </Text>
+            )}
+            {receipt.changes.pullRequestUrl && (
+              <Text size="sm">
+                PR: <Code>{receipt.changes.pullRequestUrl}</Code>
+              </Text>
+            )}
+            {receipt.changes.files.length > 0 && (
+              <Stack gap={2}>
+                <Text size="sm" fw={600}>
+                  Files ({receipt.changes.files.length})
+                </Text>
+                {receipt.changes.files.slice(0, 12).map((file) => (
+                  <Text key={file} size="sm" c="dimmed">
+                    {file}
+                  </Text>
+                ))}
+                {receipt.changes.files.length > 12 && (
+                  <Text size="xs" c="dimmed">
+                    +{receipt.changes.files.length - 12} more
+                  </Text>
+                )}
+              </Stack>
+            )}
+          </Stack>
+        </Paper>
+      )}
+
+      {receipt.validation.length > 0 && (
+        <Paper p="md" withBorder>
+          <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb="sm">
+            Validation
+          </Text>
+          <Stack gap="xs">
+            {receipt.validation.map((item) => (
+              <Group
+                key={item.label}
+                justify="space-between"
+                align="flex-start"
+              >
+                <Stack gap={2}>
+                  <Group gap="xs">
+                    <Text size="sm" fw={600}>
+                      {item.label}
+                    </Text>
+                    <Badge color={VALIDATION_COLORS[item.status]} size="sm">
+                      {item.status}
+                    </Badge>
+                  </Group>
+                  {item.summary && (
+                    <Text size="sm" c="dimmed">
+                      {item.summary}
+                    </Text>
+                  )}
+                </Stack>
+                {item.command && (
+                  <Code style={{ maxWidth: 280 }}>{item.command}</Code>
+                )}
+              </Group>
+            ))}
+          </Stack>
+        </Paper>
+      )}
+
+      <Paper p="md" withBorder>
+        <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb="sm">
+          Usage
+        </Text>
+        <Group gap="lg">
+          <Text size="sm">{receipt.usage.runCount} runs</Text>
+          <Text size="sm">
+            {receipt.usage.inputTokens.toLocaleString()} in /{' '}
+            {receipt.usage.outputTokens.toLocaleString()} out tok
+          </Text>
+          {receipt.usage.estimatedCostDollars !== undefined && (
+            <Text size="sm">
+              {formatCost(receipt.usage.estimatedCostDollars)}
+            </Text>
+          )}
+          {receipt.usage.durationMs !== undefined && (
+            <Text size="sm">{formatDuration(receipt.usage.durationMs)}</Text>
+          )}
+        </Group>
+      </Paper>
+
+      <Paper p="md" withBorder>
+        <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb="sm">
+          Markdown receipt
+        </Text>
         <MarkdownContent content={markdown} />
       </Paper>
     </Stack>

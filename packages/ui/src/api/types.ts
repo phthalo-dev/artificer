@@ -290,6 +290,117 @@ export interface WorkstreamReceiptResponse {
   markdown: string;
 }
 
+export type TraceEventKind =
+  | 'message'
+  | 'workstream'
+  | 'task'
+  | 'run'
+  | 'tool'
+  | 'review'
+  | 'finding'
+  | 'approval'
+  | 'quota'
+  | 'receipt'
+  | 'artifact';
+
+export interface TraceRecord {
+  schemaVersion: 1;
+  id: string;
+  workstreamId: string;
+  originMessageId?: string;
+  agentName: string;
+  title: string;
+  goal?: string;
+  status: WorkstreamStatus;
+  summary?: string;
+  createdAt: string;
+  updatedAt: string;
+  startedAt?: string;
+  finishedAt?: string;
+  repo?: {
+    remoteUrl?: string;
+    baseCommit?: string;
+    branch?: string;
+    headCommit?: string;
+  };
+  receiptId?: string;
+  eventCount: number;
+  lastSequence: number;
+  backfilled?: boolean;
+}
+
+export interface TraceEvent {
+  schemaVersion: 1;
+  id: string;
+  traceId: string;
+  sequence: number;
+  at: string;
+  kind: TraceEventKind;
+  sourceId?: string;
+  runId?: string;
+  parentRunId?: string;
+  taskId?: string;
+  actor?: {
+    kind: 'user' | 'agent' | 'role' | 'system';
+    id?: string;
+    role?: string;
+  };
+  data: Record<string, unknown>;
+}
+
+export interface WorkstreamTraceResponse {
+  trace: TraceRecord;
+  events: TraceEvent[];
+  hasMore: boolean;
+}
+
+export type ArtifactApprovalStatus =
+  | 'not_requested'
+  | 'pending'
+  | 'approved'
+  | 'rejected';
+
+export type ArtifactVisibility = 'private' | 'link' | 'public';
+
+export type ArtifactVersionState =
+  | 'draft'
+  | 'ready'
+  | 'approved'
+  | 'released'
+  | 'rejected';
+
+export interface ArtifactVersionSummary {
+  version: string;
+  contentType: string;
+  sha256: string;
+  byteSize: number;
+  createdAt: string;
+  createdByRunId?: string;
+  sourceTraceSequence?: number;
+  state: ArtifactVersionState;
+  sourcePath?: string;
+  metadata?: Record<string, string | number | boolean>;
+  releasedAt?: string;
+}
+
+export interface WorkstreamArtifact {
+  schemaVersion: 1;
+  id: string;
+  workstreamId: string;
+  traceId?: string;
+  key: string;
+  name: string;
+  description?: string;
+  contentType: string;
+  createdAt: string;
+  updatedAt: string;
+  archivedAt?: string;
+  currentVersion?: string;
+  approvalStatus: ArtifactApprovalStatus;
+  visibility: ArtifactVisibility;
+  versions: ArtifactVersionSummary[];
+}
+
 export interface WorkstreamDetail {
   workstream: Workstream;
   tasks: Task[];
