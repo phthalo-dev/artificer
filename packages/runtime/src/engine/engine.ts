@@ -1254,7 +1254,7 @@ export class Engine implements EngineApi {
       });
 
       await this.reply(result.text, workstream.id);
-      if (result.sessionId) {
+      if (result.clearedSession || result.sessionId) {
         await this.store.updateWorkstream(workstream.id, {
           agentSessionId: result.sessionId,
         });
