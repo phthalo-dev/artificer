@@ -100,6 +100,20 @@
         }
       }
     },
+    "repos": {
+      "type": "array",
+      "description": "Repositories this instance checks out once and reuses as git worktrees.",
+      "items": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": ["id", "url", "baseBranch"],
+        "properties": {
+          "id": { "type": "string", "pattern": "^[a-z0-9][a-z0-9-]*$" },
+          "url": { "type": "string", "minLength": 1 },
+          "baseBranch": { "type": "string", "pattern": "^\\S+$" }
+        }
+      }
+    },
     "executor": {
       "description": "Worker executor backend for work roles (planner, worker, reviewer). Defaults to 'llm' (internal tool-use loop). Set to 'cursor-agent', 'claude-code', or 'opencode' to delegate work to those CLIs instead.",
       "oneOf": [
