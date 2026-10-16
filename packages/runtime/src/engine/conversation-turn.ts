@@ -7,7 +7,9 @@ import {
   conversationPreamble,
   conversationPrompt,
 } from './conversation-prompt.js';
+import { ingestPublishedArtifacts } from './artifact-ingest.js';
 import type { WorkerExecutor } from './executor.js';
+import type { PublishArtifactInput } from './workstream-artifacts.js';
 
 export interface RunConversationTurnInput {
   workstream: Pick<Workstream, 'id' | 'goal' | 'agentSessionId'>;
@@ -15,6 +17,7 @@ export interface RunConversationTurnInput {
   content: string;
   prior: Array<{ direction: 'inbound' | 'outbound'; content: string }>;
   executor?: WorkerExecutor;
+  publishArtifact?: (input: PublishArtifactInput) => Promise<unknown>;
   runBuiltin: (prompt: string, repoPath: string) => Promise<string>;
   signal?: AbortSignal;
   run?: RunRecord;
@@ -55,7 +58,7 @@ export async function runConversationTurn(
       usage: emptyUsage(),
       createdAt: new Date().toISOString(),
     } satisfies RunRecord);
-  const execute = (context: string, sessionId?: string) => {
+  const execute = async (context: string, sessionId?: string) => {
     const options = {
       context,
       workspaceDir: input.repoPath,
@@ -66,7 +69,17 @@ export async function runConversationTurn(
         ? { outputFormat: 'json' as const }
         : {}),
     };
-    return input.executor!.execute(options);
+    try {
+      return await input.executor!.execute(options);
+    } finally {
+      if (input.publishArtifact) {
+        try {
+          await ingestPublishedArtifacts(input.repoPath, input.publishArtifact);
+        } catch (error) {
+          console.error('Failed to ingest published artifacts:', error);
+        }
+      }
+    }
   };
 
   let result;

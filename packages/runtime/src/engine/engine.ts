@@ -1204,6 +1204,11 @@ export class Engine implements EngineApi {
         prior,
         executor: buildExecutor(workstream.executor),
         run,
+        publishArtifact: (input) =>
+          this.artifacts.publish(workstream.id, {
+            ...input,
+            createdByRunId: run.id,
+          }),
         runBuiltin: async (prompt, workspaceDir) => {
           const onToolCall = (invocation: RunRecord['toolCalls'][number]) => {
             run.toolCalls.push(invocation);
