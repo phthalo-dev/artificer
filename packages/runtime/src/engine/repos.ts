@@ -30,19 +30,33 @@ export function repoUrlKey(url: string): string | undefined {
     return `${host}/${segments}`;
   }
 
+  if (!normalized.includes('://')) {
+    return undefined;
+  }
+
   let parsed: URL;
   try {
-    parsed = new URL(
-      normalized.includes('://') ? normalized : `https://${normalized}`,
-    );
+    parsed = new URL(normalized);
   } catch {
     return undefined;
   }
 
-  const host = parsed.hostname.toLowerCase();
-  const segments = normalizePathSegments(parsed.pathname);
-  if (!segments) return undefined;
-  return `${host}/${segments}`;
+  if (parsed.protocol === 'https:') {
+    const host = parsed.hostname.toLowerCase();
+    const segments = normalizePathSegments(parsed.pathname);
+    if (!segments) return undefined;
+    return `${host}/${segments}`;
+  }
+
+  if (parsed.protocol === 'ssh:') {
+    if (parsed.username !== 'git') return undefined;
+    const host = parsed.hostname.toLowerCase();
+    const segments = normalizePathSegments(parsed.pathname);
+    if (!segments) return undefined;
+    return `${host}/${segments}`;
+  }
+
+  return undefined;
 }
 
 export function loadRepos(
