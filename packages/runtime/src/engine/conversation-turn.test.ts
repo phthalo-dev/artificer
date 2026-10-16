@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
 import { test } from 'node:test';
 import { runConversationTurn } from './conversation-turn.js';
 import type { WorkerExecutor } from './executor.js';
@@ -69,4 +72,51 @@ test('a resume throw retries once with the transcript and then stops', async () 
   assert.equal(result.text, 'recovered');
   assert.equal(result.sessionId, 'sess-2');
   assert.equal(result.clearedSession, true);
+});
+
+test('artifacts are ingested after a failed resume and its retry', async () => {
+  const repoPath = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'artificer-conversation-artifacts-'),
+  );
+  const published: string[] = [];
+  let attempts = 0;
+  const executor: WorkerExecutor = {
+    name: 'claude-code',
+    resumesSession: true,
+    execute: async ({ workspaceDir }) => {
+      attempts += 1;
+      await fs.writeFile(
+        path.join(workspaceDir, '.artificer-artifacts.jsonl'),
+        JSON.stringify({
+          key: `attempt-${attempts}`,
+          name: `Attempt ${attempts}`,
+          content: 'content',
+        }),
+      );
+      if (attempts === 1) throw new Error('resume failed');
+      return { text: 'recovered' };
+    },
+  };
+
+  try {
+    const result = await runConversationTurn({
+      workstream: { id: 'ws-1', goal: 'g', agentSessionId: 'sess-1' },
+      repoPath,
+      content: 'hello',
+      prior: [],
+      executor,
+      publishArtifact: async (input) => {
+        published.push(input.key);
+      },
+      runBuiltin: async () => 'nope',
+    });
+
+    assert.equal(result.text, 'recovered');
+    assert.deepEqual(published, ['attempt-1', 'attempt-2']);
+    await assert.rejects(
+      fs.access(path.join(repoPath, '.artificer-artifacts.jsonl')),
+    );
+  } finally {
+    await fs.rm(repoPath, { recursive: true, force: true });
+  }
 });
