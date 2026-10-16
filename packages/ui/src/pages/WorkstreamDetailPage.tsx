@@ -516,8 +516,9 @@ export function WorkstreamDetailPage() {
       >
         <Stack gap="md">
           <Text size="sm">
-            This working tree has uncommitted or unpushed changes. Force removal
-            will discard the checkout.
+            This checkout has uncommitted files or commits that are not on the
+            base branch. Force removal discards uncommitted files. Commits stay
+            on <Code>{`artificer/${ws.id}`}</Code>.
           </Text>
           <Group justify="flex-end">
             <Button variant="default" onPress={() => setConfirmRemove(false)}>

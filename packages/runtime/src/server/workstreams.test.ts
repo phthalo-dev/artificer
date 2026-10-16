@@ -58,6 +58,7 @@ async function conversationFixture() {
   process.env.GIT_CONFIG_VALUE_0 = repoUrl;
   return {
     ...fixture,
+    origin,
     restore() {
       for (const key of keys) {
         const value = previous[key];
@@ -146,6 +147,136 @@ test('POST /done rejects a conversation with a running worker', async () => {
   }
 });
 
+test('a conversation stores the instance executor and an explicit base commit', async () => {
+  const { app, store, config, origin, restore } = await conversationFixture();
+  try {
+    config.executor = 'claude-code';
+    const seed = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-base-'));
+    await exec('git', ['clone', '-q', origin, seed]);
+    await exec('git', ['-C', seed, 'config', 'user.email', 't@t.test']);
+    await exec('git', ['-C', seed, 'config', 'user.name', 'Test']);
+    const baseCommit = (
+      await exec('git', ['-C', seed, 'rev-parse', 'HEAD'])
+    ).stdout.trim();
+    await fs.writeFile(path.join(seed, 'b.txt'), 'two\n');
+    await exec('git', ['-C', seed, 'add', '-A']);
+    await exec('git', ['-C', seed, 'commit', '-q', '-m', 'second']);
+    await exec('git', ['-C', seed, 'push', '-q', 'origin', 'HEAD:main']);
+
+    const created = await app.request('/api/workstreams', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        driver: 'conversation',
+        title: 'Chat',
+        goal: 'Look around',
+        repoId: 'app',
+        baseCommit,
+      }),
+    });
+    assert.equal(created.status, 201);
+    const body = (await created.json()) as { workstream: { id: string } };
+    const ws = await store.getWorkstream(body.workstream.id);
+    assert.equal(ws?.executor, 'claude-code');
+    assert.equal(ws?.baseCommit, baseCommit);
+    const head = (
+      await exec('git', [
+        '-C',
+        path.join(store.layout.workstreamWorkspace(ws!.id), 'repo'),
+        'rev-parse',
+        'HEAD',
+      ])
+    ).stdout.trim();
+    assert.equal(head, baseCommit);
+
+    const builtin = await app.request('/api/workstreams', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        driver: 'conversation',
+        title: 'Loop',
+        goal: 'Use the built-in loop',
+        repoId: 'app',
+        executor: 'llm',
+      }),
+    });
+    assert.equal(builtin.status, 201);
+    const builtinBody = (await builtin.json()) as {
+      workstream: { id: string };
+    };
+    assert.equal(
+      (await store.getWorkstream(builtinBody.workstream.id))?.executor,
+      'llm',
+    );
+
+    const rejected = await app.request('/api/workstreams', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        driver: 'conversation',
+        title: 'Nope',
+        goal: 'Reject machine fields',
+        repoId: 'app',
+        autostart: false,
+      }),
+    });
+    assert.equal(rejected.status, 400);
+  } finally {
+    restore();
+  }
+});
+
+test('stop posts no conversation reply', async () => {
+  const { app, store, engine, restore } = await conversationFixture();
+  try {
+    const created = await app.request('/api/workstreams', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        driver: 'conversation',
+        title: 'Chat',
+        goal: 'Look around',
+        repoId: 'app',
+        executor: {
+          type: 'cli',
+          command: 'sh',
+          args: ['-c', 'sleep 30'],
+          promptMode: 'stdin',
+          timeout: 2000,
+        },
+      }),
+    });
+    assert.equal(created.status, 201);
+    const id = ((await created.json()) as { workstream: { id: string } })
+      .workstream.id;
+    const posted = await app.request(`/api/workstreams/${id}/messages`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ content: 'hello' }),
+    });
+    assert.equal(posted.status, 202);
+    for (let attempt = 0; attempt < 50; attempt += 1) {
+      const runs = await store.listRunsForWorkstream(id);
+      if (runs.some((run) => run.status === 'running')) break;
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+    const cancelled = await app.request(`/api/workstreams/${id}/cancel`, {
+      method: 'POST',
+    });
+    assert.equal(cancelled.status, 200);
+    await waitForIdle(engine, store, id);
+    const messages = (await store.listMessages()).filter(
+      (message) => message.workstreamId === id,
+    );
+    assert.deepEqual(
+      messages.map((message) => message.direction),
+      ['inbound'],
+    );
+  } finally {
+    restore();
+  }
+});
+
 test('cancel marks a conversation cancelled without a cancelled error bubble', async () => {
   const { app, store, restore } = await conversationFixture();
   try {
@@ -158,10 +289,7 @@ test('cancel marks a conversation cancelled without a cancelled error bubble', a
     const messages = (await store.listMessages()).filter(
       (message) => message.workstreamId === id,
     );
-    assert.equal(
-      messages.some((message) => message.content === 'cancelled'),
-      false,
-    );
+    assert.equal(messages.length, 0);
   } finally {
     restore();
   }

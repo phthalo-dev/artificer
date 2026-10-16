@@ -8,7 +8,11 @@ import type {
   ExecutorResult,
   WorkerExecutor,
 } from './executor.js';
-import { executorStateDir } from './executor-files.js';
+import {
+  abortAgent,
+  executorStateDir,
+  killProcessGroup,
+} from './executor-files.js';
 import type { WorkerStatus } from './worker-report.js';
 
 const TIMEOUT_MS = 10 * 60 * 1000;
@@ -68,6 +72,7 @@ export class ClaudeCodeExecutor implements WorkerExecutor {
 
       const child = spawn('claude', args, {
         cwd: workspaceDir,
+        detached: true,
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
@@ -80,19 +85,14 @@ export class ClaudeCodeExecutor implements WorkerExecutor {
       child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
 
       const timer = setTimeout(() => {
-        child.kill('SIGKILL');
+        killProcessGroup(child, 'SIGKILL');
         reject(new Error('claude code agent timed out'));
       }, TIMEOUT_MS);
-      const onAbort = () => {
-        child.kill('SIGTERM');
-        reject(new Error('cancelled'));
-      };
-      signal?.addEventListener('abort', onAbort, { once: true });
-      if (signal?.aborted) onAbort();
+      const stop = abortAgent(child, signal, reject);
 
       child.on('close', (code) => {
         clearTimeout(timer);
-        signal?.removeEventListener('abort', onAbort);
+        stop();
         const stdoutText = Buffer.concat(stdout).toString('utf-8').trim();
         let text = stdoutText;
         let resultSessionId: string | undefined;
@@ -160,7 +160,7 @@ export class ClaudeCodeExecutor implements WorkerExecutor {
 
       child.on('error', (err) => {
         clearTimeout(timer);
-        signal?.removeEventListener('abort', onAbort);
+        stop();
         reject(err);
       });
     });

@@ -33,30 +33,33 @@ export async function ingestPublishedArtifacts(
     throw error;
   }
 
+  const failed: string[] = [];
   let count = 0;
-  try {
-    for (const line of raw.split('\n')) {
-      if (!line.trim()) continue;
-      let parsed: unknown;
-      try {
-        parsed = JSON.parse(line);
-      } catch {
-        console.error('Skipping invalid published artifact JSON line');
-        continue;
-      }
-      if (!isPublishArtifactInput(parsed)) {
-        console.error('Skipping invalid published artifact input');
-        continue;
-      }
-      try {
-        await publish(parsed);
-        count += 1;
-      } catch (error) {
-        console.error('Failed to publish artifact line:', error);
-      }
+  for (const line of raw.split('\n')) {
+    if (!line.trim()) continue;
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(line);
+    } catch {
+      console.error('Skipping invalid published artifact JSON line');
+      continue;
     }
-    return count;
-  } finally {
-    await fs.rm(file, { force: true });
+    if (!isPublishArtifactInput(parsed)) {
+      console.error('Skipping invalid published artifact input');
+      continue;
+    }
+    try {
+      await publish(parsed);
+      count += 1;
+    } catch (error) {
+      console.error('Failed to publish artifact line:', error);
+      failed.push(line);
+    }
   }
+  if (failed.length === 0) {
+    await fs.rm(file, { force: true });
+  } else {
+    await fs.writeFile(file, `${failed.join('\n')}\n`);
+  }
+  return count;
 }

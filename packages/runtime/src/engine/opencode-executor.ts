@@ -8,7 +8,12 @@ import type {
   ExecutorResult,
   WorkerExecutor,
 } from './executor.js';
-import { executorStateDir, writeProjectFile } from './executor-files.js';
+import {
+  abortAgent,
+  executorStateDir,
+  killProcessGroup,
+  writeProjectFile,
+} from './executor-files.js';
 import type { WorkerStatus } from './worker-report.js';
 
 const TIMEOUT_MS = 10 * 60 * 1000;
@@ -228,8 +233,9 @@ function permissionConfig(): Record<string, unknown> {
  * `external_directory` never sees bash arguments, so `git push origin HEAD`
  * from inside the sandbox would write back to the original repo without any
  * absolute path appearing in the command. Drop the remote before opencode
- * starts. No-op when the workspace has no git clone (e.g. smoke tests) or no
- * `origin`.
+ * starts. A linked worktree shares that remote with every other worktree, so
+ * its push URL is disabled locally instead. No-op when the workspace has no
+ * git clone (e.g. smoke tests) or no `origin`.
  */
 export function removeOriginRemote(workspaceDir: string): void {
   const repoDir = path.join(workspaceDir, 'repo');
@@ -240,7 +246,30 @@ export function removeOriginRemote(workspaceDir: string): void {
   } catch {
     return;
   }
-  if (!gitStat.isDirectory()) return;
+  if (!gitStat.isDirectory()) {
+    try {
+      execFileSync(
+        'git',
+        ['-C', repoDir, 'config', 'extensions.worktreeConfig', 'true'],
+        { stdio: 'ignore' },
+      );
+      execFileSync(
+        'git',
+        [
+          '-C',
+          repoDir,
+          'config',
+          '--worktree',
+          'remote.origin.pushurl',
+          'no-push://artificer.invalid/blocked',
+        ],
+        { stdio: 'ignore' },
+      );
+    } catch {
+      /* no origin configured — nothing to block */
+    }
+    return;
+  }
   try {
     execFileSync('git', ['-C', repoDir, 'remote', 'remove', 'origin'], {
       stdio: 'ignore',
@@ -301,6 +330,7 @@ export class OpencodeExecutor implements WorkerExecutor {
 
       const child = spawn('opencode', args, {
         cwd: workspaceDir,
+        detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 
@@ -310,19 +340,14 @@ export class OpencodeExecutor implements WorkerExecutor {
       child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
 
       const timer = setTimeout(() => {
-        child.kill('SIGKILL');
+        killProcessGroup(child, 'SIGKILL');
         reject(new Error('opencode agent timed out'));
       }, TIMEOUT_MS);
-      const onAbort = () => {
-        child.kill('SIGTERM');
-        reject(new Error('cancelled'));
-      };
-      signal?.addEventListener('abort', onAbort, { once: true });
-      if (signal?.aborted) onAbort();
+      const stop = abortAgent(child, signal, reject);
 
       child.on('close', (code) => {
         clearTimeout(timer);
-        signal?.removeEventListener('abort', onAbort);
+        stop();
         restoreMcpConfig();
         const text = Buffer.concat(stdout).toString('utf-8').trim();
 
@@ -377,7 +402,7 @@ export class OpencodeExecutor implements WorkerExecutor {
 
       child.on('error', (err) => {
         clearTimeout(timer);
-        signal?.removeEventListener('abort', onAbort);
+        stop();
         restoreMcpConfig();
         reject(err);
       });

@@ -1,4 +1,5 @@
 import { execFileSync } from 'node:child_process';
+import type { ChildProcess } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -37,28 +38,75 @@ function realpath(target: string): string {
   }
 }
 
+function appendExcludePattern(file: string, pattern: string): void {
+  let existing = '';
+  try {
+    existing = fs.readFileSync(file, 'utf-8');
+  } catch {
+    /* no exclude file yet */
+  }
+  if (existing.split('\n').some((line) => line.trim() === pattern)) return;
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const prefix = existing && !existing.endsWith('\n') ? '\n' : '';
+  fs.appendFileSync(file, `${prefix}${pattern}\n`);
+}
+
+function excludeLinkedWorktree(workspaceDir: string, pattern: string): void {
+  const excludeFile = path.join(executorStateDir(workspaceDir), 'exclude');
+  execFileSync(
+    'git',
+    ['-C', workspaceDir, 'config', 'extensions.worktreeConfig', 'true'],
+    { stdio: 'ignore' },
+  );
+  const current = gitOutput(workspaceDir, [
+    'config',
+    '--worktree',
+    '--get',
+    'core.excludesFile',
+  ]);
+  if (current) {
+    appendExcludePattern(path.resolve(workspaceDir, current), pattern);
+    return;
+  }
+  appendExcludePattern(excludeFile, pattern);
+  execFileSync(
+    'git',
+    [
+      '-C',
+      workspaceDir,
+      'config',
+      '--worktree',
+      'core.excludesFile',
+      excludeFile,
+    ],
+    { stdio: 'ignore' },
+  );
+}
+
 /** Add `relPath` to the repo's info/exclude when `workspaceDir` is a repo root. */
 function excludeFromRepo(workspaceDir: string, relPath: string): void {
   const top = gitOutput(workspaceDir, ['rev-parse', '--show-toplevel']);
   if (!top || realpath(top) !== realpath(workspaceDir)) return;
+  const pattern = `/${relPath.split(path.sep).join('/')}`;
+  let gitStat: fs.Stats;
+  try {
+    gitStat = fs.statSync(path.join(workspaceDir, '.git'));
+  } catch {
+    return;
+  }
+  // info/exclude is shared by every worktree. A linked worktree gets its own
+  // excludes file so one run does not hide paths in the others.
+  if (gitStat.isFile()) {
+    excludeLinkedWorktree(workspaceDir, pattern);
+    return;
+  }
   const excludeFile = gitOutput(workspaceDir, [
     'rev-parse',
     '--git-path',
     'info/exclude',
   ]);
   if (!excludeFile) return;
-  const resolved = path.resolve(workspaceDir, excludeFile);
-  const pattern = `/${relPath.split(path.sep).join('/')}`;
-  let existing = '';
-  try {
-    existing = fs.readFileSync(resolved, 'utf-8');
-  } catch {
-    /* no exclude file yet */
-  }
-  if (existing.split('\n').some((line) => line.trim() === pattern)) return;
-  fs.mkdirSync(path.dirname(resolved), { recursive: true });
-  const prefix = existing && !existing.endsWith('\n') ? '\n' : '';
-  fs.appendFileSync(resolved, `${prefix}${pattern}\n`);
+  appendExcludePattern(path.resolve(workspaceDir, excludeFile), pattern);
 }
 
 /**
@@ -110,5 +158,53 @@ export function writeProjectFile(
     } catch (error) {
       console.error(`[executor] failed to restore ${file}:`, error);
     }
+  };
+}
+
+const KILL_ESCALATE_MS = 1_000;
+
+/** Signal an agent and the processes it spawned in its own group. */
+export function killProcessGroup(
+  child: ChildProcess,
+  signal: NodeJS.Signals,
+): void {
+  const pid = child.pid;
+  if (pid === undefined) return;
+  try {
+    process.kill(-pid, signal);
+  } catch {
+    try {
+      child.kill(signal);
+    } catch {
+      /* already exited */
+    }
+  }
+}
+
+/**
+ * Reject with `cancelled` and stop the agent's process group. The child must
+ * be spawned with `detached: true` so the negative pid is its group, not ours.
+ * Returns a cleanup function for the close/error handlers.
+ */
+export function abortAgent(
+  child: ChildProcess,
+  signal: AbortSignal | undefined,
+  reject: (error: Error) => void,
+): () => void {
+  let escalate: ReturnType<typeof setTimeout> | undefined;
+  const onAbort = () => {
+    killProcessGroup(child, 'SIGTERM');
+    escalate = setTimeout(
+      () => killProcessGroup(child, 'SIGKILL'),
+      KILL_ESCALATE_MS,
+    );
+    escalate.unref();
+    reject(new Error('cancelled'));
+  };
+  signal?.addEventListener('abort', onAbort, { once: true });
+  if (signal?.aborted) onAbort();
+  return () => {
+    if (escalate) clearTimeout(escalate);
+    signal?.removeEventListener('abort', onAbort);
   };
 }

@@ -24,6 +24,18 @@ export interface RunConversationTurnInput {
   run?: RunRecord;
 }
 
+function isStaleSessionError(error: unknown): boolean {
+  const message = (
+    error instanceof Error ? error.message : String(error)
+  ).toLowerCase();
+  return (
+    message.includes('no conversation found') ||
+    message.includes('session not found') ||
+    message.includes('no such session') ||
+    message.includes('session does not exist')
+  );
+}
+
 export async function runConversationTurn(
   input: RunConversationTurnInput,
 ): Promise<{ text: string; sessionId?: string; clearedSession?: boolean }> {
@@ -93,7 +105,7 @@ export async function runConversationTurn(
       result = await execute(input.content, input.workstream.agentSessionId);
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (message === 'cancelled') throw error;
+      if (message === 'cancelled' || !isStaleSessionError(error)) throw error;
       clearedSession = true;
       result = await execute(transcriptPrompt);
     }

@@ -116,6 +116,11 @@ test('a dirty shared checkout keeps its HEAD and still adds a worktree', async (
   });
   const after = (await git(['-C', checkout, 'rev-parse', 'HEAD'])).trim();
   assert.equal(after, before);
+  await assert.rejects(fs.access(path.join(checkout, 'dirty.txt')));
+  assert.equal(
+    (await git(['-C', checkout, 'status', '--porcelain'])).trim(),
+    '',
+  );
   const branch = (
     await git(['-C', path.join(second, 'repo'), 'branch', '--show-current'])
   ).trim();
@@ -319,6 +324,53 @@ test('duplicate allowlist URLs fall back to a shallow clone', async () => {
   assert.equal(kind, 'clone');
   const stat = await fs.stat(path.join(workspaceDir, 'repo', '.git'));
   assert.equal(stat.isDirectory(), true);
+});
+
+test('inspectRemoval allows a checkout that is already gone', async () => {
+  const execRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-rm-'));
+  const workspaceDir = path.join(execRoot, 'workspace', 'ws-1');
+  await fs.mkdir(workspaceDir, { recursive: true });
+  assert.deepEqual(
+    await inspectRemoval({
+      execRoot,
+      workstreamId: 'ws-1',
+      workspaceDir,
+      force: false,
+    }),
+    { ok: true },
+  );
+});
+
+test('force removal discards the checkout and keeps an unmerged branch', async () => {
+  const origin = await bareOrigin();
+  const execRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-rm-'));
+  const repo = { id: 'app', url: origin, baseBranch: 'main' };
+  const workspaceDir = path.join(execRoot, 'workspace', 'ws-1');
+  const repoDir = path.join(workspaceDir, 'repo');
+  await ensureWorktree({ execRoot, repo, workstreamId: 'ws-1', workspaceDir });
+  await git(['-C', repoDir, 'config', 'user.email', 't@t.test']);
+  await git(['-C', repoDir, 'config', 'user.name', 'Test']);
+  await fs.writeFile(path.join(repoDir, 'new.txt'), 'new\n');
+  await git(['-C', repoDir, 'add', 'new.txt']);
+  await git(['-C', repoDir, 'commit', '-q', '-m', 'new work']);
+
+  await removeWorkspace({
+    execRoot,
+    repo,
+    workstreamId: 'ws-1',
+    workspaceDir,
+    force: true,
+  });
+
+  await assert.rejects(fs.access(repoDir));
+  const ref = await git([
+    '-C',
+    repoCheckout(execRoot, 'app'),
+    'show-ref',
+    '--verify',
+    'refs/heads/artificer/ws-1',
+  ]);
+  assert.ok(ref.trim().length > 0);
 });
 
 test('remove refuses a dirty worktree until force', async () => {
