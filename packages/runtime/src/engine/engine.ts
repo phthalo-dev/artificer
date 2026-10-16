@@ -4,6 +4,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { EventEmitter } from 'node:events';
 import type { RuntimeConfig } from '../config.js';
+import type { ExecutorConfig } from '../api/types.js';
 import { scanAgentDirectory } from '../discover/discover.js';
 import { loadSchedulesFromDisk } from '../discover/loader.js';
 import {
@@ -44,6 +45,7 @@ import { CliExecutor } from './cli-executor.js';
 import { findGitRepo } from './git-repo.js';
 import { hasUncommittedChanges } from './git-ops.js';
 import { prepareWorkspace } from './worktrees.js';
+import { loadRepos } from './repos.js';
 import {
   nextWorkstreamAction,
   type WorkstreamFacts,
@@ -104,6 +106,8 @@ export interface RuntimeState {
     Pick<Workstream, 'id' | 'title' | 'status' | 'summary' | 'updatedAt'>
   >;
 }
+
+export class ConversationWorkstreamInputError extends Error {}
 
 /**
  * The runtime engine. It receives messages like a person would, runs the
@@ -613,6 +617,52 @@ export class Engine implements EngineApi {
       await this.kickoffWorkstream(ws.id, message.id);
     }
     return { workstream: ws, messageId: message.id };
+  }
+
+  async createConversationWorkstream(input: {
+    title: string;
+    goal: string;
+    repoId: string;
+    executor?: ExecutorConfig;
+  }): Promise<Workstream> {
+    const loaded = loadRepos(this.config.repos);
+    if (!loaded.ok) {
+      throw new ConversationWorkstreamInputError(loaded.error);
+    }
+    const repo = loaded.repos.find((entry) => entry.id === input.repoId);
+    if (!repo) {
+      throw new ConversationWorkstreamInputError(
+        `Unknown repo: ${input.repoId}`,
+      );
+    }
+
+    const workstream = await this.store.createWorkstream({
+      title: input.title,
+      goal: input.goal,
+      status: 'pending',
+      driver: 'conversation',
+      repoId: repo.id,
+      repoUrl: repo.url,
+      executor: input.executor,
+    });
+
+    try {
+      await prepareWorkspace({
+        execRoot: this.store.layout.root,
+        repos: this.config.repos,
+        repoUrl: repo.url,
+        workstreamId: workstream.id,
+        workspaceDir: this.store.layout.workstreamWorkspace(workstream.id),
+        env: buildGitEnv(this.config.github),
+      });
+    } catch (error) {
+      await this.store.deleteWorkstream(workstream.id);
+      throw error;
+    }
+
+    return (await this.store.updateWorkstream(workstream.id, {
+      status: 'in_progress',
+    }))!;
   }
 
   /** Spawn the orchestrator for a workstream created via createDirectWorkstream. */

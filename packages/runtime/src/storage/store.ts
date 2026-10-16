@@ -345,6 +345,16 @@ export class Store {
     return out;
   }
 
+  async deleteWorkstream(id: string): Promise<void> {
+    await Promise.all([
+      fs.rm(this.layout.workstreamDir(id), { recursive: true, force: true }),
+      fs.rm(this.layout.workstreamWorkspace(id), {
+        recursive: true,
+        force: true,
+      }),
+    ]);
+  }
+
   // --- Plan artifact ---
 
   async writePlan(workstreamId: string, content: string): Promise<void> {

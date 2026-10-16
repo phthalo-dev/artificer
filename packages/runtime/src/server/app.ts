@@ -10,9 +10,13 @@ import {
   summarize,
   summarizeByRole,
 } from '../engine/cost.js';
-import type { Engine } from '../engine/engine.js';
+import {
+  ConversationWorkstreamInputError,
+  type Engine,
+} from '../engine/engine.js';
 import { runGithubWatchOnce as defaultRunGithubWatchOnce } from '../engine/github-watch-runner.js';
 import type { GithubWatchState } from '../engine/github-watch.js';
+import { loadRepos } from '../engine/repos.js';
 import { type LlmSdkPackage, MODEL_CATALOG } from '../llm/catalog.js';
 import { listPresets } from '../engine/presets.js';
 import { primaryAccountIdFor } from '../engine/quota-config.js';
@@ -76,7 +80,27 @@ const applyPresetSchema = z.object({
   presetId: z.string().min(1),
 });
 
-const createWorkstreamSchema = z.object({
+const executorSchema = z.union([
+  z.literal('llm'),
+  z.literal('cursor-agent'),
+  z.literal('claude-code'),
+  z.literal('opencode'),
+  z.object({ type: z.literal('cursor-agent'), model: z.string().optional() }),
+  z.object({ type: z.literal('claude-code'), model: z.string().optional() }),
+  z.object({ type: z.literal('opencode'), model: z.string().optional() }),
+  z.object({
+    type: z.literal('cli'),
+    command: z.string(),
+    args: z.array(z.string()),
+    promptMode: z.enum(['stdin', 'arg']),
+    model: z.string().optional(),
+    timeout: z.number().optional(),
+    mcpConfigPath: z.string().optional(),
+  }),
+]);
+
+const machineWorkstreamSchema = z.object({
+  driver: z.literal('machine').optional(),
   title: z.string().min(1),
   goal: z.string().min(1),
   repoUrl: z.string().min(1).optional(),
@@ -84,6 +108,23 @@ const createWorkstreamSchema = z.object({
   autostart: z.boolean().optional(),
   submitPr: z.boolean().optional(),
 });
+
+const conversationWorkstreamSchema = z.object({
+  driver: z.literal('conversation'),
+  title: z.string().min(1),
+  goal: z.string().min(1),
+  repoId: z.string().min(1),
+  executor: executorSchema.optional(),
+  message: z.string().optional(),
+  baseCommit: z.string().optional(),
+  autostart: z.boolean().optional(),
+  submitPr: z.boolean().optional(),
+});
+
+const createWorkstreamSchema = z.union([
+  machineWorkstreamSchema,
+  conversationWorkstreamSchema,
+]);
 
 const startWorkstreamSchema = z.object({
   messageId: z.string().min(1),
@@ -503,11 +544,30 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     return c.json(state);
   });
 
+  api.get('/repos', (c) => {
+    const loaded = loadRepos(engine.config.repos);
+    if (!loaded.ok) return c.json({ error: loaded.error }, 400);
+    return c.json({ repos: loaded.repos });
+  });
+
   api.post('/workstreams', async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const parsed = createWorkstreamSchema.safeParse(body);
     if (!parsed.success) {
       return c.json({ error: parsed.error.flatten() }, 400);
+    }
+    if (parsed.data.driver === 'conversation') {
+      try {
+        const workstream = await engine.createConversationWorkstream(
+          parsed.data,
+        );
+        return c.json({ workstream }, 201);
+      } catch (error) {
+        const message = error instanceof Error ? error.message : String(error);
+        const status =
+          error instanceof ConversationWorkstreamInputError ? 400 : 500;
+        return c.json({ error: message }, status);
+      }
     }
     const { workstream, messageId } = await engine.createDirectWorkstream(
       parsed.data,
