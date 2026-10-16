@@ -2,6 +2,12 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import { loadRepos, matchRepo, repoUrlKey } from './repos.js';
 
+test('repoUrlKey rejects schemeless, non-https, and non-git ssh URLs', () => {
+  assert.equal(repoUrlKey('github.com/org/repo'), undefined);
+  assert.equal(repoUrlKey('ftp://github.com/org/repo'), undefined);
+  assert.equal(repoUrlKey('ssh://someone@github.com/org/repo'), undefined);
+});
+
 test('https and git@ URLs of the same repo share a key', () => {
   const https = repoUrlKey('https://github.com/Org/Repo.git');
   const ssh = repoUrlKey('git@github.com:org/repo.git');
