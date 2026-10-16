@@ -632,6 +632,14 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     return c.json({ ok: true });
   });
 
+  api.post('/workstreams/:id/done', async (c) => {
+    const ok = await engine.markConversationDone(c.req.param('id'));
+    if (!ok) {
+      return c.json({ error: 'conversation cannot be marked done' }, 409);
+    }
+    return c.json({ ok: true });
+  });
+
   api.post('/workstreams/:id/worktree/remove', async (c) => {
     const body = await c.req.json().catch(() => ({}));
     const parsed = removeWorktreeSchema.safeParse(body);

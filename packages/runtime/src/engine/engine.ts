@@ -126,6 +126,11 @@ export class ConversationWorkstreamInputError extends Error {}
 export class ConversationBusy extends Error {}
 export class WorktreeRemovalConflict extends Error {}
 
+export function turnErrorReply(error: unknown): string | undefined {
+  const message = error instanceof Error ? error.message : String(error);
+  return message === 'cancelled' ? undefined : message;
+}
+
 /**
  * The runtime engine. It receives messages like a person would, runs the
  * hierarchical orchestration of small LLM calls, and persists everything to
@@ -146,6 +151,7 @@ export class Engine implements EngineApi {
   private readonly registry: RoleRegistry;
   private readonly customRegistry?: ToolRegistry;
   private readonly conversationPosting = new Set<string>();
+  private readonly conversationControllers = new Map<string, AbortController>();
   private readonly serviceManager: ServiceManager;
   private scheduleRunner?: ScheduleRunner;
   private quotaLedger?: QuotaLedger;
@@ -439,9 +445,43 @@ export class Engine implements EngineApi {
           result: run.error,
         });
       }
+      if (run.workstreamId) {
+        const workstream = await this.store.getWorkstream(run.workstreamId);
+        if (
+          workstream?.driver === 'conversation' &&
+          workstream.status === 'in_progress'
+        ) {
+          await this.reply(run.error, run.workstreamId);
+        }
+      }
       recovered.push(run);
     }
     return recovered;
+  }
+
+  async recoverPendingConversations(): Promise<void> {
+    const workstreams = await this.store.listWorkstreams();
+    for (const workstream of workstreams) {
+      if (
+        workstream.driver !== 'conversation' ||
+        workstream.status !== 'pending'
+      ) {
+        continue;
+      }
+      const gitFile = path.join(
+        this.store.layout.workstreamWorkspace(workstream.id),
+        'repo',
+        '.git',
+      );
+      try {
+        await fs.promises.access(gitFile);
+        await this.store.updateWorkstream(workstream.id, {
+          status: 'in_progress',
+        });
+      } catch {
+        await this.store.deleteWorkstream(workstream.id);
+      }
+    }
   }
 
   /**
@@ -811,6 +851,33 @@ export class Engine implements EngineApi {
       throw new WorktreeRemovalConflict(inspection.reason);
     }
     await removeWorkspace(input);
+  }
+
+  async markConversationDone(id: string): Promise<boolean> {
+    const workstream = await this.store.getWorkstream(id);
+    if (
+      !workstream ||
+      workstream.driver !== 'conversation' ||
+      workstream.status !== 'in_progress'
+    ) {
+      return false;
+    }
+    const runs = await this.store.listRunsForWorkstream(id);
+    if (
+      runs.some(
+        (run) =>
+          run.role === 'worker' &&
+          (run.status === 'queued' || run.status === 'running'),
+      )
+    ) {
+      return false;
+    }
+    await this.store.updateWorkstream(id, { status: 'done' });
+    await this.emitWorkstream(id);
+    await this.reply('Marked done.', id);
+    const updated = await this.store.getWorkstream(id);
+    if (updated) void this.handleWorkstreamTerminal(updated);
+    return true;
   }
 
   /** Spawn the orchestrator for a workstream created via createDirectWorkstream. */
@@ -1269,6 +1336,8 @@ export class Engine implements EngineApi {
     await this.store.saveRun(run);
     this.emit({ kind: 'run', at: run.startedAt, data: { ...run } });
 
+    const controller = new AbortController();
+    this.conversationControllers.set(workstream.id, controller);
     try {
       const result = await runConversationTurn({
         workstream,
@@ -1276,6 +1345,7 @@ export class Engine implements EngineApi {
         content: run.task,
         prior,
         executor: buildExecutor(workstream.executor),
+        signal: controller.signal,
         run,
         publishArtifact: (input) =>
           this.artifacts.publish(workstream.id, {
@@ -1350,14 +1420,17 @@ export class Engine implements EngineApi {
       this.emit({ kind: 'run', at: run.finishedAt, data: { ...run } });
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
-      if (message !== 'cancelled') {
-        await this.reply(message, workstream.id);
-      }
+      const outbound = turnErrorReply(error);
+      if (outbound !== undefined) await this.reply(outbound, workstream.id);
       run.status = 'failed';
       run.error = message;
       run.finishedAt = new Date().toISOString();
       await this.store.saveRun(run);
       this.emit({ kind: 'run', at: run.finishedAt, data: { ...run } });
+    } finally {
+      if (this.conversationControllers.get(workstream.id) === controller) {
+        this.conversationControllers.delete(workstream.id);
+      }
     }
   }
 
@@ -1552,6 +1625,9 @@ export class Engine implements EngineApi {
   async cancelWorkstream(id: string): Promise<boolean> {
     const ws = await this.store.getWorkstream(id);
     if (!ws || Engine.FSM_TERMINAL.has(ws.status)) return false;
+    if (ws.driver === 'conversation') {
+      this.conversationControllers.get(id)?.abort();
+    }
     await this.store.updateWorkstream(id, { status: 'cancelled' });
     await this.emitWorkstream(id);
     const updated = await this.store.getWorkstream(id);

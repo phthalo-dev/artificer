@@ -82,7 +82,7 @@ export class ClaudeCodeExecutor implements WorkerExecutor {
         reject(new Error('claude code agent timed out'));
       }, TIMEOUT_MS);
       const onAbort = () => {
-        child.kill('SIGKILL');
+        child.kill('SIGTERM');
         reject(new Error('cancelled'));
       };
       signal?.addEventListener('abort', onAbort, { once: true });

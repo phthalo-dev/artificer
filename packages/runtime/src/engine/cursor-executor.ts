@@ -25,10 +25,12 @@ export class CursorAgentExecutor implements WorkerExecutor {
   execute({
     context,
     workspaceDir,
+    signal,
   }: {
     context: string;
     workspaceDir: string;
     run: RunRecord;
+    signal?: AbortSignal;
   }): Promise<ExecutorResult> {
     const statusFile = path.join(workspaceDir, '.artificer-status.json');
     const mcpConfigDir = path.join(workspaceDir, '.cursor');
@@ -76,9 +78,16 @@ export class CursorAgentExecutor implements WorkerExecutor {
         child.kill('SIGKILL');
         reject(new Error('cursor agent timed out'));
       }, TIMEOUT_MS);
+      const onAbort = () => {
+        child.kill('SIGTERM');
+        reject(new Error('cancelled'));
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
+      if (signal?.aborted) onAbort();
 
       child.on('close', (code) => {
         clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
         const text = Buffer.concat(stdout).toString('utf-8').trim();
 
         // Read MCP-reported tool result if a tool was called
@@ -132,6 +141,7 @@ export class CursorAgentExecutor implements WorkerExecutor {
 
       child.on('error', (err) => {
         clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
         reject(err);
       });
     });
