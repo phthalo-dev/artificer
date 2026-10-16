@@ -48,8 +48,12 @@ export async function ingestPublishedArtifacts(
         console.error('Skipping invalid published artifact input');
         continue;
       }
-      await publish(parsed);
-      count += 1;
+      try {
+        await publish(parsed);
+        count += 1;
+      } catch (error) {
+        console.error('Failed to publish artifact line:', error);
+      }
     }
     return count;
   } finally {
