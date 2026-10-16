@@ -129,6 +129,7 @@ export async function ensureWorktree(
           120_000,
         );
       }
+      await git(['-C', checkout, 'worktree', 'prune'], input.env);
       await git(
         [
           '-C',

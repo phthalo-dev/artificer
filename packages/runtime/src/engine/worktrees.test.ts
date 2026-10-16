@@ -198,6 +198,41 @@ test('baseCommit checks out detached', async () => {
   assert.equal(head, commit);
 });
 
+test('baseCommit reattaches detached when the directory is gone', async () => {
+  const { origin, commit } = await bareOriginWithCommit();
+  const execRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-wt-'));
+  const repo = { id: 'app', url: origin, baseBranch: 'main' };
+  const workspaceDir = path.join(execRoot, 'workspace', 'ws-1');
+  await ensureWorktree({
+    execRoot,
+    repo,
+    workstreamId: 'ws-1',
+    workspaceDir,
+    baseCommit: commit,
+  });
+  await fs.rm(workspaceDir, { recursive: true, force: true });
+  await ensureWorktree({
+    execRoot,
+    repo,
+    workstreamId: 'ws-1',
+    workspaceDir,
+    baseCommit: commit,
+  });
+  const branch = (
+    await git([
+      '-C',
+      path.join(workspaceDir, 'repo'),
+      'branch',
+      '--show-current',
+    ])
+  ).trim();
+  assert.equal(branch, '');
+  const head = (
+    await git(['-C', path.join(workspaceDir, 'repo'), 'rev-parse', 'HEAD'])
+  ).trim();
+  assert.equal(head, commit);
+});
+
 test('Promise.all of two worktrees for one repo yields two branches', async () => {
   const origin = await bareOrigin();
   const execRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-wt-'));
