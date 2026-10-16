@@ -8,6 +8,7 @@ import type {
   ExecutorResult,
   WorkerExecutor,
 } from './executor.js';
+import { executorStateDir, writeProjectFile } from './executor-files.js';
 import type { WorkerStatus } from './worker-report.js';
 
 const TIMEOUT_MS = 5 * 60 * 1000;
@@ -32,13 +33,14 @@ export class CursorAgentExecutor implements WorkerExecutor {
     run: RunRecord;
     signal?: AbortSignal;
   }): Promise<ExecutorResult> {
-    const statusFile = path.join(workspaceDir, '.artificer-status.json');
-    const mcpConfigDir = path.join(workspaceDir, '.cursor');
-    const mcpConfigFile = path.join(mcpConfigDir, 'mcp.json');
-
-    fs.mkdirSync(mcpConfigDir, { recursive: true });
-    fs.writeFileSync(
-      mcpConfigFile,
+    const statusFile = path.join(
+      executorStateDir(workspaceDir),
+      '.artificer-status.json',
+    );
+    // cursor agent only reads MCP servers from the project's .cursor/mcp.json.
+    const restoreMcpConfig = writeProjectFile(
+      workspaceDir,
+      path.join('.cursor', 'mcp.json'),
       JSON.stringify({
         mcpServers: {
           [MCP_SERVER_ID]: {
@@ -88,6 +90,7 @@ export class CursorAgentExecutor implements WorkerExecutor {
       child.on('close', (code) => {
         clearTimeout(timer);
         signal?.removeEventListener('abort', onAbort);
+        restoreMcpConfig();
         const text = Buffer.concat(stdout).toString('utf-8').trim();
 
         // Read MCP-reported tool result if a tool was called
@@ -142,6 +145,7 @@ export class CursorAgentExecutor implements WorkerExecutor {
       child.on('error', (err) => {
         clearTimeout(timer);
         signal?.removeEventListener('abort', onAbort);
+        restoreMcpConfig();
         reject(err);
       });
     });

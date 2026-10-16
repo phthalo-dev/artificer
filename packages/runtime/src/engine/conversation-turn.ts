@@ -9,6 +9,7 @@ import {
 } from './conversation-prompt.js';
 import { ingestPublishedArtifacts } from './artifact-ingest.js';
 import type { WorkerExecutor } from './executor.js';
+import { executorStateDir } from './executor-files.js';
 import type { PublishArtifactInput } from './workstream-artifacts.js';
 
 export interface RunConversationTurnInput {
@@ -74,7 +75,10 @@ export async function runConversationTurn(
     } finally {
       if (input.publishArtifact) {
         try {
-          await ingestPublishedArtifacts(input.repoPath, input.publishArtifact);
+          await ingestPublishedArtifacts(
+            executorStateDir(input.repoPath),
+            input.publishArtifact,
+          );
         } catch (error) {
           console.error('Failed to ingest published artifacts:', error);
         }

@@ -414,3 +414,60 @@ test('removing a worktree keeps its unmerged branch', async () => {
   ]);
   assert.ok(ref.trim().length > 0);
 });
+
+test('a failed first clone leaves no partial checkout', async () => {
+  const origin = await bareOrigin();
+  const execRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-wt-'));
+  const template = path.join(execRoot, 'template');
+  await fs.mkdir(path.join(template, 'hooks'), { recursive: true });
+  const hook = path.join(template, 'hooks', 'post-checkout');
+  await fs.writeFile(hook, '#!/bin/sh\nexit 3\n');
+  await fs.chmod(hook, 0o755);
+  const repo = { id: 'app', url: origin, baseBranch: 'main' };
+  await assert.rejects(
+    ensureWorktree({
+      execRoot,
+      repo,
+      workstreamId: 'ws-1',
+      workspaceDir: path.join(execRoot, 'workspace', 'ws-1'),
+      env: { ...process.env, GIT_TEMPLATE_DIR: template },
+    }),
+  );
+  await assert.rejects(fs.access(repoCheckout(execRoot, 'app')));
+});
+
+test('an unlisted worktree is removed from the checkout it came from', async () => {
+  const origin = await bareOrigin();
+  const execRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-rm-'));
+  const repo = { id: 'app', url: origin, baseBranch: 'main' };
+  const workspaceDir = path.join(execRoot, 'workspace', 'ws-1');
+  await ensureWorktree({ execRoot, repo, workstreamId: 'ws-1', workspaceDir });
+  const input = { execRoot, workstreamId: 'ws-1', workspaceDir };
+  assert.deepEqual(await inspectRemoval({ ...input, force: false }), {
+    ok: true,
+  });
+  await removeWorkspace({ ...input, force: false });
+  await assert.rejects(fs.access(path.join(workspaceDir, 'repo')));
+  await fs.access(path.join(repoCheckout(execRoot, 'app'), '.git'));
+});
+
+test('a standalone clone with an unpushed commit needs force', async () => {
+  const origin = await bareOrigin();
+  const execRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-rm-'));
+  const workspaceDir = path.join(execRoot, 'workspace', 'ws-1');
+  const repoDir = path.join(workspaceDir, 'repo');
+  await git(['clone', '-q', origin, repoDir]);
+  const input = { execRoot, workstreamId: 'ws-1', workspaceDir };
+  assert.deepEqual(await inspectRemoval({ ...input, force: false }), {
+    ok: true,
+  });
+  await git(['-C', repoDir, 'config', 'user.email', 't@t.test']);
+  await git(['-C', repoDir, 'config', 'user.name', 'Test']);
+  await git(['-C', repoDir, 'commit', '-q', '--allow-empty', '-m', 'local']);
+  const blocked = await inspectRemoval({ ...input, force: false });
+  assert.equal(blocked.ok, false);
+  if (!blocked.ok) assert.match(blocked.reason, /unpushed/);
+  await removeWorkspace({ ...input, force: true });
+  await assert.rejects(fs.access(workspaceDir));
+  await assert.rejects(fs.access(path.join(execRoot, 'repos')));
+});

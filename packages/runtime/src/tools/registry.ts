@@ -152,6 +152,7 @@ export function toolsForRole(
         ...git,
         ...services,
         ...byName(artifacts, ['read_plan', 'report_status']),
+        ...byName(workstreamArtifacts, ['publish_workstream_artifact']),
         ...byName(orchestrator, [
           'get_status',
           'query_memories',

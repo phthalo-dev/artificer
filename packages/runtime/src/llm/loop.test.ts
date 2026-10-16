@@ -192,3 +192,30 @@ test('runToolLoop returns approval_denied without emitting', async () => {
   assert.equal(payload.kind, 'approval_denied');
   assert.equal(events.length, 0);
 });
+
+test('runToolLoop stops between iterations when its signal aborts', async () => {
+  const controller = new AbortController();
+  const model = toolCallThenText('stop_me', {});
+  await assert.rejects(
+    runToolLoop({
+      model,
+      system: 'You are helpful.',
+      userMessage: 'go',
+      tools: [
+        {
+          name: 'stop_me',
+          description: 'aborts the call',
+          inputSchema: { type: 'object', properties: {} },
+          handler: async () => {
+            controller.abort();
+            return 'stopped';
+          },
+        },
+      ],
+      maxIterations: 5,
+      signal: controller.signal,
+    }),
+    /cancelled/,
+  );
+  assert.equal(model.doGenerateCalls.length, 1);
+});

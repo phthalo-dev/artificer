@@ -37,7 +37,7 @@ async function buildApp() {
   const store = new Store(config.execDir);
   await store.init();
   const engine = new Engine(config, store);
-  return { app: createApp(engine), store, config };
+  return { app: createApp(engine), store, config, engine };
 }
 
 async function conversationFixture() {
@@ -516,4 +516,152 @@ test('GET /workstreams/:id includes the resolved executor', async () => {
 
   assert.equal(inheritedBody.resolvedExecutor, 'claude-code');
   assert.equal(overriddenBody.resolvedExecutor, 'cursor-agent');
+});
+
+async function waitForIdle(engine: Engine, store: Store, id: string) {
+  for (let attempt = 0; attempt < 100; attempt += 1) {
+    await new Promise((resolve) => setTimeout(resolve, 20));
+    const state = await engine.getState();
+    const runs = await store.listRunsForWorkstream(id);
+    const busyRun = runs.some(
+      (run) => run.status === 'queued' || run.status === 'running',
+    );
+    if (attempt >= 5 && !state.busy && !busyRun) return;
+  }
+  assert.fail('scheduler did not go idle');
+}
+
+test('mark done leaves exactly one message once the scheduler is idle', async () => {
+  const { app, store, engine, restore } = await conversationFixture();
+  try {
+    const id = await createChat(app);
+    const res = await app.request(`/api/workstreams/${id}/done`, {
+      method: 'POST',
+    });
+    assert.equal(res.status, 200);
+    await waitForIdle(engine, store, id);
+    const messages = (await store.listMessages()).filter(
+      (message) => message.workstreamId === id,
+    );
+    assert.deepEqual(
+      messages.map((message) => message.content),
+      ['Marked done.'],
+    );
+    const runs = await store.listRunsForWorkstream(id);
+    assert.equal(
+      runs.some((run) => run.role === 'receipt'),
+      false,
+    );
+  } finally {
+    restore();
+  }
+});
+
+test('a queued conversation turn after mark done fails cancelled and posts nothing', async () => {
+  const { app, store, engine, restore } = await conversationFixture();
+  try {
+    const id = await createChat(app);
+    const run = await store.createRun({
+      role: 'worker',
+      task: 'late turn',
+      workstreamId: id,
+    });
+    await store.updateWorkstream(id, { status: 'done' });
+    await (
+      engine as unknown as { runOne(runId: string): Promise<void> }
+    ).runOne(run.id);
+    const saved = await store.getRun(run.id);
+    assert.equal(saved?.status, 'failed');
+    assert.equal(saved?.error, 'cancelled');
+    const messages = (await store.listMessages()).filter(
+      (message) => message.workstreamId === id,
+    );
+    assert.equal(messages.length, 0);
+  } finally {
+    restore();
+  }
+});
+
+test('a done machine workstream with its own clone can be removed', async () => {
+  const origin = await bareOrigin();
+  const { app, store, config } = await buildApp();
+  config.repos = [
+    { id: 'other', url: 'https://github.com/acme/other', baseBranch: 'main' },
+  ];
+  const reposDir = path.join(config.execDir, 'repos');
+  await fs.mkdir(path.join(reposDir, 'other'), { recursive: true });
+  await fs.writeFile(path.join(reposDir, 'other', 'keep.txt'), 'keep\n');
+  const ws = await store.createWorkstream({
+    title: 'Machine',
+    goal: 'Work',
+    repoUrl: origin,
+    status: 'done',
+  });
+  const workspaceDir = store.layout.workstreamWorkspace(ws.id);
+  await fs.mkdir(workspaceDir, { recursive: true });
+  await exec('git', ['clone', '-q', origin, path.join(workspaceDir, 'repo')]);
+
+  const res = await app.request(`/api/workstreams/${ws.id}/worktree/remove`, {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({}),
+  });
+  assert.equal(res.status, 200);
+  await assert.rejects(fs.access(path.join(workspaceDir, 'repo')));
+  assert.deepEqual(await fs.readdir(reposDir), ['other']);
+  assert.equal(
+    await fs.readFile(path.join(reposDir, 'other', 'keep.txt'), 'utf8'),
+    'keep\n',
+  );
+});
+
+test('conversation chat stays out of the inbox and channel fallback', async () => {
+  const { app, store, engine, restore } = await conversationFixture();
+  try {
+    await store.appendMessage({
+      direction: 'inbound',
+      content: 'from slack',
+      channelContext: { name: 'slack', metadata: { channel: 'C1' } },
+    });
+    const id = await createChat(app);
+    await store.appendMessage({
+      direction: 'inbound',
+      content: 'chat question',
+      workstreamId: id,
+    });
+    await store.appendMessage({
+      direction: 'outbound',
+      content: 'chat answer',
+      workstreamId: id,
+    });
+    const machine = await store.createWorkstream({
+      title: 'Machine',
+      goal: 'Work',
+      status: 'done',
+    });
+    await store.appendMessage({
+      direction: 'outbound',
+      content: 'machine receipt',
+      workstreamId: machine.id,
+    });
+
+    const res = await app.request('/api/messages');
+    const body = (await res.json()) as { messages: Array<{ content: string }> };
+    assert.deepEqual(
+      body.messages.map((message) => message.content),
+      ['from slack', 'machine receipt'],
+    );
+    const resolve = (
+      engine as unknown as {
+        resolveChannelContext(id?: string): Promise<unknown>;
+      }
+    ).resolveChannelContext.bind(engine);
+    assert.equal(await resolve(id), undefined);
+    assert.deepEqual(await resolve(machine.id), {
+      name: 'slack',
+      metadata: { channel: 'C1' },
+    });
+  } finally {
+    restore();
+  }
 });
