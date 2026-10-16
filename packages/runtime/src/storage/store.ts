@@ -238,7 +238,15 @@ export class Store {
       Partial<
         Pick<
           Workstream,
-          'repoUrl' | 'baseCommit' | 'summary' | 'status' | 'submitPr'
+          | 'driver'
+          | 'repoId'
+          | 'executor'
+          | 'agentSessionId'
+          | 'repoUrl'
+          | 'baseCommit'
+          | 'summary'
+          | 'status'
+          | 'submitPr'
         >
       >,
   ): Promise<Workstream> {
@@ -246,6 +254,10 @@ export class Store {
     const workstream: Workstream = {
       id: newId('ws'),
       traceId: newId('trace'),
+      driver: input.driver,
+      repoId: input.repoId,
+      executor: input.executor,
+      agentSessionId: input.agentSessionId,
       title: input.title,
       goal: input.goal,
       status: input.status ?? 'pending',
@@ -281,6 +293,10 @@ export class Store {
         | 'status'
         | 'summary'
         | 'title'
+        | 'driver'
+        | 'repoId'
+        | 'executor'
+        | 'agentSessionId'
         | 'repoUrl'
         | 'baseCommit'
         | 'quotaPausedStatus'
