@@ -18,16 +18,23 @@ const MCP_SERVER = path.join(
 
 export class ClaudeCodeExecutor implements WorkerExecutor {
   readonly name = 'claude-code';
+  readonly resumesSession = true;
 
   constructor(private readonly model?: string) {}
 
   execute({
     context,
     workspaceDir,
+    sessionId,
+    signal,
+    outputFormat,
   }: {
     context: string;
     workspaceDir: string;
     run: RunRecord;
+    sessionId?: string;
+    signal?: AbortSignal;
+    outputFormat?: 'text' | 'json';
   }): Promise<ExecutorResult> {
     const statusFile = path.join(workspaceDir, '.artificer-status.json');
     const mcpConfigFile = path.join(workspaceDir, '.artificer-mcp.json');
@@ -54,6 +61,8 @@ export class ClaudeCodeExecutor implements WorkerExecutor {
         mcpConfigFile,
       ];
       if (this.model) args.push('--model', this.model);
+      if (sessionId) args.push('--resume', sessionId);
+      if (outputFormat === 'json') args.push('--output-format', 'json');
 
       const child = spawn('claude', args, {
         cwd: workspaceDir,
@@ -72,10 +81,31 @@ export class ClaudeCodeExecutor implements WorkerExecutor {
         child.kill('SIGKILL');
         reject(new Error('claude code agent timed out'));
       }, TIMEOUT_MS);
+      const onAbort = () => {
+        child.kill('SIGKILL');
+        reject(new Error('cancelled'));
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
+      if (signal?.aborted) onAbort();
 
       child.on('close', (code) => {
         clearTimeout(timer);
-        const text = Buffer.concat(stdout).toString('utf-8').trim();
+        signal?.removeEventListener('abort', onAbort);
+        const stdoutText = Buffer.concat(stdout).toString('utf-8').trim();
+        let text = stdoutText;
+        let resultSessionId: string | undefined;
+        if (outputFormat === 'json') {
+          try {
+            const parsed = JSON.parse(stdoutText) as Record<string, unknown>;
+            text = typeof parsed.result === 'string' ? parsed.result : '';
+            resultSessionId =
+              typeof parsed.session_id === 'string'
+                ? parsed.session_id
+                : undefined;
+          } catch {
+            text = stdoutText;
+          }
+        }
 
         let workerStatus: WorkerStatus | undefined;
         let workerSummary: string | undefined;
@@ -116,6 +146,7 @@ export class ClaudeCodeExecutor implements WorkerExecutor {
         } else {
           resolve({
             text: text || '(no output)',
+            sessionId: resultSessionId,
             usage: { inputTokens: 0, outputTokens: 0 },
             workerStatus,
             workerSummary,
@@ -127,6 +158,7 @@ export class ClaudeCodeExecutor implements WorkerExecutor {
 
       child.on('error', (err) => {
         clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
         reject(err);
       });
     });

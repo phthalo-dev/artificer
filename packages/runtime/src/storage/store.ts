@@ -307,6 +307,9 @@ export class Store {
     const existing = await this.getWorkstream(id);
     if (!existing) return null;
     const updated: Workstream = { ...existing, ...patch, updatedAt: now() };
+    if ('agentSessionId' in patch && patch.agentSessionId === undefined) {
+      delete updated.agentSessionId;
+    }
     await writeJson(this.layout.workstreamFile(id), updated);
     await this.recordTrace({
       workstreamId: updated.id,

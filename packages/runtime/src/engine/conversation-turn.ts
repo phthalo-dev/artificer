@@ -22,7 +22,7 @@ export interface RunConversationTurnInput {
 
 export async function runConversationTurn(
   input: RunConversationTurnInput,
-): Promise<{ text: string; sessionId?: string }> {
+): Promise<{ text: string; sessionId?: string; clearedSession?: boolean }> {
   const preamble = conversationPreamble({
     workstreamId: input.workstream.id,
     goal: input.workstream.goal,
@@ -31,15 +31,15 @@ export async function runConversationTurn(
   const resume = Boolean(
     input.executor?.resumesSession && input.workstream.agentSessionId,
   );
-  const prompt = conversationPrompt({
+  const transcriptPrompt = conversationPrompt({
     preamble,
     prior: input.prior,
     content: input.content,
-    resume,
+    resume: false,
   });
 
   if (!input.executor) {
-    const text = await input.runBuiltin(prompt, input.repoPath);
+    const text = await input.runBuiltin(transcriptPrompt, input.repoPath);
     return { text: text.trim() ? text : '(no output)' };
   }
 
@@ -55,15 +55,37 @@ export async function runConversationTurn(
       usage: emptyUsage(),
       createdAt: new Date().toISOString(),
     } satisfies RunRecord);
-  const result = await input.executor.execute({
-    context: prompt,
-    workspaceDir: input.repoPath,
-    run,
-    sessionId: resume ? input.workstream.agentSessionId : undefined,
-    signal: input.signal,
-  });
+  const execute = (context: string, sessionId?: string) => {
+    const options = {
+      context,
+      workspaceDir: input.repoPath,
+      run,
+      sessionId,
+      signal: input.signal,
+      ...(input.executor?.name === 'claude-code'
+        ? { outputFormat: 'json' as const }
+        : {}),
+    };
+    return input.executor!.execute(options);
+  };
+
+  let result;
+  let clearedSession = false;
+  if (resume) {
+    try {
+      result = await execute(input.content, input.workstream.agentSessionId);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message === 'cancelled') throw error;
+      clearedSession = true;
+      result = await execute(transcriptPrompt);
+    }
+  } else {
+    result = await execute(transcriptPrompt);
+  }
   return {
     text: result.text.trim() ? result.text : '(no output)',
     sessionId: result.sessionId,
+    clearedSession: clearedSession || undefined,
   };
 }
