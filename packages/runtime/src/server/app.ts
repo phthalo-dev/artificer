@@ -11,6 +11,7 @@ import {
   summarizeByRole,
 } from '../engine/cost.js';
 import {
+  ConversationBusy,
   ConversationWorkstreamInputError,
   type Engine,
 } from '../engine/engine.js';
@@ -558,10 +559,8 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     }
     if (parsed.data.driver === 'conversation') {
       try {
-        const workstream = await engine.createConversationWorkstream(
-          parsed.data,
-        );
-        return c.json({ workstream }, 201);
+        const result = await engine.createConversationWorkstream(parsed.data);
+        return c.json(result, 201);
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const status =
@@ -573,6 +572,34 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
       parsed.data,
     );
     return c.json({ workstreamId: workstream.id, messageId }, 202);
+  });
+
+  api.post('/workstreams/:id/messages', async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = sendMessageSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+    try {
+      const message = await engine.postConversationMessage(
+        c.req.param('id'),
+        parsed.data.content,
+      );
+      return c.json({ message }, 202);
+    } catch (error) {
+      if (error instanceof ConversationBusy) {
+        return c.json({ error: error.message }, 409);
+      }
+      throw error;
+    }
+  });
+
+  api.get('/workstreams/:id/messages', async (c) => {
+    const id = c.req.param('id');
+    const messages = (await engine.store.listMessages())
+      .filter((message) => message.workstreamId === id)
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt));
+    return c.json({ messages });
   });
 
   api.post('/workstreams/:id/start', async (c) => {

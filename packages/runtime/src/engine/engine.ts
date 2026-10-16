@@ -17,8 +17,14 @@ import {
 import { IdentityGitSync } from '../storage/identity-git-sync.js';
 
 const exec = promisify(execFile);
-import type { EngineApi, RuntimeEvent, SpawnCallInput } from '../context.js';
+import type {
+  EngineApi,
+  RuntimeEvent,
+  SpawnCallInput,
+  ToolContext,
+} from '../context.js';
 import { resolveLanguageModel } from '../llm/provider.js';
+import { runToolLoop } from '../llm/loop.js';
 import { Store } from '../storage/store.js';
 import { TraceRecorder } from '../storage/trace-recorder.js';
 import { deliverChannelMessage } from '../channels/delivery.js';
@@ -35,6 +41,8 @@ import type {
   WorkstreamStatus,
 } from '../storage/types.js';
 import { executeCall } from './call.js';
+import { conversationPreamble } from './conversation-prompt.js';
+import { runConversationTurn } from './conversation-turn.js';
 import { shouldStepWorkstream } from './conversation-guard.js';
 import type { WorkerExecutor } from './executor.js';
 import type { ScheduleRunner } from './schedule-runner.js';
@@ -89,6 +97,8 @@ import type { DispatchRoute } from './quota-types.js';
 import type { RoleName } from '../storage/types.js';
 import type { ToolRegistry } from '../api/tool-registry.js';
 import { ServiceManager } from '../services/service-manager.js';
+import { createToolPlan } from '../tools/tool-plan.js';
+import { loadEffectivePolicy } from '../tools/tool-policy.js';
 
 interface ActiveRun {
   runId: string;
@@ -108,6 +118,7 @@ export interface RuntimeState {
 }
 
 export class ConversationWorkstreamInputError extends Error {}
+export class ConversationBusy extends Error {}
 
 /**
  * The runtime engine. It receives messages like a person would, runs the
@@ -128,6 +139,7 @@ export class Engine implements EngineApi {
   private readonly executor?: WorkerExecutor;
   private readonly registry: RoleRegistry;
   private readonly customRegistry?: ToolRegistry;
+  private readonly conversationPosting = new Set<string>();
   private readonly serviceManager: ServiceManager;
   private scheduleRunner?: ScheduleRunner;
   private quotaLedger?: QuotaLedger;
@@ -624,7 +636,8 @@ export class Engine implements EngineApi {
     goal: string;
     repoId: string;
     executor?: ExecutorConfig;
-  }): Promise<Workstream> {
+    message?: string;
+  }): Promise<{ workstream: Workstream; messageId?: string }> {
     const loaded = loadRepos(this.config.repos);
     if (!loaded.ok) {
       throw new ConversationWorkstreamInputError(loaded.error);
@@ -660,9 +673,70 @@ export class Engine implements EngineApi {
       throw error;
     }
 
-    return (await this.store.updateWorkstream(workstream.id, {
+    const updated = (await this.store.updateWorkstream(workstream.id, {
       status: 'in_progress',
     }))!;
+    if (input.message) {
+      const message = await this.postConversationMessage(
+        updated.id,
+        input.message,
+      );
+      return { workstream: updated, messageId: message.id };
+    }
+    return { workstream: updated };
+  }
+
+  async postConversationMessage(id: string, content: string): Promise<Message> {
+    const workstream = await this.store.getWorkstream(id);
+    if (
+      !workstream ||
+      workstream.driver !== 'conversation' ||
+      workstream.status !== 'in_progress'
+    ) {
+      throw new ConversationBusy(
+        `Conversation workstream is not available (status: ${workstream?.status ?? 'not found'})`,
+      );
+    }
+
+    if (this.conversationPosting.has(id)) {
+      throw new ConversationBusy(
+        'The agent is still working on the previous message',
+      );
+    }
+
+    this.conversationPosting.add(id);
+    try {
+      const runs = await this.store.listRunsForWorkstream(id);
+      if (
+        runs.some(
+          (run) =>
+            run.role === 'worker' &&
+            (run.status === 'queued' || run.status === 'running'),
+        )
+      ) {
+        throw new ConversationBusy(
+          'The agent is still working on the previous message',
+        );
+      }
+
+      const message = await this.store.appendMessage({
+        direction: 'inbound',
+        content,
+        workstreamId: id,
+      });
+      this.emit({ kind: 'message', at: message.createdAt, data: message });
+      const run = await this.store.createRun({
+        role: 'worker',
+        task: content,
+        workstreamId: id,
+        originMessageId: message.id,
+        model: this.modelFor('worker'),
+      });
+      this.scheduler.enqueue(run.id);
+      return message;
+    } finally {
+      this.conversationPosting.delete(id);
+    }
   }
 
   /** Spawn the orchestrator for a workstream created via createDirectWorkstream. */
@@ -1071,6 +1145,13 @@ export class Engine implements EngineApi {
     });
 
     try {
+      if (run.workstreamId) {
+        const workstream = await this.store.getWorkstream(run.workstreamId);
+        if (workstream?.driver === 'conversation') {
+          await this.runConversationRun(run, workstream);
+          return;
+        }
+      }
       const route = this.runRoutes.get(runId);
       const finished = await executeCall(run, {
         resolveModel: this.resolveModelForRoute(route),
@@ -1088,6 +1169,111 @@ export class Engine implements EngineApi {
       await this.afterRun(finished);
     } finally {
       this.active.delete(runId);
+    }
+  }
+
+  private async runConversationRun(
+    run: RunRecord,
+    workstream: Workstream,
+  ): Promise<void> {
+    const repoPath = path.join(
+      this.store.layout.workstreamWorkspace(workstream.id),
+      'repo',
+    );
+    const messages = await this.store.listMessages();
+    const prior = messages
+      .filter(
+        (message) =>
+          message.workstreamId === workstream.id &&
+          message.id !== run.originMessageId,
+      )
+      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+      .map(({ direction, content }) => ({ direction, content }));
+
+    run.status = 'running';
+    run.startedAt = new Date().toISOString();
+    await this.store.saveRun(run);
+    this.emit({ kind: 'run', at: run.startedAt, data: { ...run } });
+
+    try {
+      const result = await runConversationTurn({
+        workstream,
+        repoPath,
+        content: run.task,
+        prior,
+        executor: buildExecutor(workstream.executor),
+        run,
+        runBuiltin: async (prompt, workspaceDir) => {
+          const onToolCall = (invocation: RunRecord['toolCalls'][number]) => {
+            run.toolCalls.push(invocation);
+            this.emit({
+              kind: 'tool',
+              at: invocation.at,
+              data: { ...invocation, runId: run.id },
+            });
+            void this.store.saveRun(run);
+          };
+          const ctx: ToolContext = {
+            engine: this,
+            run,
+            workspaceDir,
+            onToolCall,
+          };
+          const plan = createToolPlan({
+            role: 'worker',
+            ctx,
+            customRegistry: this.customRegistry,
+          });
+          ctx.toolPlan = plan;
+          const modelId = run.model ?? this.config.model;
+          const loopResult = await runToolLoop({
+            model: this.resolveModelForRoute()(modelId),
+            modelId,
+            system: conversationPreamble({
+              workstreamId: workstream.id,
+              goal: workstream.goal,
+              repoPath: workspaceDir,
+            }),
+            userMessage: prompt,
+            tools: [...plan.alwaysOn],
+            maxIterations: this.config.maxIterationsPerCall,
+            maxRunMs: this.config.maxRunMs,
+            maxTokens: 4096,
+            policy: loadEffectivePolicy({
+              execPath: this.store.layout.toolPolicyFile(),
+              identityPath: this.identity?.layout.agentToolPolicyFile(),
+            }),
+            emit: (event) => this.emit(event),
+            runId: run.id,
+            workstreamId: workstream.id,
+            onToolCall,
+          });
+          run.usage = loopResult.usage;
+          return loopResult.text;
+        },
+      });
+
+      await this.reply(result.text, workstream.id);
+      if (result.sessionId) {
+        await this.store.updateWorkstream(workstream.id, {
+          agentSessionId: result.sessionId,
+        });
+      }
+      run.output = result.text;
+      run.status = 'done';
+      run.finishedAt = new Date().toISOString();
+      await this.store.saveRun(run);
+      this.emit({ kind: 'run', at: run.finishedAt, data: { ...run } });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      if (message !== 'cancelled') {
+        await this.reply(message, workstream.id);
+      }
+      run.status = 'failed';
+      run.error = message;
+      run.finishedAt = new Date().toISOString();
+      await this.store.saveRun(run);
+      this.emit({ kind: 'run', at: run.finishedAt, data: { ...run } });
     }
   }
 

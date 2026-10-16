@@ -162,6 +162,60 @@ test('POST /workstreams conversation creates a worktree and returns 201', async 
   }
 });
 
+test('a second message while a worker run is queued returns 409', async () => {
+  const origin = await bareOrigin();
+  const { app, store, config } = await buildApp();
+  const repoUrl = 'https://github.com/acme/app';
+  config.repos = [{ id: 'app', url: repoUrl, baseBranch: 'main' }];
+  const keys = [
+    'GIT_CONFIG_COUNT',
+    'GIT_CONFIG_KEY_0',
+    'GIT_CONFIG_VALUE_0',
+  ] as const;
+  const previous = Object.fromEntries(
+    keys.map((key) => [key, process.env[key]]),
+  );
+  process.env.GIT_CONFIG_COUNT = '1';
+  process.env.GIT_CONFIG_KEY_0 = `url.${origin}/.insteadOf`;
+  process.env.GIT_CONFIG_VALUE_0 = repoUrl;
+  try {
+    const createRes = await app.request('/api/workstreams', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        driver: 'conversation',
+        title: 'Chat',
+        goal: 'Look around',
+        repoId: 'app',
+      }),
+    });
+    const created = (await createRes.json()) as {
+      workstream: { id: string };
+    };
+    await store.createRun({
+      role: 'worker',
+      task: 'busy',
+      workstreamId: created.workstream.id,
+    });
+    const res = await app.request(
+      `/api/workstreams/${created.workstream.id}/messages`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ content: 'hello' }),
+      },
+    );
+    assert.equal(res.status, 409);
+    assert.match(await res.text(), /still working/i);
+  } finally {
+    for (const key of keys) {
+      const value = previous[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
 test('GET /repos returns 400 when two entries normalize to the same URL', async () => {
   const { app, config } = await buildApp();
   config.repos = [
