@@ -382,3 +382,35 @@ test('removing a detached worktree leaves a sibling artificer branch', async () 
   ]);
   assert.ok(ref.trim().length > 0);
 });
+
+test('removing a worktree keeps its unmerged branch', async () => {
+  const origin = await bareOrigin();
+  const execRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-rm-'));
+  const repo = { id: 'app', url: origin, baseBranch: 'main' };
+  const workspaceDir = path.join(execRoot, 'workspace', 'ws-1');
+  const repoDir = path.join(workspaceDir, 'repo');
+  await ensureWorktree({ execRoot, repo, workstreamId: 'ws-1', workspaceDir });
+  await git(['-C', repoDir, 'config', 'user.email', 't@t.test']);
+  await git(['-C', repoDir, 'config', 'user.name', 'Test']);
+  await fs.writeFile(path.join(repoDir, 'new.txt'), 'new\n');
+  await git(['-C', repoDir, 'add', 'new.txt']);
+  await git(['-C', repoDir, 'commit', '-q', '-m', 'new work']);
+
+  await removeWorkspace({
+    execRoot,
+    repo,
+    workstreamId: 'ws-1',
+    workspaceDir,
+    force: false,
+  });
+
+  await assert.rejects(fs.access(repoDir));
+  const ref = await git([
+    '-C',
+    repoCheckout(execRoot, 'app'),
+    'show-ref',
+    '--verify',
+    'refs/heads/artificer/ws-1',
+  ]);
+  assert.ok(ref.trim().length > 0);
+});

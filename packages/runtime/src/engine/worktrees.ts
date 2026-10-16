@@ -311,10 +311,15 @@ export async function removeWorkspace(input: RemovalInput): Promise<void> {
     await git(removeArgs, input.env, 30_000);
 
     if (branch === `artificer/${input.workstreamId}`) {
-      await git(
+      const deleteBranch = git(
         ['-C', checkout, 'branch', input.force ? '-D' : '-d', branch],
         input.env,
       );
+      if (input.force) {
+        await deleteBranch;
+      } else {
+        await deleteBranch.catch(() => undefined);
+      }
     }
   });
 }
