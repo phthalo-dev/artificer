@@ -484,3 +484,36 @@ test('GET /workstreams/:id includes retry-counter progress with caps', async () 
   assert.equal(body.progress.totalRuns.count, 0);
   assert.ok(body.progress.totalRuns.max > 0);
 });
+
+test('GET /workstreams/:id includes the resolved executor', async () => {
+  const { app, store, config } = await buildApp();
+  const builtIn = await store.createWorkstream({
+    title: 'Built-in executor',
+    goal: 'Show the built-in executor',
+  });
+  const builtInBody = (await (
+    await app.request(`/api/workstreams/${builtIn.id}`)
+  ).json()) as { resolvedExecutor?: string | null };
+  assert.equal(builtInBody.resolvedExecutor, null);
+
+  config.executor = 'claude-code';
+  const inherited = await store.createWorkstream({
+    title: 'Inherited executor',
+    goal: 'Show the configured executor',
+  });
+  const overridden = await store.createWorkstream({
+    title: 'Override executor',
+    goal: 'Show the workstream executor',
+    executor: 'cursor-agent',
+  });
+
+  const inheritedBody = (await (
+    await app.request(`/api/workstreams/${inherited.id}`)
+  ).json()) as { resolvedExecutor?: string };
+  const overriddenBody = (await (
+    await app.request(`/api/workstreams/${overridden.id}`)
+  ).json()) as { resolvedExecutor?: string };
+
+  assert.equal(inheritedBody.resolvedExecutor, 'claude-code');
+  assert.equal(overriddenBody.resolvedExecutor, 'cursor-agent');
+});
