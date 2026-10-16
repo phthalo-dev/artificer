@@ -31,7 +31,7 @@ import { deliverChannelMessage } from '../channels/delivery.js';
 import { formatReceiptForChannel } from '../channels/receipt-format.js';
 import { WorkstreamReceiptService } from './workstream-receipt.js';
 import { WorkstreamArtifactService } from './workstream-artifacts.js';
-import { capturePullRequests } from './pull-requests.js';
+import { capturePullRequests, pullRequestMentions } from './pull-requests.js';
 import type { IdentityStore } from '../storage/identity-store.js';
 import type {
   Message,
@@ -53,7 +53,11 @@ import { OpencodeExecutor } from './opencode-executor.js';
 import { CliExecutor } from './cli-executor.js';
 import { findGitRepo } from './git-repo.js';
 import { hasUncommittedChanges } from './git-ops.js';
-import { prepareWorkspace } from './worktrees.js';
+import {
+  inspectRemoval,
+  prepareWorkspace,
+  removeWorkspace,
+} from './worktrees.js';
 import { loadRepos } from './repos.js';
 import {
   nextWorkstreamAction,
@@ -120,6 +124,7 @@ export interface RuntimeState {
 
 export class ConversationWorkstreamInputError extends Error {}
 export class ConversationBusy extends Error {}
+export class WorktreeRemovalConflict extends Error {}
 
 /**
  * The runtime engine. It receives messages like a person would, runs the
@@ -738,6 +743,74 @@ export class Engine implements EngineApi {
     } finally {
       this.conversationPosting.delete(id);
     }
+  }
+
+  async removeWorktree(id: string, force = false): Promise<void> {
+    const workstream = await this.store.getWorkstream(id);
+    if (!workstream) {
+      throw new WorktreeRemovalConflict('workstream not found');
+    }
+
+    const runs = await this.store.listRunsForWorkstream(id);
+    const busyRun = runs.find(
+      (run) => run.status === 'queued' || run.status === 'running',
+    );
+    if (busyRun) {
+      throw new WorktreeRemovalConflict(
+        `workstream has a ${busyRun.status} run`,
+      );
+    }
+    if (
+      workstream.status === 'pending' ||
+      workstream.status === 'planning' ||
+      workstream.status === 'reviewing' ||
+      workstream.status === 'in_progress'
+    ) {
+      throw new WorktreeRemovalConflict(
+        `workstream status is ${workstream.status}`,
+      );
+    }
+
+    const loaded = loadRepos(this.config.repos);
+    if (!loaded.ok) {
+      throw new WorktreeRemovalConflict(loaded.error);
+    }
+    const repo = loaded.repos.find((entry) => entry.id === workstream.repoId);
+    if (!repo) {
+      throw new WorktreeRemovalConflict(
+        `Unknown repo: ${workstream.repoId ?? 'not configured'}`,
+      );
+    }
+
+    const artifacts = await this.artifacts.list(id);
+    const pullRequestUrls = artifacts.flatMap((artifact) => {
+      if (!artifact.key.startsWith('pr-')) return [];
+      const version = artifact.versions.find(
+        (candidate) => candidate.version === artifact.currentVersion,
+      );
+      const url = version?.metadata?.url;
+      if (typeof url !== 'string') return [];
+      return pullRequestMentions(url).some(
+        (mention) => mention.key === artifact.key,
+      )
+        ? [url]
+        : [];
+    });
+    const input = {
+      execRoot: this.store.layout.root,
+      repo,
+      workstreamId: id,
+      workspaceDir: this.store.layout.workstreamWorkspace(id),
+      force,
+      status: workstream.status,
+      pullRequestUrls,
+      env: buildGitEnv(this.config.github),
+    };
+    const inspection = await inspectRemoval(input);
+    if (!inspection.ok) {
+      throw new WorktreeRemovalConflict(inspection.reason);
+    }
+    await removeWorkspace(input);
   }
 
   /** Spawn the orchestrator for a workstream created via createDirectWorkstream. */

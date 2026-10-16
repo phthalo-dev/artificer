@@ -14,6 +14,7 @@ import {
   ConversationBusy,
   ConversationWorkstreamInputError,
   type Engine,
+  WorktreeRemovalConflict,
 } from '../engine/engine.js';
 import { runGithubWatchOnce as defaultRunGithubWatchOnce } from '../engine/github-watch-runner.js';
 import type { GithubWatchState } from '../engine/github-watch.js';
@@ -45,6 +46,10 @@ import {
 
 const sendMessageSchema = z.object({
   content: z.string().min(1, 'content is required'),
+});
+
+const removeWorktreeSchema = z.object({
+  force: z.boolean().optional(),
 });
 
 const createPolicyRuleSchema = z.object({
@@ -625,6 +630,23 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     const ok = await engine.cancelWorkstream(id);
     if (!ok) return c.json({ error: 'not found or already terminal' }, 404);
     return c.json({ ok: true });
+  });
+
+  api.post('/workstreams/:id/worktree/remove', async (c) => {
+    const body = await c.req.json().catch(() => ({}));
+    const parsed = removeWorktreeSchema.safeParse(body);
+    if (!parsed.success) {
+      return c.json({ error: parsed.error.flatten() }, 400);
+    }
+    try {
+      await engine.removeWorktree(c.req.param('id'), parsed.data.force);
+      return c.json({ ok: true });
+    } catch (error) {
+      if (error instanceof WorktreeRemovalConflict) {
+        return c.json({ error: error.message }, 409);
+      }
+      throw error;
+    }
   });
 
   api.get('/workstreams', async (c) => {

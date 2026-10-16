@@ -162,6 +162,74 @@ test('POST /workstreams conversation creates a worktree and returns 201', async 
   }
 });
 
+test('POST /workstreams/:id/worktree/remove rejects active work and preserves the shared checkout', async () => {
+  const origin = await bareOrigin();
+  const { app, store, config } = await buildApp();
+  const repoUrl = 'https://github.com/acme/app';
+  config.repos = [{ id: 'app', url: repoUrl, baseBranch: 'main' }];
+  const keys = [
+    'GIT_CONFIG_COUNT',
+    'GIT_CONFIG_KEY_0',
+    'GIT_CONFIG_VALUE_0',
+  ] as const;
+  const previous = Object.fromEntries(
+    keys.map((key) => [key, process.env[key]]),
+  );
+  process.env.GIT_CONFIG_COUNT = '1';
+  process.env.GIT_CONFIG_KEY_0 = `url.${origin}/.insteadOf`;
+  process.env.GIT_CONFIG_VALUE_0 = repoUrl;
+  try {
+    const createRes = await app.request('/api/workstreams', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        driver: 'conversation',
+        title: 'Chat',
+        goal: 'Look around',
+        repoId: 'app',
+      }),
+    });
+    assert.equal(createRes.status, 201);
+    const created = (await createRes.json()) as {
+      workstream: { id: string };
+    };
+    const id = created.workstream.id;
+
+    const activeRes = await app.request(
+      `/api/workstreams/${id}/worktree/remove`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      },
+    );
+    assert.equal(activeRes.status, 409);
+    assert.match(await activeRes.text(), /in_progress/);
+
+    await store.updateWorkstream(id, { status: 'done' });
+    const removeRes = await app.request(
+      `/api/workstreams/${id}/worktree/remove`,
+      {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({}),
+      },
+    );
+    assert.equal(removeRes.status, 200);
+    assert.deepEqual(await removeRes.json(), { ok: true });
+    await assert.rejects(
+      fs.access(path.join(store.layout.workstreamWorkspace(id), 'repo')),
+    );
+    await fs.access(path.join(config.execDir, 'repos', 'app'));
+  } finally {
+    for (const key of keys) {
+      const value = previous[key];
+      if (value === undefined) delete process.env[key];
+      else process.env[key] = value;
+    }
+  }
+});
+
 test('a second message while a worker run is queued returns 409', async () => {
   const origin = await bareOrigin();
   const { app, store, config } = await buildApp();
