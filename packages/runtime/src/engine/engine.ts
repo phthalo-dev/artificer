@@ -34,6 +34,7 @@ import type {
   WorkstreamStatus,
 } from '../storage/types.js';
 import { executeCall } from './call.js';
+import { shouldStepWorkstream } from './conversation-guard.js';
 import type { WorkerExecutor } from './executor.js';
 import type { ScheduleRunner } from './schedule-runner.js';
 import { CursorAgentExecutor } from './cursor-executor.js';
@@ -1067,6 +1068,7 @@ export class Engine implements EngineApi {
   ): Promise<void> {
     const ws = await this.store.getWorkstream(workstreamId);
     if (!ws || Engine.FSM_TERMINAL.has(ws.status)) return;
+    if (!shouldStepWorkstream(ws.driver)) return;
 
     const { facts, workerRunsSinceReview } = await this.computeFacts(ws);
     const action = nextWorkstreamAction(facts);
