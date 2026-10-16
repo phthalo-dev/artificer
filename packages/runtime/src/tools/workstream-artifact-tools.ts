@@ -173,6 +173,56 @@ export function createWorkstreamArtifactTools(ctx: ToolContext): ToolDef[] {
       },
     },
     {
+      name: 'publish_workstream_artifact',
+      description:
+        'Publish content immediately as the current released version of a workstream artifact.',
+      inputSchema: {
+        type: 'object',
+        properties: {
+          key: {
+            type: 'string',
+            description: 'Stable artifact key (lowercase, path-safe).',
+          },
+          name: { type: 'string', description: 'Human-readable name.' },
+          content: { type: 'string', description: 'Artifact body.' },
+          contentType: {
+            type: 'string',
+            description: 'MIME type. Defaults to text/markdown.',
+          },
+          description: { type: 'string' },
+          metadata: {
+            type: 'object',
+            description: 'Optional artifact version metadata.',
+          },
+          workstreamId: {
+            type: 'string',
+            description: 'Workstream id. Defaults to the current workstream.',
+          },
+        },
+        required: ['key', 'name', 'content'],
+      },
+      handler: async (input) => {
+        const wsId = workstreamId(input);
+        if (!wsId) return 'Error: no workstream specified.';
+        try {
+          const artifact = await artifacts.publish(wsId, {
+            key: String(input.key),
+            name: String(input.name),
+            content: String(input.content),
+            contentType: input.contentType as string | undefined,
+            description: input.description as string | undefined,
+            metadata: input.metadata as
+              | Record<string, string | number | boolean>
+              | undefined,
+            createdByRunId: run.id,
+          });
+          return `Published ${artifact.key} ${artifact.currentVersion} as current.`;
+        } catch (err) {
+          return `Error: ${err instanceof Error ? err.message : String(err)}`;
+        }
+      },
+    },
+    {
       name: 'create_artifact_version',
       description:
         'Upload immutable content for an artifact as a new version. Does not release it as current.',
