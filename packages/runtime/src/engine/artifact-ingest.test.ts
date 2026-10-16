@@ -43,5 +43,8 @@ test('ingest continues after one artifact fails to publish', async () => {
 
   assert.equal(count, 1);
   assert.deepEqual(published, ['good']);
-  await assert.rejects(fs.access(file));
+  assert.equal(
+    await fs.readFile(file, 'utf8'),
+    `${JSON.stringify({ key: 'bad', name: 'Bad', content: 'invalid' })}\n`,
+  );
 });

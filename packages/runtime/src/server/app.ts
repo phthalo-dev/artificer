@@ -115,17 +115,17 @@ const machineWorkstreamSchema = z.object({
   submitPr: z.boolean().optional(),
 });
 
-const conversationWorkstreamSchema = z.object({
-  driver: z.literal('conversation'),
-  title: z.string().min(1),
-  goal: z.string().min(1),
-  repoId: z.string().min(1),
-  executor: executorSchema.optional(),
-  message: z.string().optional(),
-  baseCommit: z.string().optional(),
-  autostart: z.boolean().optional(),
-  submitPr: z.boolean().optional(),
-});
+const conversationWorkstreamSchema = z
+  .object({
+    driver: z.literal('conversation'),
+    title: z.string().min(1),
+    goal: z.string().min(1),
+    repoId: z.string().min(1),
+    executor: executorSchema.optional(),
+    message: z.string().optional(),
+    baseCommit: z.string().min(1).optional(),
+  })
+  .strict();
 
 const createWorkstreamSchema = z.union([
   machineWorkstreamSchema,

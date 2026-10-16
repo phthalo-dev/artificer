@@ -45,14 +45,18 @@ test('an empty executor body becomes (no output)', async () => {
   assert.equal(result.text, '(no output)');
 });
 
-test('a resume throw retries once with the transcript and then stops', async () => {
+test('a missing session retries once with the transcript and then stops', async () => {
   const calls: Array<{ context: string; sessionId?: string }> = [];
   const executor: WorkerExecutor = {
     name: 'claude-code',
     resumesSession: true,
     execute: async ({ context, sessionId }) => {
       calls.push({ context, sessionId });
-      if (calls.length === 1) throw new Error('resume failed');
+      if (calls.length === 1) {
+        throw new Error(
+          'claude code agent exited with code 1: No conversation found with session ID: sess-1',
+        );
+      }
       if (calls.length > 2) throw new Error('third call');
       return { text: 'recovered', sessionId: 'sess-2' };
     },
@@ -75,6 +79,30 @@ test('a resume throw retries once with the transcript and then stops', async () 
   assert.equal(result.clearedSession, true);
 });
 
+test('a resume timeout does not run the turn again', async () => {
+  const calls: string[] = [];
+  const executor: WorkerExecutor = {
+    name: 'claude-code',
+    resumesSession: true,
+    execute: async () => {
+      calls.push('run');
+      throw new Error('claude code agent timed out');
+    },
+  };
+  await assert.rejects(
+    runConversationTurn({
+      workstream: { id: 'ws-1', goal: 'g', agentSessionId: 'sess-1' },
+      repoPath: '/repo',
+      content: 'hello',
+      prior: [],
+      executor,
+      runBuiltin: async () => 'nope',
+    }),
+    /timed out/,
+  );
+  assert.equal(calls.length, 1);
+});
+
 test('artifacts are ingested after a failed resume and its retry', async () => {
   const repoPath = await fs.mkdtemp(
     path.join(os.tmpdir(), 'artificer-conversation-artifacts-'),
@@ -94,7 +122,9 @@ test('artifacts are ingested after a failed resume and its retry', async () => {
           content: 'content',
         }),
       );
-      if (attempts === 1) throw new Error('resume failed');
+      if (attempts === 1) {
+        throw new Error('No conversation found with session ID: sess-1');
+      }
       return { text: 'recovered' };
     },
   };

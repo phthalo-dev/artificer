@@ -151,6 +151,10 @@ export async function ensureWorktree(
 
     await git(['-C', checkout, 'fetch', 'origin'], input.env, 120_000);
 
+    // Untracked files in the shared checkout are not someone's worktree.
+    // Clean them so the checkout can detach at the base branch again.
+    // Tracked edits are left alone.
+    await git(['-C', checkout, 'clean', '-fd'], input.env, 30_000);
     const status = await git(
       ['-C', checkout, 'status', '--porcelain'],
       input.env,
@@ -251,6 +255,7 @@ export async function inspectRemoval(
   }
 
   const repoDir = path.join(input.workspaceDir, 'repo');
+  if ((await gitDirKind(repoDir)) === undefined) return { ok: true };
   if (input.force) return { ok: true };
   if (await hasUncommittedChanges(repoDir)) {
     return { ok: false, reason: 'worktree has uncommitted changes' };
@@ -343,15 +348,9 @@ export async function removeWorkspace(input: RemovalInput): Promise<void> {
     await git(removeArgs, input.env, 30_000);
 
     if (branch === `artificer/${input.workstreamId}`) {
-      const deleteBranch = git(
-        ['-C', checkout, 'branch', input.force ? '-D' : '-d', branch],
-        input.env,
+      await git(['-C', checkout, 'branch', '-d', branch], input.env).catch(
+        () => undefined,
       );
-      if (input.force) {
-        await deleteBranch;
-      } else {
-        await deleteBranch.catch(() => undefined);
-      }
     }
   });
 }

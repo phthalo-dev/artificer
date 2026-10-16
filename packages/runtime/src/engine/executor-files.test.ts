@@ -72,7 +72,7 @@ test('writeProjectFile puts back a pre-existing project file', async () => {
   assert.equal((await git(['-C', dir, 'status', '--porcelain'])).trim(), '');
 });
 
-test('removeOriginRemote keeps origin on a linked worktree', async () => {
+test('removeOriginRemote keeps origin on a linked worktree and blocks its push', async () => {
   const shared = await repo();
   await git([
     '-C',
@@ -83,6 +83,7 @@ test('removeOriginRemote keeps origin on a linked worktree', async () => {
     'https://example.test/a',
   ]);
   const workspace = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-oc-'));
+  const sibling = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-oc-'));
   await git([
     '-C',
     shared,
@@ -92,8 +93,110 @@ test('removeOriginRemote keeps origin on a linked worktree', async () => {
     '--detach',
     path.join(workspace, 'repo'),
   ]);
+  await git([
+    '-C',
+    shared,
+    'worktree',
+    'add',
+    '-q',
+    '-b',
+    'other',
+    path.join(sibling, 'repo'),
+  ]);
   removeOriginRemote(workspace);
   assert.equal((await git(['-C', shared, 'remote'])).trim(), 'origin');
+  assert.equal(
+    (
+      await git([
+        '-C',
+        path.join(workspace, 'repo'),
+        'config',
+        '--worktree',
+        '--get',
+        'remote.origin.pushurl',
+      ])
+    ).trim(),
+    'no-push://artificer.invalid/blocked',
+  );
+  await assert.rejects(
+    git([
+      '-C',
+      path.join(sibling, 'repo'),
+      'config',
+      '--worktree',
+      '--get',
+      'remote.origin.pushurl',
+    ]),
+  );
+  await assert.rejects(
+    exec('git', ['-C', path.join(workspace, 'repo'), 'push', 'origin', 'HEAD']),
+    (error: unknown) => {
+      const stderr = (error as { stderr?: string }).stderr ?? '';
+      assert.match(stderr, /remote-no-push|artificer\.invalid/);
+      return true;
+    },
+  );
+});
+
+test('writeProjectFile hides a generated file only in that worktree', async () => {
+  const shared = await repo();
+  const wt = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-wt-'));
+  const sibling = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-wt-'));
+  await git(['-C', shared, 'worktree', 'add', '-q', '-b', 'wt', wt]);
+  await git(['-C', shared, 'worktree', 'add', '-q', '-b', 'sib', sibling]);
+  const restore = writeProjectFile(wt, 'opencode.json', '{}');
+  const raw = (
+    await git(['-C', shared, 'rev-parse', '--git-path', 'info/exclude'])
+  ).trim();
+  const excludePath = path.isAbsolute(raw) ? raw : path.resolve(raw);
+  const sharedExclude = await fs.readFile(excludePath, 'utf8').catch(() => '');
+  assert.equal(sharedExclude.includes('opencode.json'), false);
+  assert.equal((await git(['-C', wt, 'status', '--porcelain'])).trim(), '');
+  await fs.writeFile(path.join(sibling, 'opencode.json'), '{}');
+  assert.match(
+    await git(['-C', sibling, 'status', '--porcelain']),
+    /opencode\.json/,
+  );
+  restore();
+});
+
+test('abort kills processes the agent spawned', async () => {
+  const dir = await repo();
+  const marker = path.join(dir, 'grandchild-ran');
+  const ready = `${marker}.ready`;
+  const controller = new AbortController();
+  const pending = withFakeBin(
+    'claude',
+    `#!/bin/sh
+cat >/dev/null
+echo ready > "$GRANDCHILD_FILE.ready"
+"$NODE" -e 'setTimeout(() => require("fs").writeFileSync(process.argv[1], "ran"), 2000)' "$GRANDCHILD_FILE" &
+sleep 30
+`,
+    () => {
+      process.env.GRANDCHILD_FILE = marker;
+      process.env.NODE = process.execPath;
+      return new ClaudeCodeExecutor().execute({
+        context: 'hi',
+        workspaceDir: dir,
+        run,
+        signal: controller.signal,
+      });
+    },
+  );
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    try {
+      await fs.access(ready);
+      break;
+    } catch {
+      await new Promise((resolve) => setTimeout(resolve, 20));
+    }
+  }
+  await fs.access(ready);
+  controller.abort();
+  await assert.rejects(pending, /cancelled/);
+  await new Promise((resolve) => setTimeout(resolve, 2500));
+  await assert.rejects(fs.access(marker));
 });
 
 test('removeOriginRemote removes origin from a standalone clone', async () => {

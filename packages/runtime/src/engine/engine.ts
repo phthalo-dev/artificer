@@ -683,6 +683,7 @@ export class Engine implements EngineApi {
     repoId: string;
     executor?: ExecutorConfig;
     message?: string;
+    baseCommit?: string;
   }): Promise<{ workstream: Workstream; messageId?: string }> {
     const loaded = loadRepos(this.config.repos);
     if (!loaded.ok) {
@@ -702,7 +703,8 @@ export class Engine implements EngineApi {
       driver: 'conversation',
       repoId: repo.id,
       repoUrl: repo.url,
-      executor: input.executor,
+      executor: input.executor ?? this.config.executor,
+      baseCommit: input.baseCommit,
     });
 
     try {
@@ -712,6 +714,7 @@ export class Engine implements EngineApi {
         repoUrl: repo.url,
         workstreamId: workstream.id,
         workspaceDir: this.store.layout.workstreamWorkspace(workstream.id),
+        baseCommit: input.baseCommit,
         env: buildGitEnv(this.config.github),
       });
     } catch (error) {
@@ -1420,6 +1423,10 @@ export class Engine implements EngineApi {
         },
       });
 
+      if (controller.signal.aborted) throw new Error('cancelled');
+      const finished = await this.store.getWorkstream(workstream.id);
+      if (finished?.status !== 'in_progress') throw new Error('cancelled');
+
       await this.reply(result.text, workstream.id);
       await capturePullRequests(
         { artifacts: this.artifacts },
@@ -1645,6 +1652,11 @@ export class Engine implements EngineApi {
     if (!ws || Engine.FSM_TERMINAL.has(ws.status)) return false;
     if (ws.driver === 'conversation') {
       this.conversationControllers.get(id)?.abort();
+      await this.store.updateWorkstream(id, { status: 'cancelled' });
+      await this.emitWorkstream(id);
+      const updated = await this.store.getWorkstream(id);
+      if (updated) void this.handleWorkstreamTerminal(updated);
+      return true;
     }
     await this.store.updateWorkstream(id, { status: 'cancelled' });
     await this.emitWorkstream(id);

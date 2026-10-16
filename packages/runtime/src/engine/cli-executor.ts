@@ -8,7 +8,12 @@ import type {
   ExecutorResult,
   WorkerExecutor,
 } from './executor.js';
-import { executorStateDir, writeProjectFile } from './executor-files.js';
+import {
+  abortAgent,
+  executorStateDir,
+  killProcessGroup,
+  writeProjectFile,
+} from './executor-files.js';
 import type { WorkerStatus } from './worker-report.js';
 
 const MCP_SERVER = path.join(
@@ -84,6 +89,7 @@ export class CliExecutor implements WorkerExecutor {
     return new Promise((resolve, reject) => {
       const child = spawn(this.opts.command, resolvedArgs, {
         cwd: workspaceDir,
+        detached: true,
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
@@ -98,19 +104,14 @@ export class CliExecutor implements WorkerExecutor {
       child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
 
       const timer = setTimeout(() => {
-        child.kill('SIGKILL');
+        killProcessGroup(child, 'SIGKILL');
         reject(new Error(`${this.opts.command} timed out`));
       }, timeoutMs);
-      const onAbort = () => {
-        child.kill('SIGTERM');
-        reject(new Error('cancelled'));
-      };
-      signal?.addEventListener('abort', onAbort, { once: true });
-      if (signal?.aborted) onAbort();
+      const stop = abortAgent(child, signal, reject);
 
       child.on('close', (code) => {
         clearTimeout(timer);
-        signal?.removeEventListener('abort', onAbort);
+        stop();
         restoreMcpConfig();
         const text = Buffer.concat(stdout).toString('utf-8').trim();
 
@@ -164,7 +165,7 @@ export class CliExecutor implements WorkerExecutor {
 
       child.on('error', (err) => {
         clearTimeout(timer);
-        signal?.removeEventListener('abort', onAbort);
+        stop();
         restoreMcpConfig();
         reject(err);
       });

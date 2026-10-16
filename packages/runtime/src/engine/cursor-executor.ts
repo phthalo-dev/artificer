@@ -8,7 +8,12 @@ import type {
   ExecutorResult,
   WorkerExecutor,
 } from './executor.js';
-import { executorStateDir, writeProjectFile } from './executor-files.js';
+import {
+  abortAgent,
+  executorStateDir,
+  killProcessGroup,
+  writeProjectFile,
+} from './executor-files.js';
 import type { WorkerStatus } from './worker-report.js';
 
 const TIMEOUT_MS = 5 * 60 * 1000;
@@ -68,6 +73,7 @@ export class CursorAgentExecutor implements WorkerExecutor {
       args.push(context);
 
       const child = spawn('cursor', args, {
+        detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 
@@ -77,19 +83,14 @@ export class CursorAgentExecutor implements WorkerExecutor {
       child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
 
       const timer = setTimeout(() => {
-        child.kill('SIGKILL');
+        killProcessGroup(child, 'SIGKILL');
         reject(new Error('cursor agent timed out'));
       }, TIMEOUT_MS);
-      const onAbort = () => {
-        child.kill('SIGTERM');
-        reject(new Error('cancelled'));
-      };
-      signal?.addEventListener('abort', onAbort, { once: true });
-      if (signal?.aborted) onAbort();
+      const stop = abortAgent(child, signal, reject);
 
       child.on('close', (code) => {
         clearTimeout(timer);
-        signal?.removeEventListener('abort', onAbort);
+        stop();
         restoreMcpConfig();
         const text = Buffer.concat(stdout).toString('utf-8').trim();
 
@@ -144,7 +145,7 @@ export class CursorAgentExecutor implements WorkerExecutor {
 
       child.on('error', (err) => {
         clearTimeout(timer);
-        signal?.removeEventListener('abort', onAbort);
+        stop();
         restoreMcpConfig();
         reject(err);
       });
