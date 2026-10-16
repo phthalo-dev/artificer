@@ -64,6 +64,7 @@ export type TextareaProps = {
   minRows?: number;
   maxRows?: number;
   className?: string;
+  isDisabled?: boolean;
 };
 
 export function Textarea({
@@ -71,10 +72,11 @@ export function Textarea({
   minRows = 3,
   maxRows,
   className,
+  isDisabled,
   ...props
 }: TextareaProps) {
   return (
-    <AriaTextField>
+    <AriaTextField isDisabled={isDisabled}>
       <AriaTextArea
         rows={minRows}
         className={cx(textareaCls, className)}

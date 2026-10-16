@@ -1056,6 +1056,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     };
     return c.json({
       workstream,
+      resolvedExecutor: workstream.executor ?? engine.config.executor ?? null,
       tasks,
       reviews,
       plan,
