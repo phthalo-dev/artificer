@@ -4,6 +4,7 @@ import path from 'node:path';
 import type {
   ArtificerConfig,
   ExecutorConfig,
+  RepoConfig,
   ResolvedIdentityConfig,
   WorkspaceServicesConfig,
 } from './api/types.js';
@@ -155,6 +156,8 @@ export interface RuntimeConfig {
   workspaceServices?: WorkspaceServicesConfig;
   /** Quota windows, budgets, and failover routing. */
   quota?: QuotaConfig;
+  /** Allowed remote repos for conversation workstreams. */
+  repos?: RepoConfig[];
   /**
    * When true (RUNTIME_EVAL_MODE=true), the identity repo is read-only:
    * no memory writes, learn/add_memory, identity git ops, or config persist.
@@ -426,5 +429,6 @@ export function mergeWithDefinition(
     executor: definition.executor ?? base.executor,
     workspaceServices: definition.workspaceServices ?? base.workspaceServices,
     quota: definition.quota ?? base.quota,
+    repos: definition.repos,
   };
 }

@@ -63,6 +63,12 @@ export interface WorkspaceServicesConfig {
   overrides?: Record<string, { portRange?: [number, number] }>;
 }
 
+export interface RepoConfig {
+  id: string;
+  url: string;
+  baseBranch: string;
+}
+
 export interface ArtificerConfig {
   name: string;
   description?: string;
@@ -78,6 +84,7 @@ export interface ArtificerConfig {
   executor?: ExecutorConfig;
   quota?: QuotaConfig;
   workspaceServices?: WorkspaceServicesConfig;
+  repos?: RepoConfig[];
 }
 
 export interface ToolDefinition<TInput = Record<string, unknown>> {
