@@ -5,7 +5,11 @@ import os from 'node:os';
 import path from 'node:path';
 import { test } from 'node:test';
 import { promisify } from 'node:util';
-import { ensureWorktree, repoCheckout } from './worktrees.js';
+import {
+  ensureWorktree,
+  prepareWorkspace,
+  repoCheckout,
+} from './worktrees.js';
 
 const exec = promisify(execFile);
 
@@ -261,4 +265,56 @@ test('Promise.all of two worktrees for one repo yields two branches', async () =
   ).trim();
   assert.equal(a, 'artificer/ws-1');
   assert.equal(b, 'artificer/ws-2');
+});
+
+test('a listed repo prepares a worktree', async () => {
+  const origin = await bareOrigin();
+  const repoUrl = 'https://github.com/acme/app';
+  const env = {
+    ...process.env,
+    GIT_CONFIG_COUNT: '1',
+    GIT_CONFIG_KEY_0: `url.${origin}/.insteadOf`,
+    GIT_CONFIG_VALUE_0: repoUrl,
+  };
+  const execRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-prep-'));
+  const workspaceDir = path.join(execRoot, 'workspace', 'ws-1');
+  const kind = await prepareWorkspace({
+    execRoot,
+    repos: [{ id: 'app', url: repoUrl, baseBranch: 'main' }],
+    repoUrl,
+    workstreamId: 'ws-1',
+    workspaceDir,
+    env,
+  });
+  assert.equal(kind, 'worktree');
+  const gitPath = path.join(workspaceDir, 'repo', '.git');
+  const stat = await fs.stat(gitPath);
+  assert.equal(stat.isFile(), true);
+});
+
+test('duplicate allowlist URLs fall back to a shallow clone', async () => {
+  const origin = await bareOrigin();
+  const repoUrl = 'https://github.com/acme/app';
+  const env = {
+    ...process.env,
+    GIT_CONFIG_COUNT: '1',
+    GIT_CONFIG_KEY_0: `url.${origin}/.insteadOf`,
+    GIT_CONFIG_VALUE_0: repoUrl,
+  };
+  const execRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-prep-'));
+  const workspaceDir = path.join(execRoot, 'workspace', 'ws-9');
+  const kind = await prepareWorkspace({
+    execRoot,
+    repos: [
+      { id: 'app', url: repoUrl, baseBranch: 'main' },
+      { id: 'app2', url: repoUrl, baseBranch: 'main' },
+    ],
+    repoUrl,
+    workstreamId: 'ws-9',
+    workspaceDir,
+    env,
+  });
+  assert.equal(kind, 'clone');
+  const stat = await fs.stat(path.join(workspaceDir, 'repo', '.git'));
+  assert.equal(stat.isDirectory(), true);
 });

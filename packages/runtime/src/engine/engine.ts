@@ -41,7 +41,8 @@ import { ClaudeCodeExecutor } from './claude-code-executor.js';
 import { OpencodeExecutor } from './opencode-executor.js';
 import { CliExecutor } from './cli-executor.js';
 import { findGitRepo } from './git-repo.js';
-import { cloneRepoIntoWorkspace, hasUncommittedChanges } from './git-ops.js';
+import { hasUncommittedChanges } from './git-ops.js';
+import { prepareWorkspace } from './worktrees.js';
 import {
   nextWorkstreamAction,
   type WorkstreamFacts,
@@ -1075,12 +1076,15 @@ export class Engine implements EngineApi {
         const workspaceDir =
           this.store.layout.workstreamWorkspace(workstreamId);
         try {
-          await cloneRepoIntoWorkspace(
+          await prepareWorkspace({
+            execRoot: this.store.layout.root,
+            repos: this.config.repos,
+            repoUrl: ws.repoUrl ?? '',
+            workstreamId,
             workspaceDir,
-            ws.repoUrl ?? '',
-            ws.baseCommit,
-            buildGitEnv(this.config.github),
-          );
+            baseCommit: ws.baseCommit,
+            env: buildGitEnv(this.config.github),
+          });
         } catch (err) {
           await this.blockWorkstream(
             ws,
