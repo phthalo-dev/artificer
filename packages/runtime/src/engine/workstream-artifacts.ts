@@ -113,6 +113,16 @@ function nextVersionId(artifact: WorkstreamArtifact): string {
   return `v${next}`;
 }
 
+export interface PublishArtifactInput {
+  key: string;
+  name: string;
+  content: Buffer | string;
+  contentType?: string;
+  description?: string;
+  metadata?: Record<string, string | number | boolean>;
+  createdByRunId?: string;
+}
+
 export class WorkstreamArtifactService {
   constructor(
     private readonly store: Store,
@@ -221,6 +231,122 @@ export class WorkstreamArtifactService {
         data: { event: 'created', artifact: this.summary(artifact) },
       });
       return artifact;
+    });
+  }
+
+  async publish(
+    workstreamId: string,
+    input: PublishArtifactInput,
+  ): Promise<WorkstreamArtifact> {
+    return withArtifactChain(workstreamId, input.key, async () => {
+      safeWorkstreamId(workstreamId);
+      validateArtifactKey(input.key);
+      const ws = await this.store.getWorkstream(workstreamId);
+      if (!ws) throw new Error('Workstream not found');
+
+      const contentType = input.contentType ?? 'text/markdown';
+      let artifact = await this.get(workstreamId, input.key);
+      if (!artifact) {
+        const createdAt = now();
+        artifact = {
+          schemaVersion: 1,
+          id: newId('art'),
+          workstreamId,
+          traceId: ws.traceId,
+          key: input.key,
+          name: input.name,
+          description: input.description,
+          contentType,
+          createdAt,
+          updatedAt: createdAt,
+          approvalStatus: 'not_requested',
+          visibility: 'private',
+          versions: [],
+        };
+        await ensureDir(this.layout().artifactDir(workstreamId, input.key));
+        await this.saveArtifact(artifact);
+        await this.recordTrace({
+          workstreamId,
+          kind: 'artifact',
+          sourceId: artifact.id,
+          data: { event: 'created', artifact: this.summary(artifact) },
+        });
+      }
+      if (artifact.archivedAt) {
+        throw new Error('Cannot publish an archived artifact');
+      }
+
+      const content =
+        typeof input.content === 'string'
+          ? Buffer.from(input.content, 'utf8')
+          : input.content;
+      const versionId = nextVersionId(artifact);
+      validateArtifactVersion(versionId);
+      const versionDir = this.layout().artifactVersionDir(
+        workstreamId,
+        input.key,
+        versionId,
+      );
+      assertUnderRoot(this.artifactRoot(workstreamId, input.key), versionDir);
+      const contentPath = this.resolveContentPath(
+        workstreamId,
+        input.key,
+        versionId,
+      );
+      const versionFile = this.layout().artifactVersionFile(
+        workstreamId,
+        input.key,
+        versionId,
+      );
+      const releasedAt = now();
+      const version: ArtifactVersionRecord = {
+        schemaVersion: 1,
+        version: versionId,
+        contentType,
+        sha256: sha256(content),
+        byteSize: content.byteLength,
+        createdAt: releasedAt,
+        createdByRunId: input.createdByRunId,
+        state: 'released',
+        metadata: input.metadata,
+        releasedAt,
+      };
+
+      await ensureDir(versionDir);
+      const tmp = `${contentPath}.${process.pid}.${randomUUID()}.tmp`;
+      await fs.writeFile(tmp, content);
+      await fs.rename(tmp, contentPath);
+      await writeJsonAtomic(versionFile, version);
+
+      const updatedArtifact: WorkstreamArtifact = {
+        ...artifact,
+        contentType,
+        currentVersion: versionId,
+        updatedAt: releasedAt,
+        versions: [...artifact.versions, version],
+      };
+      await this.saveArtifact(updatedArtifact);
+      await this.recordTrace({
+        workstreamId,
+        kind: 'artifact',
+        sourceId: updatedArtifact.id,
+        runId: input.createdByRunId,
+        data: {
+          event: 'version_created',
+          key: input.key,
+          version: versionId,
+          sha256: version.sha256,
+          byteSize: version.byteSize,
+        },
+      });
+      await this.recordTrace({
+        workstreamId,
+        kind: 'artifact',
+        sourceId: updatedArtifact.id,
+        runId: input.createdByRunId,
+        data: { event: 'version_released', key: input.key, version: versionId },
+      });
+      return updatedArtifact;
     });
   }
 

@@ -26,6 +26,39 @@ async function buildService() {
   return { service, store, workstream, traceEvents, dataDir };
 }
 
+async function artifactFixture() {
+  const fixture = await buildService();
+  return { ...fixture, wsId: fixture.workstream.id };
+}
+
+test('publish releases a non-markdown type and a second publish becomes current', async () => {
+  const { service, store, wsId } = await artifactFixture();
+  const first = await service.publish(wsId, {
+    key: 'note',
+    name: 'Note',
+    content: '{"a":1}',
+    contentType: 'application/json',
+  });
+  assert.equal(first.currentVersion, 'v1');
+  assert.equal(first.versions[0].state, 'released');
+  assert.equal(first.versions[0].contentType, 'application/json');
+  assert.equal(first.approvalStatus, 'not_requested');
+  assert.equal(
+    await fs.readFile(
+      store.layout.artifactVersionContentFile(wsId, 'note', 'v1'),
+      'utf8',
+    ),
+    '{"a":1}',
+  );
+  const second = await service.publish(wsId, {
+    key: 'note',
+    name: 'Note',
+    content: '{"a":2}',
+    contentType: 'application/json',
+  });
+  assert.equal(second.currentVersion, 'v2');
+});
+
 test('creates artifact metadata without content', async () => {
   const { service, workstream } = await buildService();
   const artifact = await service.create(workstream.id, {

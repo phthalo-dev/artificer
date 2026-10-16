@@ -31,6 +31,7 @@ import { deliverChannelMessage } from '../channels/delivery.js';
 import { formatReceiptForChannel } from '../channels/receipt-format.js';
 import { WorkstreamReceiptService } from './workstream-receipt.js';
 import { WorkstreamArtifactService } from './workstream-artifacts.js';
+import { capturePullRequests } from './pull-requests.js';
 import type { IdentityStore } from '../storage/identity-store.js';
 import type {
   Message,
@@ -1254,6 +1255,11 @@ export class Engine implements EngineApi {
       });
 
       await this.reply(result.text, workstream.id);
+      await capturePullRequests(
+        { artifacts: this.artifacts },
+        workstream.id,
+        result.text,
+      );
       if (result.clearedSession || result.sessionId) {
         await this.store.updateWorkstream(workstream.id, {
           agentSessionId: result.sessionId,
@@ -1600,6 +1606,17 @@ export class Engine implements EngineApi {
       run.role === 'worker' ||
       run.role === 'reviewer';
     if (!isWork || !run.workstreamId) return;
+
+    if (run.role === 'worker' && run.status === 'done' && run.output?.trim()) {
+      const workerWorkstream = await this.store.getWorkstream(run.workstreamId);
+      if (workerWorkstream?.driver !== 'conversation') {
+        await capturePullRequests(
+          { artifacts: this.artifacts },
+          run.workstreamId,
+          run.output,
+        );
+      }
+    }
 
     // A planner often writes its plan as prose in its final answer instead of
     // calling write_plan (especially for long plans). Capture that text as the
