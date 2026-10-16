@@ -129,6 +129,7 @@ export async function startRuntime(): Promise<void> {
   await engine.reconcileServices();
   const scheduleRunner = createScheduleRunnerForEngine(engine);
 
+  await engine.recoverPendingConversations();
   const recovered = await engine.recoverZombieRuns();
   if (recovered.length > 0) {
     // eslint-disable-next-line no-console

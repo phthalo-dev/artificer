@@ -40,6 +40,133 @@ async function buildApp() {
   return { app: createApp(engine), store, config };
 }
 
+async function conversationFixture() {
+  const origin = await bareOrigin();
+  const fixture = await buildApp();
+  const repoUrl = 'https://github.com/acme/app';
+  fixture.config.repos = [{ id: 'app', url: repoUrl, baseBranch: 'main' }];
+  const keys = [
+    'GIT_CONFIG_COUNT',
+    'GIT_CONFIG_KEY_0',
+    'GIT_CONFIG_VALUE_0',
+  ] as const;
+  const previous = Object.fromEntries(
+    keys.map((key) => [key, process.env[key]]),
+  );
+  process.env.GIT_CONFIG_COUNT = '1';
+  process.env.GIT_CONFIG_KEY_0 = `url.${origin}/.insteadOf`;
+  process.env.GIT_CONFIG_VALUE_0 = repoUrl;
+  return {
+    ...fixture,
+    restore() {
+      for (const key of keys) {
+        const value = previous[key];
+        if (value === undefined) delete process.env[key];
+        else process.env[key] = value;
+      }
+    },
+  };
+}
+
+async function createChat(app: ReturnType<typeof createApp>): Promise<string> {
+  const res = await app.request('/api/workstreams', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      driver: 'conversation',
+      title: 'Chat',
+      goal: 'Look around',
+      repoId: 'app',
+    }),
+  });
+  assert.equal(res.status, 201);
+  const body = (await res.json()) as { workstream: { id: string } };
+  return body.workstream.id;
+}
+
+test('mark done posts one message and leaves the worktree', async () => {
+  const { app, store, restore } = await conversationFixture();
+  try {
+    const id = await createChat(app);
+    const repo = path.join(store.layout.workstreamWorkspace(id), 'repo');
+    const res = await app.request(`/api/workstreams/${id}/done`, {
+      method: 'POST',
+    });
+    assert.equal(res.status, 200);
+    const ws = await store.getWorkstream(id);
+    assert.equal(ws?.status, 'done');
+    const messages = (await store.listMessages()).filter(
+      (message) => message.workstreamId === id,
+    );
+    assert.equal(messages.length, 1);
+    assert.equal(messages[0].content, 'Marked done.');
+    assert.equal((await fs.stat(path.join(repo, '.git'))).isFile(), true);
+  } finally {
+    restore();
+  }
+});
+
+test('POST /done rejects a machine workstream', async () => {
+  const { app } = await buildApp();
+  const createRes = await app.request('/api/workstreams', {
+    method: 'POST',
+    headers: { 'content-type': 'application/json' },
+    body: JSON.stringify({
+      title: 'Machine',
+      goal: 'Work',
+      autostart: false,
+    }),
+  });
+  const { workstreamId } = (await createRes.json()) as {
+    workstreamId: string;
+  };
+  const res = await app.request(`/api/workstreams/${workstreamId}/done`, {
+    method: 'POST',
+  });
+  assert.equal(res.status, 409);
+});
+
+test('POST /done rejects a conversation with a running worker', async () => {
+  const { app, store, restore } = await conversationFixture();
+  try {
+    const id = await createChat(app);
+    await store.createRun({
+      role: 'worker',
+      task: 'busy',
+      workstreamId: id,
+      status: 'running',
+    });
+    const res = await app.request(`/api/workstreams/${id}/done`, {
+      method: 'POST',
+    });
+    assert.equal(res.status, 409);
+    assert.equal((await store.getWorkstream(id))?.status, 'in_progress');
+  } finally {
+    restore();
+  }
+});
+
+test('cancel marks a conversation cancelled without a cancelled error bubble', async () => {
+  const { app, store, restore } = await conversationFixture();
+  try {
+    const id = await createChat(app);
+    const res = await app.request(`/api/workstreams/${id}/cancel`, {
+      method: 'POST',
+    });
+    assert.equal(res.status, 200);
+    assert.equal((await store.getWorkstream(id))?.status, 'cancelled');
+    const messages = (await store.listMessages()).filter(
+      (message) => message.workstreamId === id,
+    );
+    assert.equal(
+      messages.some((message) => message.content === 'cancelled'),
+      false,
+    );
+  } finally {
+    restore();
+  }
+});
+
 test('POST /workstreams with autostart=false creates a held workstream and no runs', async () => {
   const { app, store } = await buildApp();
 

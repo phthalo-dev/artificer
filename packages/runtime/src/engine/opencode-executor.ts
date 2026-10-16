@@ -250,10 +250,12 @@ export class OpencodeExecutor implements WorkerExecutor {
   execute({
     context,
     workspaceDir,
+    signal,
   }: {
     context: string;
     workspaceDir: string;
     run: RunRecord;
+    signal?: AbortSignal;
   }): Promise<ExecutorResult> {
     const statusFile = path.join(workspaceDir, '.artificer-status.json');
     // opencode discovers MCP servers from a project-level opencode.json
@@ -301,9 +303,16 @@ export class OpencodeExecutor implements WorkerExecutor {
         child.kill('SIGKILL');
         reject(new Error('opencode agent timed out'));
       }, TIMEOUT_MS);
+      const onAbort = () => {
+        child.kill('SIGTERM');
+        reject(new Error('cancelled'));
+      };
+      signal?.addEventListener('abort', onAbort, { once: true });
+      if (signal?.aborted) onAbort();
 
       child.on('close', (code) => {
         clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
         const text = Buffer.concat(stdout).toString('utf-8').trim();
 
         // Read MCP-reported tool result if a tool was called
@@ -357,6 +366,7 @@ export class OpencodeExecutor implements WorkerExecutor {
 
       child.on('error', (err) => {
         clearTimeout(timer);
+        signal?.removeEventListener('abort', onAbort);
         reject(err);
       });
     });
