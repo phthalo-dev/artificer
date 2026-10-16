@@ -11,6 +11,7 @@ export interface ExecutorReview {
 
 export interface ExecutorResult {
   text: string;
+  sessionId?: string;
   usage?: { inputTokens: number; outputTokens: number };
   /** Status reported via the MCP report_status tool, if called. */
   workerStatus?: WorkerStatus;
@@ -22,9 +23,12 @@ export interface ExecutorResult {
 
 export interface WorkerExecutor {
   readonly name: string;
+  readonly resumesSession?: boolean;
   execute(opts: {
     context: string;
     workspaceDir: string;
     run: RunRecord;
+    sessionId?: string;
+    signal?: AbortSignal;
   }): Promise<ExecutorResult>;
 }
