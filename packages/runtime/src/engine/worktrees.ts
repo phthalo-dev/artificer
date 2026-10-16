@@ -8,6 +8,7 @@ import { loadRepos, matchRepo } from './repos.js';
 
 const exec = promisify(execFile);
 const repoChains = new Map<string, Promise<void>>();
+const CLONE_TIMEOUT_MS = 10 * 60 * 1000;
 
 export interface EnsureWorktreeInput {
   execRoot: string;
@@ -18,7 +19,9 @@ export interface EnsureWorktreeInput {
   env?: NodeJS.ProcessEnv;
 }
 
-export interface RemovalInput extends EnsureWorktreeInput {
+export interface RemovalInput extends Omit<EnsureWorktreeInput, 'repo'> {
+  /** Allowlist entry, when the workstream's repo is listed. */
+  repo?: RepoConfig;
   force: boolean;
   status?: string;
   pullRequestUrls?: string[];
@@ -129,7 +132,16 @@ export async function ensureWorktree(
 
     if (!(await pathExists(checkout))) {
       await fs.mkdir(path.dirname(checkout), { recursive: true });
-      await git(['clone', input.repo.url, checkout], input.env, 120_000);
+      try {
+        await git(
+          ['clone', input.repo.url, checkout],
+          input.env,
+          CLONE_TIMEOUT_MS,
+        );
+      } catch (error) {
+        await fs.rm(checkout, { recursive: true, force: true });
+        throw error;
+      }
       await git(
         ['-C', checkout, 'checkout', '--detach', baseRef],
         input.env,
@@ -244,20 +256,20 @@ export async function inspectRemoval(
     return { ok: false, reason: 'worktree has uncommitted changes' };
   }
 
-  const pushed = await git(
-    [
-      '-C',
-      repoDir,
-      'merge-base',
-      '--is-ancestor',
-      'HEAD',
-      `origin/${input.repo.baseBranch}`,
-    ],
-    input.env,
-  )
-    .then(() => true)
-    .catch(() => false);
-  if (pushed) return { ok: true };
+  const standalone = (await gitDirKind(repoDir)) === 'clone';
+  const baseRefs =
+    !standalone && input.repo
+      ? [`origin/${input.repo.baseBranch}`]
+      : ['@{upstream}', 'origin/HEAD'];
+  for (const baseRef of baseRefs) {
+    const pushed = await git(
+      ['-C', repoDir, 'merge-base', '--is-ancestor', 'HEAD', baseRef],
+      input.env,
+    )
+      .then(() => true)
+      .catch(() => false);
+    if (pushed) return { ok: true };
+  }
 
   for (const url of input.pullRequestUrls ?? []) {
     const headRefOid = await exec(
@@ -285,23 +297,43 @@ export async function inspectRemoval(
   return { ok: false, reason: 'worktree has unpushed commits' };
 }
 
+async function gitDirKind(
+  repoDir: string,
+): Promise<'clone' | 'worktree' | undefined> {
+  try {
+    const stat = await fs.stat(path.join(repoDir, '.git'));
+    if (stat.isDirectory()) return 'clone';
+    if (stat.isFile()) return 'worktree';
+  } catch {
+    /* no checkout */
+  }
+  return undefined;
+}
+
+/** The shared checkout a linked worktree was added from. */
+async function sharedCheckout(
+  repoDir: string,
+  env: NodeJS.ProcessEnv | undefined,
+): Promise<string> {
+  const commonDir = (
+    await git(['-C', repoDir, 'rev-parse', '--git-common-dir'], env)
+  ).trim();
+  return path.dirname(await fs.realpath(path.resolve(repoDir, commonDir)));
+}
+
 export async function removeWorkspace(input: RemovalInput): Promise<void> {
-  await withRepoChain(input.repo.id, async () => {
-    const repoDir = path.join(input.workspaceDir, 'repo');
-    let gitStat;
-    try {
-      gitStat = await fs.stat(path.join(repoDir, '.git'));
-    } catch {
-      return;
-    }
+  const repoDir = path.join(input.workspaceDir, 'repo');
+  const kind = await gitDirKind(repoDir);
+  if (kind === 'clone') {
+    await fs.rm(input.workspaceDir, { recursive: true, force: true });
+    return;
+  }
+  if (kind !== 'worktree') return;
 
-    if (gitStat.isDirectory()) {
-      await fs.rm(input.workspaceDir, { recursive: true, force: true });
-      return;
-    }
-    if (!gitStat.isFile()) return;
-
-    const checkout = repoCheckout(input.execRoot, input.repo.id);
+  const checkout = input.repo
+    ? repoCheckout(input.execRoot, input.repo.id)
+    : await sharedCheckout(repoDir, input.env);
+  await withRepoChain(input.repo?.id ?? path.basename(checkout), async () => {
     const branch = (
       await git(['-C', repoDir, 'branch', '--show-current'], input.env)
     ).trim();

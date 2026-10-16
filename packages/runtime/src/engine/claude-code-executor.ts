@@ -8,6 +8,7 @@ import type {
   ExecutorResult,
   WorkerExecutor,
 } from './executor.js';
+import { executorStateDir } from './executor-files.js';
 import type { WorkerStatus } from './worker-report.js';
 
 const TIMEOUT_MS = 10 * 60 * 1000;
@@ -36,8 +37,9 @@ export class ClaudeCodeExecutor implements WorkerExecutor {
     signal?: AbortSignal;
     outputFormat?: 'text' | 'json';
   }): Promise<ExecutorResult> {
-    const statusFile = path.join(workspaceDir, '.artificer-status.json');
-    const mcpConfigFile = path.join(workspaceDir, '.artificer-mcp.json');
+    const stateDir = executorStateDir(workspaceDir);
+    const statusFile = path.join(stateDir, '.artificer-status.json');
+    const mcpConfigFile = path.join(stateDir, '.artificer-mcp.json');
 
     fs.writeFileSync(
       mcpConfigFile,

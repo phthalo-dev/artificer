@@ -67,3 +67,8 @@ test('createToolPlan includes custom registry tools for worker', async () => {
   });
   assert.ok(plan.alwaysOnNames.includes('echo_custom'));
 });
+
+test('createToolPlan gives the worker publish_workstream_artifact', async () => {
+  const plan = createToolPlan({ role: 'worker', ctx: await fakeCtx() });
+  assert.ok(plan.alwaysOnNames.includes('publish_workstream_artifact'));
+});

@@ -13,6 +13,7 @@ import {
 } from './context-sections.js';
 import { FileCache } from './file-cache.js';
 import { ingestPublishedArtifacts } from './artifact-ingest.js';
+import { executorStateDir } from './executor-files.js';
 import { formatCallError } from '../llm/errors.js';
 import { runToolLoop } from '../llm/loop.js';
 import type { Store } from '../storage/store.js';
@@ -429,11 +430,13 @@ export async function executeCall(
       } finally {
         if (run.workstreamId) {
           try {
-            await ingestPublishedArtifacts(workspaceDir, (input) =>
-              engine.artifacts.publish(run.workstreamId!, {
-                ...input,
-                createdByRunId: run.id,
-              }),
+            await ingestPublishedArtifacts(
+              executorStateDir(workspaceDir),
+              (input) =>
+                engine.artifacts.publish(run.workstreamId!, {
+                  ...input,
+                  createdByRunId: run.id,
+                }),
             );
           } catch (error) {
             console.error(

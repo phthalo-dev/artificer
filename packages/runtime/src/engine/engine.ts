@@ -58,7 +58,7 @@ import {
   prepareWorkspace,
   removeWorkspace,
 } from './worktrees.js';
-import { loadRepos } from './repos.js';
+import { loadRepos, matchRepo } from './repos.js';
 import {
   nextWorkstreamAction,
   type WorkstreamFacts,
@@ -445,7 +445,7 @@ export class Engine implements EngineApi {
           result: run.error,
         });
       }
-      if (run.workstreamId) {
+      if (run.workstreamId && run.role === 'worker') {
         const workstream = await this.store.getWorkstream(run.workstreamId);
         if (
           workstream?.driver === 'conversation' &&
@@ -537,7 +537,7 @@ export class Engine implements EngineApi {
     // Prepend recent thread history so the communicator can understand
     // follow-up messages without asking for context that was already given.
     const RECENT_MESSAGE_LIMIT = 15;
-    const allMessages = await this.store.listMessages();
+    const allMessages = await this.listInboxMessages();
     const recentPrior = allMessages
       .filter((m) => m.id !== message.id)
       .slice(-RECENT_MESSAGE_LIMIT);
@@ -812,15 +812,10 @@ export class Engine implements EngineApi {
     }
 
     const loaded = loadRepos(this.config.repos);
-    if (!loaded.ok) {
-      throw new WorktreeRemovalConflict(loaded.error);
-    }
-    const repo = loaded.repos.find((entry) => entry.id === workstream.repoId);
-    if (!repo) {
-      throw new WorktreeRemovalConflict(
-        `Unknown repo: ${workstream.repoId ?? 'not configured'}`,
-      );
-    }
+    const repos = loaded.ok ? loaded.repos : [];
+    const repo =
+      repos.find((entry) => entry.id === workstream.repoId) ??
+      (workstream.repoUrl ? matchRepo(repos, workstream.repoUrl) : undefined);
 
     const artifacts = await this.artifacts.list(id);
     const pullRequestUrls = artifacts.flatMap((artifact) => {
@@ -948,12 +943,30 @@ export class Engine implements EngineApi {
     }
   }
 
+  /** Messages for the shared inbox, without dashboard conversation chats. */
+  async listInboxMessages(): Promise<Message[]> {
+    const [messages, workstreams] = await Promise.all([
+      this.store.listMessages(),
+      this.store.listWorkstreams(),
+    ]);
+    const conversations = new Set(
+      workstreams
+        .filter((workstream) => workstream.driver === 'conversation')
+        .map((workstream) => workstream.id),
+    );
+    return messages.filter(
+      (message) =>
+        !message.workstreamId || !conversations.has(message.workstreamId),
+    );
+  }
+
   private async resolveChannelContext(
     workstreamId?: string,
   ): Promise<MessageChannelContext | undefined> {
     if (workstreamId) {
       const ws = await this.store.getWorkstream(workstreamId);
       if (ws?.channelContext) return ws.channelContext;
+      if (ws?.driver === 'conversation') return undefined;
     }
     const messages = await this.store.listMessages();
     for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -1286,7 +1299,7 @@ export class Engine implements EngineApi {
     });
 
     try {
-      if (run.workstreamId) {
+      if (run.workstreamId && run.role === 'worker') {
         const workstream = await this.store.getWorkstream(run.workstreamId);
         if (workstream?.driver === 'conversation') {
           await this.runConversationRun(run, workstream);
@@ -1315,30 +1328,34 @@ export class Engine implements EngineApi {
 
   private async runConversationRun(
     run: RunRecord,
-    workstream: Workstream,
+    loaded: Workstream,
   ): Promise<void> {
-    const repoPath = path.join(
-      this.store.layout.workstreamWorkspace(workstream.id),
-      'repo',
-    );
-    const messages = await this.store.listMessages();
-    const prior = messages
-      .filter(
-        (message) =>
-          message.workstreamId === workstream.id &&
-          message.id !== run.originMessageId,
-      )
-      .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
-      .map(({ direction, content }) => ({ direction, content }));
-
-    run.status = 'running';
-    run.startedAt = new Date().toISOString();
-    await this.store.saveRun(run);
-    this.emit({ kind: 'run', at: run.startedAt, data: { ...run } });
-
     const controller = new AbortController();
-    this.conversationControllers.set(workstream.id, controller);
+    this.conversationControllers.set(loaded.id, controller);
+    let workstream = loaded;
     try {
+      const current = await this.store.getWorkstream(loaded.id);
+      if (current?.status !== 'in_progress') throw new Error('cancelled');
+      workstream = current;
+      const repoPath = path.join(
+        this.store.layout.workstreamWorkspace(workstream.id),
+        'repo',
+      );
+      const messages = await this.store.listMessages();
+      const prior = messages
+        .filter(
+          (message) =>
+            message.workstreamId === workstream.id &&
+            message.id !== run.originMessageId,
+        )
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+        .map(({ direction, content }) => ({ direction, content }));
+
+      run.status = 'running';
+      run.startedAt = new Date().toISOString();
+      await this.store.saveRun(run);
+      this.emit({ kind: 'run', at: run.startedAt, data: { ...run } });
+
       const result = await runConversationTurn({
         workstream,
         repoPath,
@@ -1387,6 +1404,7 @@ export class Engine implements EngineApi {
             tools: [...plan.alwaysOn],
             maxIterations: this.config.maxIterationsPerCall,
             maxRunMs: this.config.maxRunMs,
+            signal: controller.signal,
             maxTokens: 4096,
             policy: loadEffectivePolicy({
               execPath: this.store.layout.toolPolicyFile(),
@@ -1659,7 +1677,7 @@ export class Engine implements EngineApi {
     await this.serviceManager.teardownWorkstream(ws.id).catch((err) => {
       console.error(`[services] teardown failed for workstream ${ws.id}:`, err);
     });
-    if (!this.config.evalMode) {
+    if (!this.config.evalMode && ws.driver !== 'conversation') {
       void this.receipts
         .requestSummary(ws, (input) => this.spawnCall(input))
         .catch((error) => {

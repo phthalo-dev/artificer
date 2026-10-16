@@ -5,6 +5,7 @@ import path from 'node:path';
 import { test } from 'node:test';
 import { runConversationTurn } from './conversation-turn.js';
 import type { WorkerExecutor } from './executor.js';
+import { executorStateDir } from './executor-files.js';
 
 test('the runner posts executor text and ignores workerStatus', async () => {
   const calls: string[] = [];
@@ -86,7 +87,7 @@ test('artifacts are ingested after a failed resume and its retry', async () => {
     execute: async ({ workspaceDir }) => {
       attempts += 1;
       await fs.writeFile(
-        path.join(workspaceDir, '.artificer-artifacts.jsonl'),
+        path.join(executorStateDir(workspaceDir), '.artificer-artifacts.jsonl'),
         JSON.stringify({
           key: `attempt-${attempts}`,
           name: `Attempt ${attempts}`,
@@ -114,7 +115,9 @@ test('artifacts are ingested after a failed resume and its retry', async () => {
     assert.equal(result.text, 'recovered');
     assert.deepEqual(published, ['attempt-1', 'attempt-2']);
     await assert.rejects(
-      fs.access(path.join(repoPath, '.artificer-artifacts.jsonl')),
+      fs.access(
+        path.join(executorStateDir(repoPath), '.artificer-artifacts.jsonl'),
+      ),
     );
   } finally {
     await fs.rm(repoPath, { recursive: true, force: true });

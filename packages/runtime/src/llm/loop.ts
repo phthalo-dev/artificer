@@ -43,6 +43,8 @@ export interface RunToolLoopOptions {
   maxIterations: number;
   /** Hard wall-clock cap (ms) for the whole call; aborts in-flight generation. */
   maxRunMs?: number;
+  /** Caller cancellation; checked between iterations and aborts generation. */
+  signal?: AbortSignal;
   maxTokens?: number;
   /** Called whenever a tool finishes, for live observability. */
   onToolCall?: (invocation: ToolInvocation) => void;
@@ -82,6 +84,7 @@ export async function runToolLoop(
     tools,
     maxIterations,
     maxRunMs,
+    signal: cancelSignal,
     maxTokens = 4096,
     onToolCall,
     toolResultSpill,
@@ -177,7 +180,12 @@ export async function runToolLoop(
   }
 
   const messages: ModelMessage[] = [{ role: 'user', content: userMessage }];
-  const signal = maxRunMs ? AbortSignal.timeout(maxRunMs) : undefined;
+  const timeoutSignal = maxRunMs ? AbortSignal.timeout(maxRunMs) : undefined;
+  const signals = [timeoutSignal, cancelSignal].filter(
+    (candidate): candidate is AbortSignal => candidate !== undefined,
+  );
+  const signal = signals.length > 0 ? AbortSignal.any(signals) : undefined;
+  if (cancelSignal?.aborted) throw new Error('cancelled');
 
   let result: Awaited<ReturnType<typeof generateText>> | undefined;
   try {
@@ -201,7 +209,7 @@ export async function runToolLoop(
       messages,
       tools: tools.length > 0 ? sdkTools : undefined,
       maxOutputTokens: maxTokens,
-      stopWhen: stepCountIs(maxIterations),
+      stopWhen: [stepCountIs(maxIterations), () => !!cancelSignal?.aborted],
       abortSignal: signal,
       onStepFinish: ({ usage: u, providerMetadata }) => {
         const cr = u.cachedInputTokens ?? 0;
@@ -214,6 +222,7 @@ export async function runToolLoop(
       },
     });
   } catch (err) {
+    if (cancelSignal?.aborted) throw new Error('cancelled');
     // A wall-clock abort is expected: end the call as truncated with the work
     // and tokens accumulated so far, rather than failing the run.
     if (signal?.aborted) {
@@ -221,6 +230,8 @@ export async function runToolLoop(
     }
     throw err;
   }
+
+  if (cancelSignal?.aborted) throw new Error('cancelled');
 
   const usage = emptyUsage();
   const cacheRead = result.totalUsage.cachedInputTokens ?? 0;

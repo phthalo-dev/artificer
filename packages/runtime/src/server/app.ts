@@ -541,7 +541,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
   });
 
   api.get('/messages', async (c) => {
-    const messages = await engine.store.listMessages();
+    const messages = await engine.listInboxMessages();
     return c.json({ messages });
   });
 
