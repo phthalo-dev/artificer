@@ -60,3 +60,23 @@ test('capture publishes a pull request once and skips an existing key', async ()
     '# Fix login\n\nhttps://github.com/Org/Repo/pull/12\n',
   );
 });
+
+test('capture does not reject when artifact storage throws', async () => {
+  const { service, wsId } = await artifactFixture();
+  const text = 'Opened https://github.com/Org/Repo/pull/12 today';
+
+  service.list = async () => {
+    throw new Error('list failed');
+  };
+  await capturePullRequests({ artifacts: service }, wsId, text);
+
+  service.list = async () => [];
+  service.publish = async () => {
+    throw new Error('publish failed');
+  };
+  await capturePullRequests(
+    { artifacts: service, gh: async () => ({ title: 'Fix login' }) },
+    wsId,
+    text,
+  );
+});

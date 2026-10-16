@@ -40,37 +40,46 @@ export async function capturePullRequests(
   workstreamId: string,
   text: string,
 ): Promise<void> {
-  const existing = await deps.artifacts.list(workstreamId);
+  let existing;
+  try {
+    existing = await deps.artifacts.list(workstreamId);
+  } catch {
+    return;
+  }
   const keys = new Set(existing.map((artifact) => artifact.key));
   const gh = deps.gh ?? viewPullRequest;
 
   for (const mention of pullRequestMentions(text)) {
     if (keys.has(mention.key)) continue;
 
-    let name: string;
     try {
-      ({ title: name } = await gh([
-        'pr',
-        'view',
-        mention.url,
-        '--json',
-        'title',
-      ]));
-    } catch {
-      name = `Pull request #${mention.number}`;
-    }
+      let name: string;
+      try {
+        ({ title: name } = await gh([
+          'pr',
+          'view',
+          mention.url,
+          '--json',
+          'title',
+        ]));
+      } catch {
+        name = `Pull request #${mention.number}`;
+      }
 
-    await deps.artifacts.publish(workstreamId, {
-      key: mention.key,
-      name,
-      content: `# ${name}\n\n${mention.url}\n`,
-      metadata: {
-        url: mention.url,
-        owner: mention.owner,
-        repo: mention.repo,
-        number: mention.number,
-      },
-    });
-    keys.add(mention.key);
+      await deps.artifacts.publish(workstreamId, {
+        key: mention.key,
+        name,
+        content: `# ${name}\n\n${mention.url}\n`,
+        metadata: {
+          url: mention.url,
+          owner: mention.owner,
+          repo: mention.repo,
+          number: mention.number,
+        },
+      });
+      keys.add(mention.key);
+    } catch {
+      // Pull request capture is best-effort and must not fail the run.
+    }
   }
 }
