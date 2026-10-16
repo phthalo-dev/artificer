@@ -7,7 +7,9 @@ import { test } from 'node:test';
 import { promisify } from 'node:util';
 import {
   ensureWorktree,
+  inspectRemoval,
   prepareWorkspace,
+  removeWorkspace,
   repoCheckout,
 } from './worktrees.js';
 
@@ -317,4 +319,66 @@ test('duplicate allowlist URLs fall back to a shallow clone', async () => {
   assert.equal(kind, 'clone');
   const stat = await fs.stat(path.join(workspaceDir, 'repo', '.git'));
   assert.equal(stat.isDirectory(), true);
+});
+
+test('remove refuses a dirty worktree until force', async () => {
+  const origin = await bareOrigin();
+  const execRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-rm-'));
+  const repo = { id: 'app', url: origin, baseBranch: 'main' };
+  const workspaceDir = path.join(execRoot, 'workspace', 'ws-1');
+  await ensureWorktree({ execRoot, repo, workstreamId: 'ws-1', workspaceDir });
+  await fs.writeFile(path.join(workspaceDir, 'repo', 'dirty.txt'), 'x\n');
+  const blocked = await inspectRemoval({
+    execRoot,
+    repo,
+    workstreamId: 'ws-1',
+    workspaceDir,
+    force: false,
+  });
+  assert.equal(blocked.ok, false);
+  if (!blocked.ok) assert.match(blocked.reason, /uncommitted/i);
+  await removeWorkspace({
+    execRoot,
+    repo,
+    workstreamId: 'ws-1',
+    workspaceDir,
+    force: true,
+  });
+  await assert.rejects(fs.access(path.join(workspaceDir, 'repo')));
+});
+
+test('removing a detached worktree leaves a sibling artificer branch', async () => {
+  const { origin, commit } = await bareOriginWithCommit();
+  const execRoot = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-rm-'));
+  const repo = { id: 'app', url: origin, baseBranch: 'main' };
+  const named = path.join(execRoot, 'workspace', 'ws-1');
+  const detached = path.join(execRoot, 'workspace', 'ws-2');
+  await ensureWorktree({
+    execRoot,
+    repo,
+    workstreamId: 'ws-1',
+    workspaceDir: named,
+  });
+  await ensureWorktree({
+    execRoot,
+    repo,
+    workstreamId: 'ws-2',
+    workspaceDir: detached,
+    baseCommit: commit,
+  });
+  await removeWorkspace({
+    execRoot,
+    repo,
+    workstreamId: 'ws-2',
+    workspaceDir: detached,
+    force: true,
+  });
+  const ref = await git([
+    '-C',
+    repoCheckout(execRoot, 'app'),
+    'show-ref',
+    '--verify',
+    'refs/heads/artificer/ws-1',
+  ]);
+  assert.ok(ref.trim().length > 0);
 });

@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import type { RepoConfig } from '../api/types.js';
-import { cloneRepoIntoWorkspace } from './git-ops.js';
+import { cloneRepoIntoWorkspace, hasUncommittedChanges } from './git-ops.js';
 import { loadRepos, matchRepo } from './repos.js';
 
 const exec = promisify(execFile);
@@ -16,6 +16,12 @@ export interface EnsureWorktreeInput {
   workspaceDir: string;
   baseCommit?: string;
   env?: NodeJS.ProcessEnv;
+}
+
+export interface RemovalInput extends EnsureWorktreeInput {
+  force: boolean;
+  status?: string;
+  pullRequestUrls?: string[];
 }
 
 export async function prepareWorkspace(input: {
@@ -212,5 +218,103 @@ export async function ensureWorktree(
       30_000,
     );
     return { repoDir: target };
+  });
+}
+
+const BUSY_STATUSES = new Set([
+  'pending',
+  'planning',
+  'reviewing',
+  'in_progress',
+]);
+
+export async function inspectRemoval(
+  input: RemovalInput,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  if (input.status && BUSY_STATUSES.has(input.status)) {
+    return {
+      ok: false,
+      reason: `workstream status is ${input.status}`,
+    };
+  }
+
+  const repoDir = path.join(input.workspaceDir, 'repo');
+  if (input.force) return { ok: true };
+  if (await hasUncommittedChanges(repoDir)) {
+    return { ok: false, reason: 'worktree has uncommitted changes' };
+  }
+
+  const pushed = await git(
+    [
+      '-C',
+      repoDir,
+      'merge-base',
+      '--is-ancestor',
+      'HEAD',
+      `origin/${input.repo.baseBranch}`,
+    ],
+    input.env,
+  )
+    .then(() => true)
+    .catch(() => false);
+  if (pushed) return { ok: true };
+
+  for (const url of input.pullRequestUrls ?? []) {
+    const headRefOid = await exec(
+      'gh',
+      ['pr', 'view', url, '--json', 'headRefOid'],
+      { env: input.env },
+    )
+      .then(({ stdout }) => {
+        const value = JSON.parse(stdout) as { headRefOid?: unknown };
+        return typeof value.headRefOid === 'string'
+          ? value.headRefOid
+          : undefined;
+      })
+      .catch(() => undefined);
+    if (!headRefOid) continue;
+    const included = await git(
+      ['-C', repoDir, 'merge-base', '--is-ancestor', 'HEAD', headRefOid],
+      input.env,
+    )
+      .then(() => true)
+      .catch(() => false);
+    if (included) return { ok: true };
+  }
+
+  return { ok: false, reason: 'worktree has unpushed commits' };
+}
+
+export async function removeWorkspace(input: RemovalInput): Promise<void> {
+  await withRepoChain(input.repo.id, async () => {
+    const repoDir = path.join(input.workspaceDir, 'repo');
+    let gitStat;
+    try {
+      gitStat = await fs.stat(path.join(repoDir, '.git'));
+    } catch {
+      return;
+    }
+
+    if (gitStat.isDirectory()) {
+      await fs.rm(input.workspaceDir, { recursive: true, force: true });
+      return;
+    }
+    if (!gitStat.isFile()) return;
+
+    const checkout = repoCheckout(input.execRoot, input.repo.id);
+    const branch = (
+      await git(['-C', repoDir, 'branch', '--show-current'], input.env)
+    ).trim();
+    const removeArgs = ['-C', checkout, 'worktree', 'remove'];
+    if (input.force) removeArgs.push('--force');
+    removeArgs.push(repoDir);
+    await git(removeArgs, input.env, 30_000);
+
+    if (branch === `artificer/${input.workstreamId}`) {
+      await git(
+        ['-C', checkout, 'branch', input.force ? '-D' : '-d', branch],
+        input.env,
+      );
+    }
   });
 }
