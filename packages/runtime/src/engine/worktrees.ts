@@ -3,6 +3,8 @@ import fs from 'node:fs/promises';
 import path from 'node:path';
 import { promisify } from 'node:util';
 import type { RepoConfig } from '../api/types.js';
+import { cloneRepoIntoWorkspace } from './git-ops.js';
+import { loadRepos, matchRepo } from './repos.js';
 
 const exec = promisify(execFile);
 const repoChains = new Map<string, Promise<void>>();
@@ -14,6 +16,39 @@ export interface EnsureWorktreeInput {
   workspaceDir: string;
   baseCommit?: string;
   env?: NodeJS.ProcessEnv;
+}
+
+export async function prepareWorkspace(input: {
+  execRoot: string;
+  repos: unknown;
+  repoUrl: string;
+  workstreamId: string;
+  workspaceDir: string;
+  baseCommit?: string;
+  env?: NodeJS.ProcessEnv;
+}): Promise<'worktree' | 'clone'> {
+  const loaded = loadRepos(input.repos);
+  const repo = loaded.ok ? matchRepo(loaded.repos, input.repoUrl) : undefined;
+
+  if (!repo) {
+    await cloneRepoIntoWorkspace(
+      input.workspaceDir,
+      input.repoUrl,
+      input.baseCommit,
+      input.env,
+    );
+    return 'clone';
+  }
+
+  await ensureWorktree({
+    execRoot: input.execRoot,
+    repo,
+    workstreamId: input.workstreamId,
+    workspaceDir: input.workspaceDir,
+    baseCommit: input.baseCommit,
+    env: input.env,
+  });
+  return 'worktree';
 }
 
 export function repoCheckout(root: string, repoId: string): string {
