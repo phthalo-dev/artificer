@@ -74,6 +74,22 @@ Example: `{ "worker": "high", "planner": "high" }`
 |---|---|---|---|---|
 | `github.watchInterval` | string | No | — | Polling interval for the agent's own PRs and notifications. Accepts duration strings: `"30s"`, `"5m"`, `"1h"`. Absent or unset disables background GitHub polling |
 
+### `repos` array
+
+The repo allowlist. Each entry is one shared full clone that the runtime checks out once and reuses as git worktrees across workstreams. A conversation workstream must pick an `id` from this list when it needs a target repo. A machine workstream whose repository URL matches an entry uses a worktree from that shared clone instead of a fresh checkout.
+
+| Field | Type | Required | Description |
+|---|---|---|---|
+| `repos[].id` | string | Yes | Stable identifier for this repo (`^[a-z0-9][a-z0-9-]*$`). Referenced by conversation workstreams. |
+| `repos[].url` | string | Yes | Git remote URL (HTTPS or SSH). |
+| `repos[].baseBranch` | string | Yes | Branch to fetch and branch worktrees from (non-whitespace). |
+
+```json
+"repos": [
+  { "id": "app", "url": "https://github.com/acme/app", "baseBranch": "main" }
+]
+```
+
 ### `identity` block
 
 Controls how the agent commits and pushes memories to the identity repo after each run.
