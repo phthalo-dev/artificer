@@ -24,3 +24,24 @@ test('ingest publishes valid lines and deletes the file', async () => {
   assert.deepEqual(published, ['note']);
   await assert.rejects(fs.access(file));
 });
+
+test('ingest continues after one artifact fails to publish', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-ingest-'));
+  const file = path.join(dir, '.artificer-artifacts.jsonl');
+  await fs.writeFile(
+    file,
+    [
+      JSON.stringify({ key: 'bad', name: 'Bad', content: 'invalid' }),
+      JSON.stringify({ key: 'good', name: 'Good', content: 'valid' }),
+    ].join('\n'),
+  );
+  const published: string[] = [];
+  const count = await ingestPublishedArtifacts(dir, async (input) => {
+    if (input.key === 'bad') throw new Error('invalid artifact');
+    published.push(input.key);
+  });
+
+  assert.equal(count, 1);
+  assert.deepEqual(published, ['good']);
+  await assert.rejects(fs.access(file));
+});
