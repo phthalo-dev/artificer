@@ -6,6 +6,7 @@ import type {
   BenchOverview,
   BenchRunDetail,
   BenchSuiteCatalogEntry,
+  ExecutorConfig,
   Memory,
   Message,
   MessageCost,
@@ -14,6 +15,7 @@ import type {
   ModelTiers,
   QuotaConfig,
   QuotaConfigResponse,
+  RepoConfig,
   RoleName,
   RuntimeState,
   UsageOverview,
@@ -64,12 +66,91 @@ export function useWorkstreams() {
   });
 }
 
+export function useRepos() {
+  return useQuery({
+    queryKey: ['repos'],
+    queryFn: () => api.get<{ repos: RepoConfig[] }>('/repos'),
+    select: (d) => d.repos,
+  });
+}
+
+export interface CreateWorkstreamInput {
+  driver: 'conversation';
+  title: string;
+  goal: string;
+  repoId: string;
+  executor?: ExecutorConfig;
+  message?: string;
+}
+
+export function useCreateWorkstream() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: CreateWorkstreamInput) =>
+      api.post<{ workstream: Workstream; messageId?: string }>(
+        '/workstreams',
+        input,
+      ),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['workstreams'] });
+    },
+  });
+}
+
 export function useWorkstream(id: string | undefined) {
   return useQuery({
     queryKey: ['workstream', id],
     queryFn: () => api.get<WorkstreamDetail>(`/workstreams/${id}`),
     refetchInterval: 2500,
     enabled: Boolean(id),
+  });
+}
+
+export function useWorkstreamMessages(id: string | undefined) {
+  return useQuery({
+    queryKey: ['workstream-messages', id],
+    queryFn: () =>
+      api.get<{ messages: Message[] }>(`/workstreams/${id}/messages`),
+    refetchInterval: 2000,
+    enabled: Boolean(id),
+    select: (d) => d.messages,
+  });
+}
+
+export function usePostWorkstreamMessage(id: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (content: string) =>
+      api.post<{ message: Message }>(`/workstreams/${id}/messages`, {
+        content,
+      }),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['workstream-messages', id] });
+      qc.invalidateQueries({ queryKey: ['workstream', id] });
+    },
+  });
+}
+
+export function useMarkWorkstreamDone(id: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => api.post<{ ok: boolean }>(`/workstreams/${id}/done`, {}),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['workstream', id] });
+      qc.invalidateQueries({ queryKey: ['workstreams'] });
+      qc.invalidateQueries({ queryKey: ['workstream-messages', id] });
+    },
+  });
+}
+
+export function useRemoveWorktree(id: string | undefined) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { force?: boolean } = {}) =>
+      api.post<{ ok: boolean }>(`/workstreams/${id}/worktree/remove`, input),
+    onSuccess: () => {
+      qc.invalidateQueries({ queryKey: ['workstream', id] });
+    },
   });
 }
 

@@ -11,15 +11,21 @@
  */
 
 import fs from 'node:fs';
+import path from 'node:path';
 import readline from 'node:readline';
 
 const statusFile = process.argv[2] ?? process.env.ARTIFICER_STATUS_FILE;
 if (!statusFile) {
-  process.stderr.write('mcp-status-server: status file path required as argv[2] or ARTIFICER_STATUS_FILE\n');
+  process.stderr.write(
+    'mcp-status-server: status file path required as argv[2] or ARTIFICER_STATUS_FILE\n',
+  );
   process.exit(1);
 }
 
-const rl = readline.createInterface({ input: process.stdin, crlfDelay: Infinity });
+const rl = readline.createInterface({
+  input: process.stdin,
+  crlfDelay: Infinity,
+});
 
 function send(msg) {
   process.stdout.write(JSON.stringify(msg) + '\n');
@@ -39,11 +45,13 @@ const TOOLS = [
         status: {
           type: 'string',
           enum: ['done', 'done_with_concerns', 'blocked', 'needs_context'],
-          description: 'done — task complete and verified; done_with_concerns — complete with caveats; blocked — stuck, cannot proceed; needs_context — missing information.',
+          description:
+            'done — task complete and verified; done_with_concerns — complete with caveats; blocked — stuck, cannot proceed; needs_context — missing information.',
         },
         summary: {
           type: 'string',
-          description: 'Brief summary of what was accomplished or why you are blocked.',
+          description:
+            'Brief summary of what was accomplished or why you are blocked.',
         },
         followUps: {
           type: 'string',
@@ -64,7 +72,8 @@ const TOOLS = [
       properties: {
         target: {
           type: 'string',
-          description: 'What was reviewed (e.g. "work", "plan", or a file path).',
+          description:
+            'What was reviewed (e.g. "work", "plan", or a file path).',
         },
         notes: {
           type: 'string',
@@ -82,7 +91,30 @@ const TOOLS = [
         severity: {
           type: 'string',
           enum: ['critical', 'important', 'minor', 'none'],
-          description: 'Highest-severity issue found; "none" when nothing needs to change.',
+          description:
+            'Highest-severity issue found; "none" when nothing needs to change.',
+        },
+      },
+    },
+  },
+  {
+    name: 'publish_artifact',
+    description:
+      'Publish a workstream artifact to the Artificer orchestrator after this executor exits.',
+    inputSchema: {
+      type: 'object',
+      required: ['key', 'name', 'content'],
+      properties: {
+        key: { type: 'string' },
+        name: { type: 'string' },
+        content: { type: 'string' },
+        contentType: { type: 'string' },
+        description: { type: 'string' },
+        metadata: {
+          type: 'object',
+          additionalProperties: {
+            type: ['string', 'number', 'boolean'],
+          },
         },
       },
     },
@@ -118,16 +150,50 @@ rl.on('line', (line) => {
     send({ jsonrpc: '2.0', id, result: { tools: TOOLS } });
   } else if (method === 'tools/call') {
     const { name, arguments: args } = params ?? {};
-    if (name === 'report_status' || name === 'submit_review') {
+    if (name === 'publish_artifact') {
       try {
-        fs.writeFileSync(statusFile, JSON.stringify({ tool: name, ...(args ?? {}) }));
+        const artifactFile = path.join(
+          path.dirname(statusFile),
+          '.artificer-artifacts.jsonl',
+        );
+        fs.appendFileSync(artifactFile, JSON.stringify(args ?? {}) + '\n');
       } catch (err) {
-        process.stderr.write(`mcp-status-server: failed to write status file: ${err}\n`);
+        process.stderr.write(
+          `mcp-status-server: failed to append artifact: ${err}\n`,
+        );
       }
       send({
         jsonrpc: '2.0',
         id,
-        result: { content: [{ type: 'text', text: name === 'submit_review' ? 'Review recorded.' : 'Status recorded.' }] },
+        result: {
+          content: [{ type: 'text', text: 'Artifact queued for publishing.' }],
+        },
+      });
+    } else if (name === 'report_status' || name === 'submit_review') {
+      try {
+        fs.writeFileSync(
+          statusFile,
+          JSON.stringify({ tool: name, ...(args ?? {}) }),
+        );
+      } catch (err) {
+        process.stderr.write(
+          `mcp-status-server: failed to write status file: ${err}\n`,
+        );
+      }
+      send({
+        jsonrpc: '2.0',
+        id,
+        result: {
+          content: [
+            {
+              type: 'text',
+              text:
+                name === 'submit_review'
+                  ? 'Review recorded.'
+                  : 'Status recorded.',
+            },
+          ],
+        },
       });
     } else {
       send({

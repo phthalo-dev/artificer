@@ -28,6 +28,10 @@ export class Layout {
     return path.join(this.root, 'workspace');
   }
 
+  repoCheckout(repoId: string): string {
+    return path.join(this.root, 'repos', repoId);
+  }
+
   get tracesDir(): string {
     return path.join(this.root, 'traces');
   }

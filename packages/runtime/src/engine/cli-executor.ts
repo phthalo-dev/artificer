@@ -8,6 +8,12 @@ import type {
   ExecutorResult,
   WorkerExecutor,
 } from './executor.js';
+import {
+  abortAgent,
+  executorStateDir,
+  killProcessGroup,
+  writeProjectFile,
+} from './executor-files.js';
 import type { WorkerStatus } from './worker-report.js';
 
 const MCP_SERVER = path.join(
@@ -22,7 +28,10 @@ export interface CliExecutorOptions {
   promptMode: 'stdin' | 'arg';
   model?: string;
   timeout?: number;
-  /** Workspace-relative path for the MCP config file. Defaults to `.artificer-mcp.json`. */
+  /**
+   * Workspace-relative path for a project MCP config file the CLI requires.
+   * When unset, the config is written outside the workspace.
+   */
   mcpConfigPath?: string;
 }
 
@@ -36,29 +45,36 @@ export class CliExecutor implements WorkerExecutor {
   execute({
     context,
     workspaceDir,
+    signal,
   }: {
     context: string;
     workspaceDir: string;
     run: RunRecord;
+    signal?: AbortSignal;
   }): Promise<ExecutorResult> {
-    const statusFile = path.join(workspaceDir, '.artificer-status.json');
-    const mcpConfigFile = path.join(
-      workspaceDir,
-      this.opts.mcpConfigPath ?? '.artificer-mcp.json',
-    );
-
-    fs.mkdirSync(path.dirname(mcpConfigFile), { recursive: true });
-    fs.writeFileSync(
-      mcpConfigFile,
-      JSON.stringify({
-        mcpServers: {
-          'artificer-status': {
-            command: process.execPath,
-            args: [MCP_SERVER, statusFile],
-          },
+    const stateDir = executorStateDir(workspaceDir);
+    const statusFile = path.join(stateDir, '.artificer-status.json');
+    const mcpConfig = JSON.stringify({
+      mcpServers: {
+        'artificer-status': {
+          command: process.execPath,
+          args: [MCP_SERVER, statusFile],
         },
-      }),
-    );
+      },
+    });
+    let mcpConfigFile: string;
+    let restoreMcpConfig = () => {};
+    if (this.opts.mcpConfigPath) {
+      mcpConfigFile = path.join(workspaceDir, this.opts.mcpConfigPath);
+      restoreMcpConfig = writeProjectFile(
+        workspaceDir,
+        this.opts.mcpConfigPath,
+        mcpConfig,
+      );
+    } else {
+      mcpConfigFile = path.join(stateDir, '.artificer-mcp.json');
+      fs.writeFileSync(mcpConfigFile, mcpConfig);
+    }
     fs.rmSync(statusFile, { force: true });
 
     const resolvedArgs = resolveArgs(this.opts.args, {
@@ -73,6 +89,7 @@ export class CliExecutor implements WorkerExecutor {
     return new Promise((resolve, reject) => {
       const child = spawn(this.opts.command, resolvedArgs, {
         cwd: workspaceDir,
+        detached: true,
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
@@ -87,12 +104,15 @@ export class CliExecutor implements WorkerExecutor {
       child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
 
       const timer = setTimeout(() => {
-        child.kill('SIGKILL');
+        killProcessGroup(child, 'SIGKILL');
         reject(new Error(`${this.opts.command} timed out`));
       }, timeoutMs);
+      const stop = abortAgent(child, signal, reject);
 
       child.on('close', (code) => {
         clearTimeout(timer);
+        stop();
+        restoreMcpConfig();
         const text = Buffer.concat(stdout).toString('utf-8').trim();
 
         let workerStatus: WorkerStatus | undefined;
@@ -145,6 +165,8 @@ export class CliExecutor implements WorkerExecutor {
 
       child.on('error', (err) => {
         clearTimeout(timer);
+        stop();
+        restoreMcpConfig();
         reject(err);
       });
     });

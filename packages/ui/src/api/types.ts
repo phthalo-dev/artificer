@@ -53,6 +53,30 @@ export interface Message {
   workstreamId?: string;
 }
 
+export type ExecutorConfig =
+  | 'llm'
+  | 'cursor-agent'
+  | 'claude-code'
+  | 'opencode'
+  | { type: 'cursor-agent'; model?: string }
+  | { type: 'claude-code'; model?: string }
+  | { type: 'opencode'; model?: string }
+  | {
+      type: 'cli';
+      command: string;
+      args: string[];
+      promptMode: 'stdin' | 'arg';
+      model?: string;
+      timeout?: number;
+      mcpConfigPath?: string;
+    };
+
+export interface RepoConfig {
+  id: string;
+  url: string;
+  baseBranch: string;
+}
+
 export type WorkstreamStatus =
   | 'pending'
   | 'planning'
@@ -67,6 +91,9 @@ export type WorkstreamStatus =
 export interface Workstream {
   id: string;
   traceId?: string;
+  driver?: 'machine' | 'conversation';
+  repoId?: string;
+  executor?: ExecutorConfig;
   title: string;
   goal: string;
   status: WorkstreamStatus;
@@ -403,6 +430,7 @@ export interface WorkstreamArtifact {
 
 export interface WorkstreamDetail {
   workstream: Workstream;
+  resolvedExecutor?: ExecutorConfig | null;
   tasks: Task[];
   reviews: Review[];
   plan: string | null;
