@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { execFile } from 'node:child_process';
+import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
@@ -8,7 +8,12 @@ import { promisify } from 'node:util';
 import { emptyUsage, type RunRecord } from '../storage/types.js';
 import { ClaudeCodeExecutor } from './claude-code-executor.js';
 import { CursorAgentExecutor } from './cursor-executor.js';
-import { executorStateDir, writeProjectFile } from './executor-files.js';
+import {
+  abortAgent,
+  executorStateDir,
+  reapAgentGroups,
+  writeProjectFile,
+} from './executor-files.js';
 import { removeOriginRemote } from './opencode-executor.js';
 
 const exec = promisify(execFile);
@@ -160,43 +165,79 @@ test('writeProjectFile hides a generated file only in that worktree', async () =
   restore();
 });
 
-test('abort kills processes the agent spawned', async () => {
-  const dir = await repo();
-  const marker = path.join(dir, 'grandchild-ran');
-  const ready = `${marker}.ready`;
-  const controller = new AbortController();
-  const pending = withFakeBin(
-    'claude',
+test('abort SIGKILLs grandchildren after the agent exits', async () => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-abort-'));
+  const pidFile = path.join(dir, 'grandchild.pid');
+  const scriptPath = path.join(dir, 'agent');
+  await fs.writeFile(
+    scriptPath,
     `#!/bin/sh
-cat >/dev/null
-echo ready > "$GRANDCHILD_FILE.ready"
-"$NODE" -e 'setTimeout(() => require("fs").writeFileSync(process.argv[1], "ran"), 2000)' "$GRANDCHILD_FILE" &
+trap 'exit 0' TERM
+"$NODE" -e 'process.on("SIGTERM",()=>{}); process.on("SIGHUP",()=>{}); require("fs").writeFileSync(process.argv[1], String(process.pid)); setInterval(()=>{},1000);' "$PIDFILE" &
+while [ ! -f "$PIDFILE" ]; do sleep 0.02; done
 sleep 30
 `,
-    () => {
-      process.env.GRANDCHILD_FILE = marker;
-      process.env.NODE = process.execPath;
-      return new ClaudeCodeExecutor().execute({
-        context: 'hi',
-        workspaceDir: dir,
-        run,
-        signal: controller.signal,
-      });
-    },
   );
+  await fs.chmod(scriptPath, 0o755);
+  const child = spawn(scriptPath, [], {
+    detached: true,
+    stdio: 'ignore',
+    env: { ...process.env, NODE: process.execPath, PIDFILE: pidFile },
+  });
+  const controller = new AbortController();
+  let stop = (): void => undefined;
+  const closed = new Promise((resolve) => {
+    child.on('close', () => {
+      stop();
+      resolve(undefined);
+    });
+  });
+  stop = abortAgent(child, controller.signal, () => undefined);
   for (let attempt = 0; attempt < 50; attempt += 1) {
     try {
-      await fs.access(ready);
+      await fs.access(pidFile);
       break;
     } catch {
       await new Promise((resolve) => setTimeout(resolve, 20));
     }
   }
-  await fs.access(ready);
+  const pid = Number(await fs.readFile(pidFile, 'utf8'));
+  assert.ok(pid > 0);
   controller.abort();
-  await assert.rejects(pending, /cancelled/);
-  await new Promise((resolve) => setTimeout(resolve, 2500));
-  await assert.rejects(fs.access(marker));
+  await closed;
+  let dead = false;
+  for (let attempt = 0; attempt < 20; attempt += 1) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      dead = true;
+      break;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  try {
+    process.kill(pid, 'SIGKILL');
+  } catch {
+    /* already dead */
+  }
+  assert.equal(dead, true);
+});
+
+test('reapAgentGroups kills a detached agent still running at exit', async () => {
+  const child = spawn('sleep', ['30'], { detached: true, stdio: 'ignore' });
+  const pid = child.pid;
+  assert.ok(pid);
+  abortAgent(child, undefined, () => undefined);
+  reapAgentGroups();
+  for (let attempt = 0; attempt < 50; attempt += 1) {
+    try {
+      process.kill(pid, 0);
+    } catch {
+      return;
+    }
+    await new Promise((resolve) => setTimeout(resolve, 20));
+  }
+  assert.throws(() => process.kill(pid, 0));
 });
 
 test('removeOriginRemote removes origin from a standalone clone', async () => {
