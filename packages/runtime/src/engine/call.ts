@@ -12,6 +12,8 @@ import {
   type ContextSectionId,
 } from './context-sections.js';
 import { FileCache } from './file-cache.js';
+import { ingestPublishedArtifacts } from './artifact-ingest.js';
+import { executorStateDir } from './executor-files.js';
 import { formatCallError } from '../llm/errors.js';
 import { runToolLoop } from '../llm/loop.js';
 import type { Store } from '../storage/store.js';
@@ -21,7 +23,7 @@ import { emptyUsage } from '../storage/types.js';
 import { createToolPlan } from '../tools/tool-plan.js';
 import { loadEffectivePolicy } from '../tools/tool-policy.js';
 import { findGitRepo } from './git-repo.js';
-import type { WorkerExecutor } from './executor.js';
+import type { ExecutorResult, WorkerExecutor } from './executor.js';
 import { RoleRegistry } from './role-registry.js';
 import type { ToolRegistry } from '../api/tool-registry.js';
 
@@ -418,11 +420,32 @@ export async function executeCall(
 
     if (deps.executor && WORK_ROLES.has(effectiveBaseRole)) {
       const execContext = userMessage + EXECUTOR_STATUS_INSTRUCTION;
-      const execResult = await deps.executor.execute({
-        context: execContext,
-        workspaceDir,
-        run,
-      });
+      let execResult: ExecutorResult;
+      try {
+        execResult = await deps.executor.execute({
+          context: execContext,
+          workspaceDir,
+          run,
+        });
+      } finally {
+        if (run.workstreamId) {
+          try {
+            await ingestPublishedArtifacts(
+              executorStateDir(workspaceDir),
+              (input) =>
+                engine.artifacts.publish(run.workstreamId!, {
+                  ...input,
+                  createdByRunId: run.id,
+                }),
+            );
+          } catch (error) {
+            console.error(
+              `[run:${run.id}] failed to ingest published artifacts:`,
+              error,
+            );
+          }
+        }
+      }
       resultText = execResult.text;
       resultUsage = {
         ...emptyUsage(),

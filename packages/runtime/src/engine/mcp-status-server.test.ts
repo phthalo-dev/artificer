@@ -231,7 +231,7 @@ test('notifications/initialized produces no response', async () => {
   }
 });
 
-test('tools/list includes both report_status and submit_review', async () => {
+test('tools/list includes report_status, submit_review, and publish_artifact', async () => {
   const statusFile = tmpStatusFile();
   try {
     const responses = await driveServer(statusFile, [
@@ -244,8 +244,45 @@ test('tools/list includes both report_status and submit_review', async () => {
     const names = result.tools.map((t) => t.name);
     assert.ok(names.includes('report_status'));
     assert.ok(names.includes('submit_review'));
+    assert.ok(names.includes('publish_artifact'));
   } finally {
     fs.rmSync(statusFile, { force: true });
+  }
+});
+
+test('tools/call publish_artifact appends an artifact JSON line', async () => {
+  const dir = await fs.promises.mkdtemp(
+    path.join(os.tmpdir(), 'artificer-mcp-artifact-'),
+  );
+  const statusFile = path.join(dir, '.artificer-status.json');
+  const artifactFile = path.join(dir, '.artificer-artifacts.jsonl');
+  try {
+    const responses = await driveServer(statusFile, [
+      { jsonrpc: '2.0', id: 1, method: 'initialize', params: {} },
+      {
+        jsonrpc: '2.0',
+        id: 2,
+        method: 'tools/call',
+        params: {
+          name: 'publish_artifact',
+          arguments: { key: 'note', name: 'Note', content: 'hello' },
+        },
+      },
+    ]);
+    const callResponse = responses.find((r) => r.id === 2);
+    assert.ok(
+      !callResponse?.error,
+      `unexpected error: ${callResponse?.error?.message}`,
+    );
+
+    const lines = fs
+      .readFileSync(artifactFile, 'utf-8')
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line) as Record<string, unknown>);
+    assert.deepEqual(lines, [{ key: 'note', name: 'Note', content: 'hello' }]);
+  } finally {
+    await fs.promises.rm(dir, { recursive: true, force: true });
   }
 });
 

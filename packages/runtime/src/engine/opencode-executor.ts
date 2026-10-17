@@ -8,6 +8,12 @@ import type {
   ExecutorResult,
   WorkerExecutor,
 } from './executor.js';
+import {
+  abortAgent,
+  executorStateDir,
+  killProcessGroup,
+  writeProjectFile,
+} from './executor-files.js';
 import type { WorkerStatus } from './worker-report.js';
 
 const TIMEOUT_MS = 10 * 60 * 1000;
@@ -227,12 +233,43 @@ function permissionConfig(): Record<string, unknown> {
  * `external_directory` never sees bash arguments, so `git push origin HEAD`
  * from inside the sandbox would write back to the original repo without any
  * absolute path appearing in the command. Drop the remote before opencode
- * starts. No-op when the workspace has no git clone (e.g. smoke tests) or no
- * `origin`.
+ * starts. A linked worktree shares that remote with every other worktree, so
+ * its push URL is disabled locally instead. No-op when the workspace has no
+ * git clone (e.g. smoke tests) or no `origin`.
  */
-function removeOriginRemote(workspaceDir: string): void {
+export function removeOriginRemote(workspaceDir: string): void {
   const repoDir = path.join(workspaceDir, 'repo');
-  if (!fs.existsSync(path.join(repoDir, '.git'))) return;
+  // A linked worktree shares its remotes with the checkout it came from.
+  let gitStat: fs.Stats;
+  try {
+    gitStat = fs.statSync(path.join(repoDir, '.git'));
+  } catch {
+    return;
+  }
+  if (!gitStat.isDirectory()) {
+    try {
+      execFileSync(
+        'git',
+        ['-C', repoDir, 'config', 'extensions.worktreeConfig', 'true'],
+        { stdio: 'ignore' },
+      );
+      execFileSync(
+        'git',
+        [
+          '-C',
+          repoDir,
+          'config',
+          '--worktree',
+          'remote.origin.pushurl',
+          'no-push://artificer.invalid/blocked',
+        ],
+        { stdio: 'ignore' },
+      );
+    } catch {
+      /* no origin configured — nothing to block */
+    }
+    return;
+  }
   try {
     execFileSync('git', ['-C', repoDir, 'remote', 'remove', 'origin'], {
       stdio: 'ignore',
@@ -250,19 +287,23 @@ export class OpencodeExecutor implements WorkerExecutor {
   execute({
     context,
     workspaceDir,
+    signal,
   }: {
     context: string;
     workspaceDir: string;
     run: RunRecord;
+    signal?: AbortSignal;
   }): Promise<ExecutorResult> {
-    const statusFile = path.join(workspaceDir, '.artificer-status.json');
+    const statusFile = path.join(
+      executorStateDir(workspaceDir),
+      '.artificer-status.json',
+    );
     // opencode discovers MCP servers from a project-level opencode.json
     // (walking up from cwd) — there is no --mcp-config flag, so this must
     // live at the workspace root under opencode's own config file name.
-    const mcpConfigFile = path.join(workspaceDir, 'opencode.json');
-
-    fs.writeFileSync(
-      mcpConfigFile,
+    const restoreMcpConfig = writeProjectFile(
+      workspaceDir,
+      'opencode.json',
       JSON.stringify({
         mcp: {
           [MCP_SERVER_ID]: {
@@ -289,6 +330,7 @@ export class OpencodeExecutor implements WorkerExecutor {
 
       const child = spawn('opencode', args, {
         cwd: workspaceDir,
+        detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
       });
 
@@ -298,12 +340,15 @@ export class OpencodeExecutor implements WorkerExecutor {
       child.stderr.on('data', (chunk: Buffer) => stderr.push(chunk));
 
       const timer = setTimeout(() => {
-        child.kill('SIGKILL');
+        killProcessGroup(child, 'SIGKILL');
         reject(new Error('opencode agent timed out'));
       }, TIMEOUT_MS);
+      const stop = abortAgent(child, signal, reject);
 
       child.on('close', (code) => {
         clearTimeout(timer);
+        stop();
+        restoreMcpConfig();
         const text = Buffer.concat(stdout).toString('utf-8').trim();
 
         // Read MCP-reported tool result if a tool was called
@@ -357,6 +402,8 @@ export class OpencodeExecutor implements WorkerExecutor {
 
       child.on('error', (err) => {
         clearTimeout(timer);
+        stop();
+        restoreMcpConfig();
         reject(err);
       });
     });

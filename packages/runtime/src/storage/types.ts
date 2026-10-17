@@ -1,3 +1,5 @@
+import type { ExecutorConfig } from '../api/types.js';
+
 export type RoleName =
   | 'communicator'
   | 'orchestrator'
@@ -44,6 +46,14 @@ export interface Workstream {
   id: string;
   /** Stable local trace identity for this workstream. */
   traceId?: string;
+  /** Execution path for this workstream. Absent means the state machine. */
+  driver?: 'machine' | 'conversation';
+  /** Configured repository identity for conversation workstreams. */
+  repoId?: string;
+  /** Executor selected for conversation turns. */
+  executor?: ExecutorConfig;
+  /** Persistent external agent session for conversation continuity. */
+  agentSessionId?: string;
   title: string;
   /** The original request / objective driving this workstream. */
   goal: string;

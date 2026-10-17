@@ -4,6 +4,7 @@ import path from 'node:path';
 import { promisify } from 'node:util';
 import { EventEmitter } from 'node:events';
 import type { RuntimeConfig } from '../config.js';
+import type { ExecutorConfig } from '../api/types.js';
 import { scanAgentDirectory } from '../discover/discover.js';
 import { loadSchedulesFromDisk } from '../discover/loader.js';
 import {
@@ -16,14 +17,21 @@ import {
 import { IdentityGitSync } from '../storage/identity-git-sync.js';
 
 const exec = promisify(execFile);
-import type { EngineApi, RuntimeEvent, SpawnCallInput } from '../context.js';
+import type {
+  EngineApi,
+  RuntimeEvent,
+  SpawnCallInput,
+  ToolContext,
+} from '../context.js';
 import { resolveLanguageModel } from '../llm/provider.js';
+import { runToolLoop } from '../llm/loop.js';
 import { Store } from '../storage/store.js';
 import { TraceRecorder } from '../storage/trace-recorder.js';
 import { deliverChannelMessage } from '../channels/delivery.js';
 import { formatReceiptForChannel } from '../channels/receipt-format.js';
 import { WorkstreamReceiptService } from './workstream-receipt.js';
 import { WorkstreamArtifactService } from './workstream-artifacts.js';
+import { capturePullRequests, pullRequestMentions } from './pull-requests.js';
 import type { IdentityStore } from '../storage/identity-store.js';
 import type {
   Message,
@@ -34,6 +42,9 @@ import type {
   WorkstreamStatus,
 } from '../storage/types.js';
 import { executeCall } from './call.js';
+import { conversationPreamble } from './conversation-prompt.js';
+import { runConversationTurn } from './conversation-turn.js';
+import { shouldStepWorkstream } from './conversation-guard.js';
 import type { WorkerExecutor } from './executor.js';
 import type { ScheduleRunner } from './schedule-runner.js';
 import { CursorAgentExecutor } from './cursor-executor.js';
@@ -41,7 +52,13 @@ import { ClaudeCodeExecutor } from './claude-code-executor.js';
 import { OpencodeExecutor } from './opencode-executor.js';
 import { CliExecutor } from './cli-executor.js';
 import { findGitRepo } from './git-repo.js';
-import { cloneRepoIntoWorkspace, hasUncommittedChanges } from './git-ops.js';
+import { hasUncommittedChanges } from './git-ops.js';
+import {
+  inspectRemoval,
+  prepareWorkspace,
+  removeWorkspace,
+} from './worktrees.js';
+import { loadRepos, matchRepo } from './repos.js';
 import {
   nextWorkstreamAction,
   type WorkstreamFacts,
@@ -85,6 +102,8 @@ import type { DispatchRoute } from './quota-types.js';
 import type { RoleName } from '../storage/types.js';
 import type { ToolRegistry } from '../api/tool-registry.js';
 import { ServiceManager } from '../services/service-manager.js';
+import { createToolPlan } from '../tools/tool-plan.js';
+import { loadEffectivePolicy } from '../tools/tool-policy.js';
 
 interface ActiveRun {
   runId: string;
@@ -101,6 +120,15 @@ export interface RuntimeState {
   workstreams: Array<
     Pick<Workstream, 'id' | 'title' | 'status' | 'summary' | 'updatedAt'>
   >;
+}
+
+export class ConversationWorkstreamInputError extends Error {}
+export class ConversationBusy extends Error {}
+export class WorktreeRemovalConflict extends Error {}
+
+export function turnErrorReply(error: unknown): string | undefined {
+  const message = error instanceof Error ? error.message : String(error);
+  return message === 'cancelled' ? undefined : message;
 }
 
 /**
@@ -122,6 +150,8 @@ export class Engine implements EngineApi {
   private readonly executor?: WorkerExecutor;
   private readonly registry: RoleRegistry;
   private readonly customRegistry?: ToolRegistry;
+  private readonly conversationPosting = new Set<string>();
+  private readonly conversationControllers = new Map<string, AbortController>();
   private readonly serviceManager: ServiceManager;
   private scheduleRunner?: ScheduleRunner;
   private quotaLedger?: QuotaLedger;
@@ -415,9 +445,43 @@ export class Engine implements EngineApi {
           result: run.error,
         });
       }
+      if (run.workstreamId && run.role === 'worker') {
+        const workstream = await this.store.getWorkstream(run.workstreamId);
+        if (
+          workstream?.driver === 'conversation' &&
+          workstream.status === 'in_progress'
+        ) {
+          await this.reply(run.error, run.workstreamId);
+        }
+      }
       recovered.push(run);
     }
     return recovered;
+  }
+
+  async recoverPendingConversations(): Promise<void> {
+    const workstreams = await this.store.listWorkstreams();
+    for (const workstream of workstreams) {
+      if (
+        workstream.driver !== 'conversation' ||
+        workstream.status !== 'pending'
+      ) {
+        continue;
+      }
+      const gitFile = path.join(
+        this.store.layout.workstreamWorkspace(workstream.id),
+        'repo',
+        '.git',
+      );
+      try {
+        await fs.promises.access(gitFile);
+        await this.store.updateWorkstream(workstream.id, {
+          status: 'in_progress',
+        });
+      } catch {
+        await this.store.deleteWorkstream(workstream.id);
+      }
+    }
   }
 
   /**
@@ -473,7 +537,7 @@ export class Engine implements EngineApi {
     // Prepend recent thread history so the communicator can understand
     // follow-up messages without asking for context that was already given.
     const RECENT_MESSAGE_LIMIT = 15;
-    const allMessages = await this.store.listMessages();
+    const allMessages = await this.listInboxMessages();
     const recentPrior = allMessages
       .filter((m) => m.id !== message.id)
       .slice(-RECENT_MESSAGE_LIMIT);
@@ -613,6 +677,207 @@ export class Engine implements EngineApi {
     return { workstream: ws, messageId: message.id };
   }
 
+  async createConversationWorkstream(input: {
+    title: string;
+    goal: string;
+    repoId: string;
+    executor?: ExecutorConfig;
+    message?: string;
+    baseCommit?: string;
+  }): Promise<{ workstream: Workstream; messageId?: string }> {
+    const loaded = loadRepos(this.config.repos);
+    if (!loaded.ok) {
+      throw new ConversationWorkstreamInputError(loaded.error);
+    }
+    const repo = loaded.repos.find((entry) => entry.id === input.repoId);
+    if (!repo) {
+      throw new ConversationWorkstreamInputError(
+        `Unknown repo: ${input.repoId}`,
+      );
+    }
+
+    const workstream = await this.store.createWorkstream({
+      title: input.title,
+      goal: input.goal,
+      status: 'pending',
+      driver: 'conversation',
+      repoId: repo.id,
+      repoUrl: repo.url,
+      executor: input.executor ?? this.config.executor,
+      baseCommit: input.baseCommit,
+    });
+
+    try {
+      await prepareWorkspace({
+        execRoot: this.store.layout.root,
+        repos: this.config.repos,
+        repoUrl: repo.url,
+        workstreamId: workstream.id,
+        workspaceDir: this.store.layout.workstreamWorkspace(workstream.id),
+        baseCommit: input.baseCommit,
+        env: buildGitEnv(this.config.github),
+      });
+    } catch (error) {
+      await this.store.deleteWorkstream(workstream.id);
+      throw error;
+    }
+
+    const updated = (await this.store.updateWorkstream(workstream.id, {
+      status: 'in_progress',
+    }))!;
+    if (input.message) {
+      const message = await this.postConversationMessage(
+        updated.id,
+        input.message,
+      );
+      return { workstream: updated, messageId: message.id };
+    }
+    return { workstream: updated };
+  }
+
+  async postConversationMessage(id: string, content: string): Promise<Message> {
+    const workstream = await this.store.getWorkstream(id);
+    if (
+      !workstream ||
+      workstream.driver !== 'conversation' ||
+      workstream.status !== 'in_progress'
+    ) {
+      throw new ConversationBusy(
+        `Conversation workstream is not available (status: ${workstream?.status ?? 'not found'})`,
+      );
+    }
+
+    if (this.conversationPosting.has(id)) {
+      throw new ConversationBusy(
+        'The agent is still working on the previous message',
+      );
+    }
+
+    this.conversationPosting.add(id);
+    try {
+      const runs = await this.store.listRunsForWorkstream(id);
+      if (
+        runs.some(
+          (run) =>
+            run.role === 'worker' &&
+            (run.status === 'queued' || run.status === 'running'),
+        )
+      ) {
+        throw new ConversationBusy(
+          'The agent is still working on the previous message',
+        );
+      }
+
+      const message = await this.store.appendMessage({
+        direction: 'inbound',
+        content,
+        workstreamId: id,
+      });
+      this.emit({ kind: 'message', at: message.createdAt, data: message });
+      const run = await this.store.createRun({
+        role: 'worker',
+        task: content,
+        workstreamId: id,
+        originMessageId: message.id,
+        model: this.modelFor('worker'),
+      });
+      this.scheduler.enqueue(run.id);
+      return message;
+    } finally {
+      this.conversationPosting.delete(id);
+    }
+  }
+
+  async removeWorktree(id: string, force = false): Promise<void> {
+    const workstream = await this.store.getWorkstream(id);
+    if (!workstream) {
+      throw new WorktreeRemovalConflict('workstream not found');
+    }
+
+    const runs = await this.store.listRunsForWorkstream(id);
+    const busyRun = runs.find(
+      (run) => run.status === 'queued' || run.status === 'running',
+    );
+    if (busyRun) {
+      throw new WorktreeRemovalConflict(
+        `workstream has a ${busyRun.status} run`,
+      );
+    }
+    if (
+      workstream.status === 'pending' ||
+      workstream.status === 'planning' ||
+      workstream.status === 'reviewing' ||
+      workstream.status === 'in_progress'
+    ) {
+      throw new WorktreeRemovalConflict(
+        `workstream status is ${workstream.status}`,
+      );
+    }
+
+    const loaded = loadRepos(this.config.repos);
+    const repos = loaded.ok ? loaded.repos : [];
+    const repo =
+      repos.find((entry) => entry.id === workstream.repoId) ??
+      (workstream.repoUrl ? matchRepo(repos, workstream.repoUrl) : undefined);
+
+    const artifacts = await this.artifacts.list(id);
+    const pullRequestUrls = artifacts.flatMap((artifact) => {
+      if (!artifact.key.startsWith('pr-')) return [];
+      const version = artifact.versions.find(
+        (candidate) => candidate.version === artifact.currentVersion,
+      );
+      const url = version?.metadata?.url;
+      if (typeof url !== 'string') return [];
+      return pullRequestMentions(url).some(
+        (mention) => mention.key === artifact.key,
+      )
+        ? [url]
+        : [];
+    });
+    const input = {
+      execRoot: this.store.layout.root,
+      repo,
+      workstreamId: id,
+      workspaceDir: this.store.layout.workstreamWorkspace(id),
+      force,
+      status: workstream.status,
+      pullRequestUrls,
+      env: buildGitEnv(this.config.github),
+    };
+    const inspection = await inspectRemoval(input);
+    if (!inspection.ok) {
+      throw new WorktreeRemovalConflict(inspection.reason);
+    }
+    await removeWorkspace(input);
+  }
+
+  async markConversationDone(id: string): Promise<boolean> {
+    const workstream = await this.store.getWorkstream(id);
+    if (
+      !workstream ||
+      workstream.driver !== 'conversation' ||
+      workstream.status !== 'in_progress'
+    ) {
+      return false;
+    }
+    const runs = await this.store.listRunsForWorkstream(id);
+    if (
+      runs.some(
+        (run) =>
+          run.role === 'worker' &&
+          (run.status === 'queued' || run.status === 'running'),
+      )
+    ) {
+      return false;
+    }
+    await this.store.updateWorkstream(id, { status: 'done' });
+    await this.emitWorkstream(id);
+    await this.reply('Marked done.', id);
+    const updated = await this.store.getWorkstream(id);
+    if (updated) void this.handleWorkstreamTerminal(updated);
+    return true;
+  }
+
   /** Spawn the orchestrator for a workstream created via createDirectWorkstream. */
   async kickoffWorkstream(
     workstreamId: string,
@@ -681,12 +946,30 @@ export class Engine implements EngineApi {
     }
   }
 
+  /** Messages for the shared inbox, without dashboard conversation chats. */
+  async listInboxMessages(): Promise<Message[]> {
+    const [messages, workstreams] = await Promise.all([
+      this.store.listMessages(),
+      this.store.listWorkstreams(),
+    ]);
+    const conversations = new Set(
+      workstreams
+        .filter((workstream) => workstream.driver === 'conversation')
+        .map((workstream) => workstream.id),
+    );
+    return messages.filter(
+      (message) =>
+        !message.workstreamId || !conversations.has(message.workstreamId),
+    );
+  }
+
   private async resolveChannelContext(
     workstreamId?: string,
   ): Promise<MessageChannelContext | undefined> {
     if (workstreamId) {
       const ws = await this.store.getWorkstream(workstreamId);
       if (ws?.channelContext) return ws.channelContext;
+      if (ws?.driver === 'conversation') return undefined;
     }
     const messages = await this.store.listMessages();
     for (let index = messages.length - 1; index >= 0; index -= 1) {
@@ -1019,6 +1302,13 @@ export class Engine implements EngineApi {
     });
 
     try {
+      if (run.workstreamId && run.role === 'worker') {
+        const workstream = await this.store.getWorkstream(run.workstreamId);
+        if (workstream?.driver === 'conversation') {
+          await this.runConversationRun(run, workstream);
+          return;
+        }
+      }
       const route = this.runRoutes.get(runId);
       const finished = await executeCall(run, {
         resolveModel: this.resolveModelForRoute(route),
@@ -1036,6 +1326,136 @@ export class Engine implements EngineApi {
       await this.afterRun(finished);
     } finally {
       this.active.delete(runId);
+    }
+  }
+
+  private async runConversationRun(
+    run: RunRecord,
+    loaded: Workstream,
+  ): Promise<void> {
+    const controller = new AbortController();
+    this.conversationControllers.set(loaded.id, controller);
+    let workstream = loaded;
+    try {
+      const current = await this.store.getWorkstream(loaded.id);
+      if (current?.status !== 'in_progress') throw new Error('cancelled');
+      workstream = current;
+      const repoPath = path.join(
+        this.store.layout.workstreamWorkspace(workstream.id),
+        'repo',
+      );
+      const messages = await this.store.listMessages();
+      const prior = messages
+        .filter(
+          (message) =>
+            message.workstreamId === workstream.id &&
+            message.id !== run.originMessageId,
+        )
+        .sort((a, b) => a.createdAt.localeCompare(b.createdAt))
+        .map(({ direction, content }) => ({ direction, content }));
+
+      run.status = 'running';
+      run.startedAt = new Date().toISOString();
+      await this.store.saveRun(run);
+      this.emit({ kind: 'run', at: run.startedAt, data: { ...run } });
+
+      const result = await runConversationTurn({
+        workstream,
+        repoPath,
+        content: run.task,
+        prior,
+        executor: buildExecutor(workstream.executor),
+        signal: controller.signal,
+        run,
+        publishArtifact: (input) =>
+          this.artifacts.publish(workstream.id, {
+            ...input,
+            createdByRunId: run.id,
+          }),
+        runBuiltin: async (prompt, workspaceDir) => {
+          const onToolCall = (invocation: RunRecord['toolCalls'][number]) => {
+            run.toolCalls.push(invocation);
+            this.emit({
+              kind: 'tool',
+              at: invocation.at,
+              data: { ...invocation, runId: run.id },
+            });
+            void this.store.saveRun(run);
+          };
+          const ctx: ToolContext = {
+            engine: this,
+            run,
+            workspaceDir,
+            onToolCall,
+          };
+          const plan = createToolPlan({
+            role: 'worker',
+            ctx,
+            customRegistry: this.customRegistry,
+          });
+          ctx.toolPlan = plan;
+          const modelId = run.model ?? this.config.model;
+          const loopResult = await runToolLoop({
+            model: this.resolveModelForRoute()(modelId),
+            modelId,
+            system: conversationPreamble({
+              workstreamId: workstream.id,
+              goal: workstream.goal,
+              repoPath: workspaceDir,
+            }),
+            userMessage: prompt,
+            tools: [...plan.alwaysOn],
+            maxIterations: this.config.maxIterationsPerCall,
+            maxRunMs: this.config.maxRunMs,
+            signal: controller.signal,
+            maxTokens: 4096,
+            policy: loadEffectivePolicy({
+              execPath: this.store.layout.toolPolicyFile(),
+              identityPath: this.identity?.layout.agentToolPolicyFile(),
+            }),
+            emit: (event) => this.emit(event),
+            runId: run.id,
+            workstreamId: workstream.id,
+            onToolCall,
+          });
+          run.usage = loopResult.usage;
+          return loopResult.text;
+        },
+      });
+
+      if (controller.signal.aborted) throw new Error('cancelled');
+      const finished = await this.store.getWorkstream(workstream.id);
+      if (finished?.status !== 'in_progress') throw new Error('cancelled');
+
+      await this.reply(result.text, workstream.id);
+      await capturePullRequests(
+        { artifacts: this.artifacts },
+        workstream.id,
+        result.text,
+      );
+      if (result.clearedSession || result.sessionId) {
+        await this.store.updateWorkstream(workstream.id, {
+          agentSessionId: result.sessionId,
+        });
+      }
+      run.output = result.text;
+      run.status = 'done';
+      run.finishedAt = new Date().toISOString();
+      await this.store.saveRun(run);
+      this.emit({ kind: 'run', at: run.finishedAt, data: { ...run } });
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const outbound = turnErrorReply(error);
+      if (outbound !== undefined) await this.reply(outbound, workstream.id);
+      run.status = 'failed';
+      run.error = message;
+      run.finishedAt = new Date().toISOString();
+      await this.store.saveRun(run);
+      this.emit({ kind: 'run', at: run.finishedAt, data: { ...run } });
+    } finally {
+      if (this.conversationControllers.get(workstream.id) === controller) {
+        this.conversationControllers.delete(workstream.id);
+      }
     }
   }
 
@@ -1066,6 +1486,7 @@ export class Engine implements EngineApi {
   ): Promise<void> {
     const ws = await this.store.getWorkstream(workstreamId);
     if (!ws || Engine.FSM_TERMINAL.has(ws.status)) return;
+    if (!shouldStepWorkstream(ws.driver)) return;
 
     const { facts, workerRunsSinceReview } = await this.computeFacts(ws);
     const action = nextWorkstreamAction(facts);
@@ -1075,12 +1496,15 @@ export class Engine implements EngineApi {
         const workspaceDir =
           this.store.layout.workstreamWorkspace(workstreamId);
         try {
-          await cloneRepoIntoWorkspace(
+          await prepareWorkspace({
+            execRoot: this.store.layout.root,
+            repos: this.config.repos,
+            repoUrl: ws.repoUrl ?? '',
+            workstreamId,
             workspaceDir,
-            ws.repoUrl ?? '',
-            ws.baseCommit,
-            buildGitEnv(this.config.github),
-          );
+            baseCommit: ws.baseCommit,
+            env: buildGitEnv(this.config.github),
+          });
         } catch (err) {
           await this.blockWorkstream(
             ws,
@@ -1226,6 +1650,14 @@ export class Engine implements EngineApi {
   async cancelWorkstream(id: string): Promise<boolean> {
     const ws = await this.store.getWorkstream(id);
     if (!ws || Engine.FSM_TERMINAL.has(ws.status)) return false;
+    if (ws.driver === 'conversation') {
+      this.conversationControllers.get(id)?.abort();
+      await this.store.updateWorkstream(id, { status: 'cancelled' });
+      await this.emitWorkstream(id);
+      const updated = await this.store.getWorkstream(id);
+      if (updated) void this.handleWorkstreamTerminal(updated);
+      return true;
+    }
     await this.store.updateWorkstream(id, { status: 'cancelled' });
     await this.emitWorkstream(id);
     const updated = await this.store.getWorkstream(id);
@@ -1257,7 +1689,7 @@ export class Engine implements EngineApi {
     await this.serviceManager.teardownWorkstream(ws.id).catch((err) => {
       console.error(`[services] teardown failed for workstream ${ws.id}:`, err);
     });
-    if (!this.config.evalMode) {
+    if (!this.config.evalMode && ws.driver !== 'conversation') {
       void this.receipts
         .requestSummary(ws, (input) => this.spawnCall(input))
         .catch((error) => {
@@ -1358,6 +1790,17 @@ export class Engine implements EngineApi {
       run.role === 'worker' ||
       run.role === 'reviewer';
     if (!isWork || !run.workstreamId) return;
+
+    if (run.role === 'worker' && run.status === 'done' && run.output?.trim()) {
+      const workerWorkstream = await this.store.getWorkstream(run.workstreamId);
+      if (workerWorkstream?.driver !== 'conversation') {
+        await capturePullRequests(
+          { artifacts: this.artifacts },
+          run.workstreamId,
+          run.output,
+        );
+      }
+    }
 
     // A planner often writes its plan as prose in its final answer instead of
     // calling write_plan (especially for long plans). Capture that text as the
