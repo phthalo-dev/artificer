@@ -94,7 +94,10 @@ export function loadRepos(
       baseBranch === '' ||
       !/^\S+$/.test(baseBranch)
     ) {
-      return { ok: false, error: `repo "${id}" must have a non-empty baseBranch` };
+      return {
+        ok: false,
+        error: `repo "${id}" must have a non-empty baseBranch`,
+      };
     }
 
     const key = repoUrlKey(url);

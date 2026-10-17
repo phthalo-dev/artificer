@@ -34,5 +34,8 @@ test('matchRepo finds the listed repo', () => {
   assert.equal(loaded.ok, true);
   if (!loaded.ok) return;
   assert.equal(matchRepo(loaded.repos, 'git@github.com:a/b.git')?.id, 'app');
-  assert.equal(matchRepo(loaded.repos, 'https://github.com/other/x'), undefined);
+  assert.equal(
+    matchRepo(loaded.repos, 'https://github.com/other/x'),
+    undefined,
+  );
 });
