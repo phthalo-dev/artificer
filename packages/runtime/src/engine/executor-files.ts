@@ -163,6 +163,49 @@ export function writeProjectFile(
 
 const KILL_ESCALATE_MS = 1_000;
 
+/**
+ * Detached agents are their own session, so a runtime Ctrl+C or SIGTERM does
+ * not take them with it. Track the group leaders and kill them on the way out.
+ */
+const agentGroups = new Set<number>();
+let reaperInstalled = false;
+
+function installAgentReaper(): void {
+  if (reaperInstalled) return;
+  reaperInstalled = true;
+  process.on('exit', reapAgentGroups);
+  process.once('SIGINT', () => {
+    reapAgentGroups();
+    process.exit(130);
+  });
+  process.once('SIGTERM', () => {
+    reapAgentGroups();
+    process.exit(143);
+  });
+}
+
+/** SIGKILL every agent process group still running. */
+export function reapAgentGroups(): void {
+  for (const pid of agentGroups) {
+    try {
+      process.kill(-pid, 'SIGKILL');
+    } catch {
+      /* already gone */
+    }
+  }
+  agentGroups.clear();
+}
+
+function trackAgentProcess(child: ChildProcess): void {
+  const pid = child.pid;
+  if (pid === undefined) return;
+  installAgentReaper();
+  agentGroups.add(pid);
+  child.on('exit', () => {
+    agentGroups.delete(pid);
+  });
+}
+
 /** Signal an agent and the processes it spawned in its own group. */
 export function killProcessGroup(
   child: ChildProcess,
@@ -184,15 +227,21 @@ export function killProcessGroup(
 /**
  * Reject with `cancelled` and stop the agent's process group. The child must
  * be spawned with `detached: true` so the negative pid is its group, not ours.
- * Returns a cleanup function for the close/error handlers.
+ * Returns a cleanup function for the close/error handlers. After an abort,
+ * that cleanup SIGKILLs the group: the parent CLI often exits on SIGTERM and
+ * would otherwise cancel the follow-up kill, leaving children that ignore
+ * SIGTERM running.
  */
 export function abortAgent(
   child: ChildProcess,
   signal: AbortSignal | undefined,
   reject: (error: Error) => void,
 ): () => void {
+  trackAgentProcess(child);
+  let aborted = false;
   let escalate: ReturnType<typeof setTimeout> | undefined;
   const onAbort = () => {
+    aborted = true;
     killProcessGroup(child, 'SIGTERM');
     escalate = setTimeout(
       () => killProcessGroup(child, 'SIGKILL'),
@@ -204,7 +253,9 @@ export function abortAgent(
   signal?.addEventListener('abort', onAbort, { once: true });
   if (signal?.aborted) onAbort();
   return () => {
-    if (escalate) clearTimeout(escalate);
     signal?.removeEventListener('abort', onAbort);
+    if (!aborted) return;
+    if (escalate) clearTimeout(escalate);
+    killProcessGroup(child, 'SIGKILL');
   };
 }
