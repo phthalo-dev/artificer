@@ -1,11 +1,11 @@
 ---
 title: Using the ACP Executor
-description: Run OpenCode, or any Agent Client Protocol agent, as Artificer's worker executor with policy-gated shell commands and edits.
+description: Run OpenCode, or any Agent Client Protocol agent, as Artificer's worker executor with dangerous shell commands, mutating fetches and out-of-workspace writes policed by Artificer.
 ---
 
 # Using the ACP Executor
 
-The [Agent Client Protocol](https://agentclientprotocol.com) (ACP) is a JSON-RPC protocol over stdio that lets a client drive a coding agent. Artificer's `acp` executor spawns an ACP agent in the workspace, sends it the role prompt, and answers the agent's permission requests using Artificer's tool policy. Status is reported back through the same `report_status` MCP tool the other executors use.
+The [Agent Client Protocol](https://agentclientprotocol.com) (ACP) is a JSON-RPC protocol over stdio that lets a client drive a coding agent. Artificer's `acp` executor spawns an ACP agent in the workspace, sends it the role prompt, and answers the agent's permission requests: dangerous shell commands and mutating fetches go through Artificer's tool policy, while reviewer writes and out-of-workspace writes are denied. Status is reported back through the same `report_status` MCP tool the other executors use.
 
 ## The `opencode` preset
 
@@ -38,11 +38,11 @@ By default OpenCode does not ask before running commands: it ran `rm -rf build` 
 
 This overrides a repo's own `opencode.json`. If you set your own `OPENCODE_CONFIG_CONTENT`, it is merged, but the preset's `permission` block always wins, so you cannot loosen it there.
 
-With that config OpenCode sends a `session/request_permission` for shell commands and writes (including writes outside the workspace); this was verified in recordings. Web fetch and `external_directory` are also configured to `ask`, but those were not exercised. Artificer decides each request as follows, and records every decision as an `acp:permission` tool call:
+With that config OpenCode sends a `session/request_permission` for shell commands and writes (including writes outside the workspace); this was verified in recordings. Web fetch and `external_directory` are also configured to `ask`, but those were not exercised. Artificer decides each request as follows, and records every decision as an `acp:permission` tool call. Requests that arrive while Artificer is cancelling are answered `cancelled`.
 
-- **Shell commands** are allowed unless they match the dangerous-command check, and those go through the tool policy. Reviewer writes, `git stash` and cloning into the workspace are always denied.
+- **Shell commands** are allowed unless they match the dangerous-command check, and those go through the tool policy. For a reviewer (or a custom role whose base role is reviewer), detected mutating commands (`sed -i`, `patch`, redirects, `git checkout`/`reset`, `rm`/`mv`/`tee` and similar) are denied. `git stash` is denied for other roles, and `git clone` into a location outside the workspace is denied.
 - **Web fetches** are allowed for GET and HEAD and policy-gated otherwise.
-- **Edits** are allowed unless the role is a reviewer (or reviewer-based) or a path resolves outside the workspace. Edits are not gated by policy rules.
+- **Writes** (edit, delete, move) are allowed unless the role is a reviewer (or a custom role whose base role is reviewer) or a path resolves outside the workspace. Writes are not gated by policy rules.
 - **Any other kind of request**, including MCP tools and reads, is allowed.
 
 **Not covered:**
