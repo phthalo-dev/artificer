@@ -230,6 +230,39 @@ test('max_tokens stop reason appends marker', async (t) => {
   assert.equal(result.text, 'partial\n\n[agent stopped: max_tokens]');
 });
 
+test('agent-initiated cancelled is a stop marker', async (t) => {
+  const { promise } = await run(t, {
+    steps: [{ type: 'message', text: 'partial' }],
+    stopReason: 'cancelled',
+  });
+  const result = await promise;
+  assert.equal(result.text, 'partial\n\n[agent stopped: cancelled]');
+});
+
+test('prompt usage is returned', async (t) => {
+  const { promise } = await run(t, {
+    steps: [{ type: 'message', text: 'x' }],
+    promptUsage: { inputTokens: 120, outputTokens: 7, totalTokens: 300 },
+  });
+  assert.deepEqual((await promise).usage, {
+    inputTokens: 120,
+    outputTokens: 7,
+  });
+});
+
+test('malformed usage falls back to zeros', async (t) => {
+  for (const promptUsage of [{ inputTokens: '12', outputTokens: -1 }, null]) {
+    const { promise } = await run(t, {
+      steps: [{ type: 'message', text: 'x' }],
+      promptUsage,
+    });
+    assert.deepEqual((await promise).usage, {
+      inputTokens: 0,
+      outputTokens: 0,
+    });
+  }
+});
+
 test('refusal stop reason appends marker', async (t) => {
   const { promise } = await run(t, {
     steps: [{ type: 'message', text: 'no' }],

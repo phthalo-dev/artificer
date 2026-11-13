@@ -224,7 +224,10 @@ const app = agent({ name: 'fake' })
     }
     cancelWaiters.delete(sessionId);
     if (cancelled.has(sessionId)) return { stopReason: 'cancelled' };
-    return { stopReason: scenario.stopReason ?? 'end_turn' };
+    return {
+      stopReason: scenario.stopReason ?? 'end_turn',
+      ...('promptUsage' in scenario ? { usage: scenario.promptUsage } : {}),
+    };
   })
   .onNotification(methods.agent.session.cancel, async ({ params }) => {
     if (scenario.garbageOnCancel) process.stdout.write('not json-rpc\n');

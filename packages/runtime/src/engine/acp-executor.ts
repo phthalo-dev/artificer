@@ -69,6 +69,25 @@ function readRuntimeVersion(): string {
   }
 }
 
+function readPromptUsage(response: unknown): {
+  inputTokens: number;
+  outputTokens: number;
+} {
+  const usage: unknown =
+    typeof response === 'object' && response !== null
+      ? (response as { usage?: unknown }).usage
+      : undefined;
+  const read = (key: string): number => {
+    if (typeof usage !== 'object' || usage === null) return 0;
+    const v = (usage as Record<string, unknown>)[key];
+    return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0;
+  };
+  return {
+    inputTokens: read('inputTokens'),
+    outputTokens: read('outputTokens'),
+  };
+}
+
 function truncate(text: string): string {
   return text.length > MAX_TOOL_TEXT
     ? text.slice(0, MAX_TOOL_TEXT) + TRUNCATED_SUFFIX
@@ -269,7 +288,11 @@ export class AcpExecutor implements WorkerExecutor {
     let ctxRef: ClientContext | undefined;
     let activeSessionId: string | undefined;
     let session:
-      | Promise<{ sessionId: string; stopReason: StopReason }>
+      | Promise<{
+          sessionId: string;
+          stopReason: StopReason;
+          usage: { inputTokens: number; outputTokens: number };
+        }>
       | undefined;
     /**
      * Abort/timeout path: send session/cancel, give the agent the grace to
@@ -515,10 +538,18 @@ export class AcpExecutor implements WorkerExecutor {
           prompt: [{ type: 'text', text: context }],
         });
         promptDone = true;
-        return { sessionId, stopReason: response.stopReason };
+        return {
+          sessionId,
+          stopReason: response.stopReason,
+          usage: readPromptUsage(response),
+        };
       });
 
-      let outcome: { sessionId: string; stopReason: StopReason };
+      let outcome: {
+        sessionId: string;
+        stopReason: StopReason;
+        usage: { inputTokens: number; outputTokens: number };
+      };
       try {
         outcome = await Promise.race([session, transportFailure]);
         await settleStop();
@@ -544,7 +575,9 @@ export class AcpExecutor implements WorkerExecutor {
       }
       promptDone = true;
 
-      if (outcome.stopReason === 'cancelled') throw new Error('cancelled');
+      if (outcome.stopReason === 'cancelled' && cancelling) {
+        throw new Error('cancelled');
+      }
       let resultText = text || '(no output)';
       if (outcome.stopReason !== 'end_turn') {
         resultText += `\n\n[agent stopped: ${outcome.stopReason}]`;
@@ -554,7 +587,7 @@ export class AcpExecutor implements WorkerExecutor {
       return {
         text: resultText,
         sessionId: outcome.sessionId,
-        usage: { inputTokens: 0, outputTokens: 0 },
+        usage: outcome.usage,
         ...readExecutorStatus(statusFile),
       };
     } finally {
