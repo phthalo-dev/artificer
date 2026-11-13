@@ -80,3 +80,38 @@ test('agent and command together throws; neither throws', () => {
   );
   assert.throws(() => resolveAcpLaunch({ type: 'acp' }));
 });
+
+test('opencode preset disables project config', () => {
+  const l = resolveAcpLaunch({ type: 'acp', agent: 'opencode' });
+  assert.equal(l.env.OPENCODE_DISABLE_PROJECT_CONFIG, '1');
+});
+
+test('user env cannot re-enable project config', () => {
+  const l = resolveAcpLaunch({
+    type: 'acp',
+    agent: 'opencode',
+    env: { OPENCODE_DISABLE_PROJECT_CONFIG: '0' },
+  });
+  assert.equal(l.env.OPENCODE_DISABLE_PROJECT_CONFIG, '1');
+});
+
+test('preset args cannot be overridden', () => {
+  assert.throws(
+    () => resolveAcpLaunch({ type: 'acp', agent: 'opencode', args: [] }),
+    /acp:opencode: args cannot be overridden for a preset/,
+  );
+});
+
+test('custom command named like a preset is marked custom', () => {
+  const l = resolveAcpLaunch({
+    type: 'acp',
+    command: '/usr/bin/opencode',
+    args: ['acp'],
+  });
+  assert.equal(l.name, 'acp:custom:opencode');
+  assert.equal(l.permissionEnforcement, 'none');
+  assert.equal(
+    resolveAcpLaunch({ type: 'acp', command: '/x/gemini', args: [] }).name,
+    'acp:gemini',
+  );
+});

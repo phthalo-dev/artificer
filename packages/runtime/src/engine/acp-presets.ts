@@ -58,12 +58,17 @@ function opencodeEnv(
       );
     }
   }
+  // Both keys are set after the user env so it cannot undo them. Project
+  // config is disabled because agent-level permissions in a repo's
+  // opencode.json or .opencode/agent/*.md apply after top-level ones and
+  // would otherwise switch off the ask block (verified live, 2.0.32).
   return {
     ...userEnv,
     OPENCODE_CONFIG_CONTENT: JSON.stringify({
       ...base,
       permission: OPENCODE_PERMISSION,
     }),
+    OPENCODE_DISABLE_PROJECT_CONFIG: '1',
   };
 }
 
@@ -74,10 +79,15 @@ export function resolveAcpLaunch(config: AcpExecutorConfig): AcpLaunch {
   if (config.agent) {
     const preset = ACP_PRESETS[config.agent];
     if (!preset) throw new Error(`acp executor: unknown agent ${config.agent}`);
+    if (config.args !== undefined) {
+      throw new Error(
+        `acp:${preset.id}: args cannot be overridden for a preset`,
+      );
+    }
     return {
       name: `acp:${preset.id}`,
       command: preset.command,
-      args: config.args ?? preset.args,
+      args: preset.args,
       env: opencodeEnv(config.env),
       resumes: config.resumes ?? preset.resumes,
       permissionEnforcement: preset.permissionEnforcement,
@@ -89,8 +99,12 @@ export function resolveAcpLaunch(config: AcpExecutorConfig): AcpLaunch {
   if (!config.args) {
     throw new Error('acp executor: args is required with command');
   }
+  const base = path.basename(config.command);
+  // A custom command must never be mistaken for a certified preset in run
+  // records or quota accounts.
+  const isPresetName = Object.prototype.hasOwnProperty.call(ACP_PRESETS, base);
   return {
-    name: `acp:${path.basename(config.command)}`,
+    name: isPresetName ? `acp:custom:${base}` : `acp:${base}`,
     command: config.command,
     args: config.args,
     env: config.env ?? {},
