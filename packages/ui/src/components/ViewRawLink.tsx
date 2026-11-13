@@ -1,6 +1,7 @@
-import { Anchor, anchorIcon } from '../ds';
+import { Link } from '@var-ui/react';
 import { IconExternalLink } from '@tabler/icons-react';
 import { useEffect, useMemo } from 'react';
+import { t } from '../styles/system';
 
 export function ViewRawLink({
   data,
@@ -19,15 +20,20 @@ export function ViewRawLink({
   useEffect(() => () => URL.revokeObjectURL(href), [href]);
 
   return (
-    <Anchor
+    <Link
       href={href}
       target="_blank"
       rel="noopener noreferrer"
       download={filename}
-      size="xs"
-      c="dimmed"
+      style={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: t.space.xxs.var,
+        fontSize: t.fontSize.xs.var,
+        color: t.color.text.secondary.var,
+      }}
     >
-      View raw <IconExternalLink size={12} className={anchorIcon} />
-    </Anchor>
+      View raw <IconExternalLink size={12} />
+    </Link>
   );
 }

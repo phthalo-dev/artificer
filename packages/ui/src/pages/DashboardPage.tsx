@@ -1,4 +1,4 @@
-import { Badge, Group, Stack, Text, Title } from '../ds';
+import { Badge, Heading, HStack, Stack, Text } from '@var-ui/react';
 import { useRuntimeState, useUsage } from '../api/hooks';
 import { CLOUD_MODE } from '../api/client';
 import { UsageStats } from '../components/UsageStats';
@@ -9,35 +9,31 @@ export function DashboardPage() {
 
   return (
     <Stack gap="lg">
-      <div>
-        <Title order={3}>Dashboard</Title>
-        <Group gap="xs" mt={4}>
+      <Stack gap="xs">
+        <Heading level={3} size="md">
+          Dashboard
+        </Heading>
+        <HStack gap="xs" wrap>
           {state.isError ? (
-            <Badge variant="light" color="orange">
+            <Badge tone="warning">
               {CLOUD_MODE ? 'hibernating or starting' : 'offline'}
             </Badge>
           ) : (
-            <Badge variant="light" color={state.data?.busy ? 'blue' : 'gray'}>
+            <Badge tone={state.data?.busy ? 'info' : 'neutral'}>
               {state.data?.busy ? 'working' : 'idle'}
             </Badge>
           )}
-          <Badge variant="light">
-            {state.data?.queue.running ?? 0} running
-          </Badge>
-          <Badge variant="light">{state.data?.queue.pending ?? 0} queued</Badge>
-          <Badge variant="light">
-            {state.data?.activeRuns.length ?? 0} active calls
-          </Badge>
-        </Group>
-      </div>
+          <Badge>{state.data?.queue.running ?? 0} running</Badge>
+          <Badge>{state.data?.queue.pending ?? 0} queued</Badge>
+          <Badge>{state.data?.activeRuns.length ?? 0} active calls</Badge>
+        </HStack>
+      </Stack>
 
       {usage.data && (
-        <div>
-          <Text fw={600} mb={8}>
-            Total usage
-          </Text>
+        <Stack gap="xs">
+          <Text weight="semibold">Total usage</Text>
           <UsageStats usage={usage.data.total} />
-        </div>
+        </Stack>
       )}
     </Stack>
   );
