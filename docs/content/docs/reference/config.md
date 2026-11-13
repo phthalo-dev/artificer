@@ -114,12 +114,13 @@ Selects the worker execution backend. Omitting this field uses the built-in LLM 
 | `"llm"` | Built-in internal tool loop (default) |
 | `"cursor-agent"` | Cursor agent executor (uses default model) |
 | `"claude-code"` | Claude Code executor (uses default model) |
+| `"opencode"` | OpenCode executor (uses default model) |
 
-**Object form — `cursor-agent` and `claude-code`:**
+**Object form — `cursor-agent`, `claude-code` and `opencode`:**
 
 | Field | Type | Required | Description |
 |---|---|---|---|
-| `executor.type` | `"cursor-agent"` \| `"claude-code"` | Yes | Executor type |
+| `executor.type` | `"cursor-agent"` \| `"claude-code"` \| `"opencode"` | Yes | Executor type |
 | `executor.model` | string | No | Model string passed to the executor |
 
 **Object form — `cli`:**
@@ -133,6 +134,32 @@ Selects the worker execution backend. Omitting this field uses the built-in LLM 
 | `executor.model` | string | No | — | Model string substituted into the `{model}` placeholder |
 | `executor.timeout` | number | No | `600000` | Max milliseconds before the process is killed |
 | `executor.mcpConfigPath` | string | No | `".artificer-mcp.json"` | Relative path for the MCP config file; substituted into `{mcpConfig}` |
+
+**Object form — `acp`:**
+
+Runs any agent that speaks the [Agent Client Protocol](https://agentclientprotocol.com) over stdio. Unknown fields are rejected by the HTTP API (when creating a conversation) and by the JSON schema; the instance config in `artificer.config.json` is not validated at load, the same as the other executors.
+
+| Field | Type | Required | Default | Description |
+|---|---|---|---|---|
+| `executor.type` | `"acp"` | Yes | — | Must be `"acp"` to enable the ACP executor |
+| `executor.command` | string | Yes | — | Agent binary to spawn. Quota accounts are named `acp:<basename(command)>` |
+| `executor.args` | string[] | Yes | — | Arguments passed to the command (put the agent's ACP flag and any model selection here) |
+| `executor.env` | object (string values) | No | — | Extra environment variables for the agent process |
+| `executor.mode` | string | No | — | Session mode id to select after the session starts |
+| `executor.resumes` | boolean | No | `false` | Set `true` if the agent supports resuming sessions (`session/resume` or `session/load`) so conversations continue the same agent session |
+| `executor.timeout` | integer | No | `600000` | Max milliseconds before the run is cancelled and the process killed |
+
+```json
+{
+  "executor": {
+    "type": "acp",
+    "command": "opencode",
+    "args": ["acp"]
+  }
+}
+```
+
+Phase 1: custom command only. Permission enforcement depends on the agent sending `session/request_permission`; agents that don't are not policy-gated.
 
 ### `.artificer/workspace.json` (target repo) and `workspaceServices` override
 

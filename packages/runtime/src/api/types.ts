@@ -56,7 +56,18 @@ export type ExecutorConfig =
       model?: string;
       timeout?: number;
       mcpConfigPath?: string;
-    };
+    }
+  | AcpExecutorConfig;
+
+export interface AcpExecutorConfig {
+  type: 'acp';
+  command: string;
+  args: string[];
+  env?: Record<string, string>;
+  mode?: string;
+  resumes?: boolean;
+  timeout?: number;
+}
 
 export interface WorkspaceServicesConfig {
   disabled?: string[];

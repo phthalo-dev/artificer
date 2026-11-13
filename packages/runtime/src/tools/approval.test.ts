@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import { test } from 'node:test';
 import type { RuntimeEvent, ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
-import { enforceApproval } from './approval.js';
+import { decideApproval, enforceApproval } from './approval.js';
 import { createFetchTools } from './fetch.js';
 import { createShellTool } from './shell.js';
 import type { PolicyRule, ToolPolicyFile } from './tool-policy.js';
@@ -237,4 +237,36 @@ test('fetch_url needsApproval gates non-GET only', () => {
     needsApproval({ method: 'POST', url: 'https://example.com' }),
     true,
   );
+});
+
+test('decideApproval allows on matching allow rule', () => {
+  const r = { ...rule('allow', 'gated', 'ls'), id: 'r1' };
+  const d = decideApproval({
+    tool: 'gated',
+    approvalKey: 'ls',
+    policy: { version: 1, rules: [r] },
+  });
+  assert.equal(d.allow, true);
+  assert.equal(d.allow && d.rule?.id, r.id);
+});
+
+test('decideApproval denies on matching deny rule', () => {
+  const d = decideApproval({
+    tool: 'gated',
+    approvalKey: 'ls',
+    policy: { version: 1, rules: [rule('deny', 'gated', 'ls')] },
+  });
+  assert.equal(d.allow, false);
+  assert.equal(!d.allow && d.kind, 'approval_denied');
+});
+
+test('decideApproval requires approval with no match', () => {
+  const d = decideApproval({
+    tool: 'gated',
+    approvalKey: 'ls',
+    policy: EMPTY_POLICY,
+  });
+  assert.equal(d.allow, false);
+  assert.equal(!d.allow && d.kind, 'approval_required');
+  assert.equal(!d.allow && d.proposedRule.pattern, 'ls');
 });

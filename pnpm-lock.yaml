@@ -285,6 +285,9 @@ importers:
 
   packages/runtime:
     dependencies:
+      '@agentclientprotocol/sdk':
+        specifier: 2.6.0
+        version: 2.6.0(zod@3.25.76)
       '@ai-sdk/anthropic':
         specifier: 3.0.81
         version: 3.0.81(zod@3.25.76)
@@ -394,6 +397,33 @@ importers:
         version: 4.1.10(@opentelemetry/api@1.9.1)(@types/node@20.19.35)(vite@6.4.1(@types/node@20.19.35)(tsx@4.21.0)(yaml@2.9.1))
 
 packages:
+
+  '@adobe/react-spectrum-ui@1.2.1':
+    resolution: {integrity: sha512-wcrbEE2O/9WnEn6avBnaVRRx88S5PLFsPLr4wffzlbMfXeQsy+RMQwaJd3cbzrn18/j04Isit7f7Emfn0dhrJA==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0-rc.1 || ^18.0.0 || ^19.0.0
+      react-dom: ^16.8.0 || ^17.0.0-rc.1 || ^18.0.0 || ^19.0.0
+
+  '@adobe/react-spectrum-workflow@2.3.5':
+    resolution: {integrity: sha512-b53VIPwPWKb/T5gzE3qs+QlGP5gVrw/LnWV3xMksDU+CRl3rzOKUwxIGiZO8ICyYh1WiyqY4myGlPU/nAynBUg==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0-rc.1 || ^18.0.0 || ^19.0.0
+      react-dom: ^16.8.0 || ^17.0.0-rc.1 || ^18.0.0 || ^19.0.0
+
+  '@adobe/react-spectrum@3.47.5':
+    resolution: {integrity: sha512-iTbAwwMijVnQjwjwbvkWn82AyRAbFNSJzt/VawWp1vXRIxVIO9COZ1pPG5Fj88xXgqlG8maVcv58p74vqqy5HA==}
+    peerDependencies:
+      react: ^16.8.0 || ^17.0.0-rc.1 || ^18.0.0 || ^19.0.0-rc.1
+      react-dom: ^16.8.0 || ^17.0.0-rc.1 || ^18.0.0 || ^19.0.0-rc.1
+
+  '@agentclientprotocol/sdk@2.6.0':
+    resolution: {integrity: sha512-3FtL6MkAV5F9qxg0FQV8wmBszIm2xuVPoDWOILIFSDQ+Vq3Twdh7Cw6Hk2GOPUbevgrTUpUAqZXQy7Geaj79mw==}
+    peerDependencies:
+      '@modelcontextprotocol/server': ^2.4.0
+      zod: ^3.25.76 || ^4.0.0
+    peerDependenciesMeta:
+      '@modelcontextprotocol/server':
+        optional: true
 
   '@ai-sdk/anthropic@3.0.81':
     resolution: {integrity: sha512-B1JDd9Ugq9R5AgIaW3674lhGCMMYJcPUxnrZh8fzbGojgg4QvHFRv6eZahGQAUsmGHbcf74G9bdSBDLWQGY2GA==}
@@ -3609,6 +3639,37 @@ packages:
     resolution: {integrity: sha512-bXE4cR/kVZhKZX/RjPEflHaKVhUVl85noU3v6b8apfQEc1x4A+zBxjZ4lN8LqGd6WZ3dl98pY4o717VFmoPp+A==}
 
 snapshots:
+
+  '@adobe/react-spectrum-ui@1.2.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+
+  '@adobe/react-spectrum-workflow@2.3.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      react: 18.3.1
+      react-dom: 18.3.1(react@18.3.1)
+
+  '@adobe/react-spectrum@3.47.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1)':
+    dependencies:
+      '@internationalized/date': 3.12.4
+      '@react-types/shared': 3.36.1(react@18.3.1)
+      '@spectrum-icons/ui': 3.7.2(@adobe/react-spectrum@3.47.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@spectrum-icons/workflow': 4.3.2(@adobe/react-spectrum@3.47.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1))(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      '@swc/helpers': 0.5.23
+      client-only: 0.0.1
+      clsx: 2.1.1
+      react: 18.3.1
+      react-aria: 3.52.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react-aria-components: 1.21.1(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      react-dom: 18.3.1(react@18.3.1)
+      react-stately: 3.50.0(react@18.3.1)
+      react-transition-group: 4.4.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
+      use-sync-external-store: 1.7.0(react@18.3.1)
+
+  '@agentclientprotocol/sdk@2.6.0(zod@3.25.76)':
+    dependencies:
+      zod: 3.25.76
 
   '@ai-sdk/anthropic@3.0.81(zod@3.25.76)':
     dependencies:
