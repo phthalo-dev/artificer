@@ -8,6 +8,11 @@
  * request and notification is appended as `{ method, params }` exactly as it
  * arrived on the wire, and
  * every permission response as `{ permissionResponse, toolCallId }`.
+ *
+ * Tool steps: `askPermission` sends session/request_permission with
+ * `permissionToolCall` (default: the step's tool call) and `options`;
+ * `permissionMeta` becomes the request's top-level `_meta` and
+ * `toolCallMeta` the `_meta` of the step's tool_call update.
  */
 
 import { spawn } from 'node:child_process';
@@ -122,14 +127,23 @@ async function runTool(client, sessionId, step) {
     ...(step.rawInput !== undefined ? { rawInput: step.rawInput } : {}),
     ...(locations.length ? { locations } : {}),
   };
-  await update(client, sessionId, { sessionUpdate: 'tool_call', ...toolCall });
+  await update(client, sessionId, {
+    sessionUpdate: 'tool_call',
+    ...toolCall,
+    ...(step.toolCallMeta ? { _meta: step.toolCallMeta } : {}),
+  });
 
   let allowed = true;
   if (step.askPermission) {
     const options = step.options ?? DEFAULT_OPTIONS;
     const response = await client.request(
       methods.client.session.requestPermission,
-      { sessionId, toolCall: step.permissionToolCall ?? toolCall, options },
+      {
+        sessionId,
+        toolCall: step.permissionToolCall ?? toolCall,
+        options,
+        ...(step.permissionMeta ? { _meta: step.permissionMeta } : {}),
+      },
     );
     record({ permissionResponse: response, toolCallId: step.id });
     const outcome = response?.outcome;

@@ -1,4 +1,7 @@
 import assert from 'node:assert/strict';
+import fs from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
 import type {
   PermissionOption,
@@ -6,7 +9,22 @@ import type {
   ToolKind,
 } from '@agentclientprotocol/sdk';
 import { shellApprovalKey, type ToolPolicyFile } from '../tools/tool-policy.js';
-import { decidePermission, type PermissionContext } from './acp-permissions.js';
+import {
+  decidePermission,
+  fillPermissionRequest,
+  type PermissionContext,
+} from './acp-permissions.js';
+
+const fixture = JSON.parse(
+  fs.readFileSync(
+    path.join(
+      path.dirname(fileURLToPath(import.meta.url)),
+      '__fixtures__',
+      'codex-acp-2.6.0-recorded.json',
+    ),
+    'utf-8',
+  ),
+);
 
 const DEFAULT_OPTIONS: PermissionOption[] = [
   { optionId: 'a1', name: 'Allow', kind: 'allow_once' },
@@ -239,6 +257,123 @@ describe('decidePermission', () => {
   it('cancelling → cancelled outcome even for read', () => {
     const o = decidePermission(req('read'), ctx({ cancelling: true }));
     assert.deepEqual(o.response, { outcome: { outcome: 'cancelled' } });
+    assert.equal(o.decision, 'deny');
+  });
+
+  it('detail-free execute is denied', () => {
+    const o = decidePermission(
+      {
+        sessionId: 's1',
+        options: DEFAULT_OPTIONS,
+        toolCall: { toolCallId: 'x', kind: 'execute', status: 'pending' },
+      },
+      ctx(),
+    );
+    assert.equal(o.decision, 'deny');
+    assert.equal(o.reason, 'no command to evaluate');
+    assert.equal(selected(o), 'r1');
+  });
+});
+
+describe('fillPermissionRequest', () => {
+  it('copies tracked fields only when missing', () => {
+    const base = req('execute', undefined, DEFAULT_OPTIONS, undefined, 'a');
+    const titled = fillPermissionRequest(base, { title: 'b' });
+    assert.equal(titled.toolCall.title, 'a');
+
+    const filled = fillPermissionRequest(base, {
+      rawInput: { command: 'ls' },
+    });
+    assert.deepEqual(filled.toolCall.rawInput, { command: 'ls' });
+
+    const withNullLocations: RequestPermissionRequest = {
+      ...base,
+      toolCall: { ...base.toolCall, locations: null },
+    };
+    const located = fillPermissionRequest(withNullLocations, {
+      locations: [{ path: 'a.txt' }],
+    });
+    assert.deepEqual(located.toolCall.locations, [{ path: 'a.txt' }]);
+  });
+
+  it('keeps the request when nothing is tracked and passes _meta through', () => {
+    const r: RequestPermissionRequest = {
+      ...req('execute', { command: 'ls' }),
+      _meta: { is_mcp_tool_approval: true },
+    };
+    const out = fillPermissionRequest(r, undefined);
+    assert.deepEqual(out, r);
+  });
+});
+
+describe('MCP approvals', () => {
+  const mcpRequest = (rawInput?: unknown): RequestPermissionRequest => {
+    const tracked = fixture.mcpToolCallUpdate.update;
+    return fillPermissionRequest(
+      fixture.mcpPermissionRequest as RequestPermissionRequest,
+      {
+        title: tracked.title,
+        kind: tracked.kind as ToolKind,
+        rawInput: rawInput ?? tracked.rawInput,
+      },
+    );
+  };
+  const optionOf = (o: ReturnType<typeof decidePermission>) => selected(o);
+
+  it('artificer-status MCP approval is allowed', () => {
+    const o = decidePermission(mcpRequest(), ctx());
+    assert.equal(o.decision, 'allow');
+    assert.equal(o.tool, 'mcp:artificer-status.report_status');
+    assert.equal(optionOf(o), 'allow_once');
+  });
+
+  it('foreign MCP approval is policy-gated', () => {
+    const foreign = mcpRequest({
+      server: 'evil',
+      tool: 'exfil',
+      arguments: {},
+    });
+    const denied = decidePermission(foreign, ctx());
+    assert.equal(denied.decision, 'deny');
+    assert.equal(optionOf(denied), 'cancel');
+    assert.equal(denied.proposedRule?.tool, 'mcp:evil.exfil');
+    assert.equal(denied.proposedRule?.pattern, 'evil.exfil');
+
+    const policy: ToolPolicyFile = {
+      version: 1,
+      rules: [
+        {
+          id: 'mcp1',
+          tool: 'mcp:evil.exfil',
+          pattern: 'evil.exfil',
+          effect: 'allow',
+          scope: 'agent',
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+    };
+    const allowed = decidePermission(foreign, ctx({ policy }));
+    assert.equal(allowed.decision, 'allow');
+    assert.equal(allowed.ruleId, 'mcp1');
+    assert.equal(optionOf(allowed), 'allow_once');
+  });
+
+  it('meta flag alone marks MCP approval', () => {
+    const o = decidePermission(
+      fixture.mcpPermissionRequest as RequestPermissionRequest,
+      ctx(),
+    );
+    assert.equal(o.decision, 'deny');
+    assert.equal(o.reason, 'unknown MCP server');
+    assert.equal(optionOf(o), 'cancel');
+  });
+
+  it('server/tool rawInput without meta flag is an MCP approval', () => {
+    const o = decidePermission(
+      req('execute', { server: 'evil', tool: 'exfil' }),
+      ctx(),
+    );
+    assert.equal(o.tool, 'mcp:evil.exfil');
     assert.equal(o.decision, 'deny');
   });
 });

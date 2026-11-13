@@ -3,6 +3,7 @@ import type {
   PermissionOption,
   RequestPermissionRequest,
   RequestPermissionResponse,
+  ToolCallLocation,
   ToolKind,
 } from '@agentclientprotocol/sdk';
 import type { RoleName } from '../storage/types.js';
@@ -55,6 +56,75 @@ function asRecord(value: unknown): Record<string, unknown> {
   return value && typeof value === 'object'
     ? (value as Record<string, unknown>)
     : {};
+}
+
+/** The tool call fields the executor tracks from session/update. */
+export interface TrackedPermissionFields {
+  title?: string | null;
+  kind?: ToolKind | null;
+  rawInput?: unknown;
+  locations?: ToolCallLocation[] | null;
+}
+
+function isEmpty(value: unknown): boolean {
+  if (value === undefined || value === null || value === '') return true;
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === 'object') return Object.keys(value).length === 0;
+  return false;
+}
+
+/**
+ * Merge the tool call tracked under the request's toolCallId into the
+ * request. Agents such as Codex send detail-free permission requests and put
+ * the title, kind and input on the earlier tool_call update. A field is
+ * copied only when the request's own field is missing, null or empty; the
+ * request's top-level `_meta` passes through unchanged.
+ */
+export function fillPermissionRequest(
+  req: RequestPermissionRequest,
+  tracked: TrackedPermissionFields | undefined,
+): RequestPermissionRequest {
+  if (!tracked) return req;
+  const toolCall = { ...req.toolCall };
+  if (isEmpty(toolCall.title) && !isEmpty(tracked.title)) {
+    toolCall.title = tracked.title;
+  }
+  if (isEmpty(toolCall.kind) && !isEmpty(tracked.kind)) {
+    toolCall.kind = tracked.kind;
+  }
+  if (isEmpty(toolCall.rawInput) && !isEmpty(tracked.rawInput)) {
+    toolCall.rawInput = tracked.rawInput;
+  }
+  if (isEmpty(toolCall.locations) && !isEmpty(tracked.locations)) {
+    toolCall.locations = tracked.locations;
+  }
+  return { ...req, toolCall };
+}
+
+const STATUS_SERVER = 'artificer-status';
+
+function decideMcp(
+  req: RequestPermissionRequest,
+  ctx: PermissionContext,
+  input: Record<string, unknown>,
+): PermissionOutcome {
+  const { server, tool } = input;
+  if (
+    typeof server !== 'string' ||
+    typeof tool !== 'string' ||
+    server.length === 0 ||
+    tool.length === 0
+  ) {
+    return deny(req, {
+      tool: 'mcp:unknown',
+      approvalKey: '',
+      reason: 'unknown MCP server',
+    });
+  }
+  const approvalKey = `${server}.${tool}`;
+  const name = `mcp:${approvalKey}`;
+  if (server === STATUS_SERVER) return allow(req, { tool: name, approvalKey });
+  return gated(req, ctx, name, approvalKey);
 }
 
 function commandOf(rawInput: unknown, title: string | null | undefined) {
@@ -131,10 +201,21 @@ export function decidePermission(
     };
   }
 
+  const input = asRecord(call.rawInput);
+  if (
+    req._meta?.is_mcp_tool_approval === true ||
+    (typeof input.server === 'string' && typeof input.tool === 'string')
+  ) {
+    return decideMcp(req, ctx, input);
+  }
+
   if (kind === 'execute') {
     const command = commandOf(call.rawInput, call.title);
     const approvalKey = shellApprovalKey(command);
     const tool = 'run_shell';
+    if (command.trim().length === 0) {
+      return deny(req, { tool, approvalKey, reason: 'no command to evaluate' });
+    }
     const reviewerWrite = checkReviewerWrite(command, ctx.role as RoleName);
     if (!reviewerWrite.allowed) {
       return deny(req, { tool, approvalKey, reason: reviewerWrite.reason });
@@ -158,7 +239,6 @@ export function decidePermission(
   }
 
   if (kind === 'fetch') {
-    const input = asRecord(call.rawInput);
     const method = String(input.method ?? 'GET').toUpperCase();
     const approvalKey = fetchApprovalKey(method, String(input.url ?? ''));
     const tool = 'fetch_url';

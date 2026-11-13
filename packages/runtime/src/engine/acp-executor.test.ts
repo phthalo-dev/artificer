@@ -610,6 +610,70 @@ test('gated execute without rule is rejected and approval emitted', async (t) =>
   assert.ok(calls.find((c) => c.name === 'acp:permission'));
 });
 
+test('permission request is filled from tracked tool call', async (t) => {
+  const { events, records } = await runTools(t, [
+    {
+      type: 'tool',
+      id: 'exec-1',
+      title: 'rm -rf build',
+      kind: 'execute',
+      rawInput: { command: 'rm -rf build' },
+      askPermission: true,
+      options: GATE_OPTIONS,
+      permissionToolCall: {
+        toolCallId: 'exec-1',
+        kind: 'execute',
+        status: 'pending',
+      },
+      output: 'removed',
+    },
+  ]);
+  const res = permissionResponse(await records());
+  assert.equal(res?.permissionResponse.outcome.optionId, 'r1');
+  const approval = events.find((e) => e.kind === 'approval');
+  assert.ok(approval && approval.kind === 'approval');
+  assert.equal(
+    approval.data.proposedRule.pattern,
+    shellApprovalKey('rm -rf build'),
+  );
+});
+
+test('MCP approval is filled from tracked tool call and allowed', async (t) => {
+  const { calls, records } = await runTools(t, [
+    {
+      type: 'tool',
+      id: 'exec-mcp',
+      title: 'mcp.artificer-status.report_status',
+      kind: 'execute',
+      rawInput: {
+        server: 'artificer-status',
+        tool: 'report_status',
+        arguments: { status: 'done', summary: 'ok' },
+      },
+      toolCallMeta: { is_mcp_tool_call: true },
+      askPermission: true,
+      options: GATE_OPTIONS,
+      permissionToolCall: {
+        toolCallId: 'exec-mcp',
+        kind: 'execute',
+        status: 'pending',
+      },
+      permissionMeta: { is_mcp_tool_approval: true },
+      output: 'ok',
+    },
+  ]);
+  const all = await records();
+  assert.equal(
+    permissionResponse(all)?.permissionResponse.outcome.optionId,
+    'a1',
+  );
+  const perm = calls.find((c) => c.name === 'acp:permission');
+  assert.deepEqual(perm?.input, {
+    tool: 'mcp:artificer-status.report_status',
+    approvalKey: 'artificer-status.report_status',
+  });
+});
+
 test('without onToolCall the permission decision is emitted live', async (t) => {
   const events: RuntimeEvent[] = [];
   const { promise } = await run(

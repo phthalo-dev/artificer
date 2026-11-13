@@ -17,6 +17,7 @@ import {
   type SessionModeState,
   type StopReason,
   type ToolCallContent,
+  type ToolCallLocation,
   type ToolKind,
   type ToolCallStatus,
 } from '@agentclientprotocol/sdk';
@@ -24,7 +25,7 @@ import type { AcpExecutorConfig } from '../api/types.js';
 import type { RuntimeEvent } from '../context.js';
 import type { RunRecord, ToolInvocation } from '../storage/types.js';
 import type { ToolPolicyFile } from '../tools/tool-policy.js';
-import { decidePermission } from './acp-permissions.js';
+import { decidePermission, fillPermissionRequest } from './acp-permissions.js';
 import { resolveAcpLaunch, type AcpLaunch } from './acp-presets.js';
 import type { ExecutorResult, WorkerExecutor } from './executor.js';
 import {
@@ -124,6 +125,7 @@ interface TrackedToolCall {
   kind?: ToolKind | null;
   status?: ToolCallStatus | null;
   rawInput?: unknown;
+  locations?: ToolCallLocation[] | null;
   output: string;
   reported: boolean;
 }
@@ -392,6 +394,7 @@ export class AcpExecutor implements WorkerExecutor {
           kind?: ToolKind | null;
           status?: ToolCallStatus | null;
           rawInput?: unknown;
+          locations?: ToolCallLocation[] | null;
           content?: ToolCallContent[] | null;
         },
       ) => {
@@ -401,6 +404,7 @@ export class AcpExecutor implements WorkerExecutor {
         if (patch.kind != null) call.kind = patch.kind;
         if (patch.status != null) call.status = patch.status;
         if (patch.rawInput !== undefined) call.rawInput = patch.rawInput;
+        if (patch.locations != null) call.locations = patch.locations;
         if (patch.content) {
           const out = contentText(patch.content);
           if (out) call.output = out;
@@ -436,7 +440,13 @@ export class AcpExecutor implements WorkerExecutor {
           }
         })
         .onRequest(methods.client.session.requestPermission, ({ params }) => {
-          const outcome = decidePermission(params, {
+          // Tracked values are stored untruncated, so policy judges the
+          // real command even when the request itself is detail-free.
+          const filled = fillPermissionRequest(
+            params,
+            toolCalls.get(params.toolCall.toolCallId),
+          );
+          const outcome = decidePermission(filled, {
             role: role ?? run.role,
             workspaceDir,
             policy: policy ?? EMPTY_POLICY,
