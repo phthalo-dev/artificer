@@ -39,6 +39,11 @@ const MCP_SERVER = path.join(
 const STDERR_TAIL_BYTES = 64 * 1024;
 const EXIT_GRACE_MS = 2_000;
 const TERM_GRACE_MS = 1_000;
+const DEFAULT_TIMEOUT_MS = 10 * 60 * 1000;
+/** How long the agent gets to honour session/cancel before SIGKILL. */
+const CANCEL_GRACE_MS = 5_000;
+/** How long to wait for the exit event after SIGKILL. */
+const KILL_SETTLE_MS = 1_000;
 /** How long to wait for the exit event after the connection drops. */
 const EXIT_SETTLE_MS = 1_000;
 /** How long to wait for stderr to drain after the agent exits. */
@@ -171,6 +176,7 @@ export class AcpExecutor implements WorkerExecutor {
     context,
     workspaceDir,
     run,
+    signal,
     policy,
     onToolCall,
     emit,
@@ -185,6 +191,7 @@ export class AcpExecutor implements WorkerExecutor {
     emit?: (event: RuntimeEvent) => void;
   }): Promise<ExecutorResult> {
     const { config, name } = this;
+    if (signal?.aborted) throw new Error('cancelled');
     const statusFile = path.join(
       executorStateDir(workspaceDir),
       '.artificer-status.json',
@@ -212,6 +219,9 @@ export class AcpExecutor implements WorkerExecutor {
     child.stdin.on('error', () => {});
 
     let promptDone = false;
+    // Set once abort or timeout begins; permission requests are then cancelled
+    // and the agent's own exit or cancelled stop reason no longer decide.
+    let cancelling = false;
     let failTransport!: (error: Error) => void;
     const transportFailure = new Promise<never>((_, reject) => {
       failTransport = reject;
@@ -243,12 +253,51 @@ export class AcpExecutor implements WorkerExecutor {
             });
           });
     child.on('exit', async (code, sig) => {
-      if (promptDone) return;
+      if (promptDone || cancelling) return;
       await stderrDrained();
-      if (promptDone) return;
+      if (promptDone || cancelling) return;
       const how = code !== null ? `code ${code}` : `signal ${sig}`;
       failTransport(new AcpRunError(withStderr(`${name} exited with ${how}`)));
     });
+
+    let ctxRef: ClientContext | undefined;
+    let activeSessionId: string | undefined;
+    let session:
+      | Promise<{ sessionId: string; stopReason: StopReason }>
+      | undefined;
+    /**
+     * Abort/timeout path: send session/cancel, give the agent the grace to
+     * wind down, SIGKILL the group, then fail the run with `error`.
+     */
+    const stop = async (error: Error) => {
+      if (cancelling || promptDone) return;
+      cancelling = true;
+      if (ctxRef && activeSessionId) {
+        ctxRef
+          .notify(methods.agent.session.cancel, { sessionId: activeSessionId })
+          .catch(() => {});
+        await Promise.race([
+          session?.then(
+            () => {},
+            () => {},
+          ),
+          waitForExit(child, CANCEL_GRACE_MS),
+        ]);
+      }
+      killProcessGroup(child, 'SIGKILL');
+      await waitForExit(child, KILL_SETTLE_MS);
+      failTransport(new AcpRunError(error.message));
+    };
+    const onAbort = () => void stop(new Error('cancelled'));
+    signal?.addEventListener('abort', onAbort, { once: true });
+    const timeout = setTimeout(
+      () => void stop(new Error(`${name} agent timed out`)),
+      config.timeout ?? DEFAULT_TIMEOUT_MS,
+    );
+    /** Once stopping, the stop error is the only outcome. */
+    const settleStop = async () => {
+      if (cancelling) await transportFailure;
+    };
 
     try {
       await new Promise<void>((resolve, reject) => {
@@ -276,9 +325,6 @@ export class AcpExecutor implements WorkerExecutor {
       );
 
       let text = '';
-      let activeSessionId: string | undefined;
-      // Task 6's abort path flips this once session/cancel has been sent.
-      const cancelling = false;
       const toolCalls = new Map<string, TrackedToolCall>();
       const track = (
         id: string,
@@ -372,7 +418,8 @@ export class AcpExecutor implements WorkerExecutor {
           return outcome.response;
         });
 
-      const session = app.connectWith(stream, async (ctx) => {
+      session = app.connectWith(stream, async (ctx) => {
+        ctxRef = ctx;
         const init = await this.call(ctx, methods.agent.initialize, {
           protocolVersion: PROTOCOL_VERSION,
           clientCapabilities: CLIENT_CAPABILITIES,
@@ -431,7 +478,9 @@ export class AcpExecutor implements WorkerExecutor {
       let outcome: { sessionId: string; stopReason: StopReason };
       try {
         outcome = await Promise.race([session, transportFailure]);
+        await settleStop();
       } catch (err) {
+        await settleStop();
         // A dropped connection usually means the agent died. Let the exit
         // event, which carries the code and stderr, win that race.
         if (!(err instanceof AcpRunError)) {
@@ -466,6 +515,8 @@ export class AcpExecutor implements WorkerExecutor {
         ...readExecutorStatus(statusFile),
       };
     } finally {
+      clearTimeout(timeout);
+      signal?.removeEventListener('abort', onAbort);
       killProcessGroup(child, 'SIGKILL');
     }
   }
