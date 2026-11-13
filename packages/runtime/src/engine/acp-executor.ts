@@ -69,7 +69,7 @@ function truncate(text: string): string {
     : text;
 }
 
-/** Keep raw tool input small; oversized input is replaced by its truncated JSON. */
+/** Keep the whole tool input within the 8 KiB budget; oversized input is replaced by its truncated JSON. */
 function boundedInput(value: unknown): unknown {
   if (value === undefined) return undefined;
   let json: string | undefined;
@@ -307,11 +307,7 @@ export class AcpExecutor implements WorkerExecutor {
           call.reported = true;
           onToolCall?.({
             name: 'acp:' + (call.kind ?? 'other'),
-            input: {
-              title:
-                call.title === undefined ? undefined : truncate(call.title),
-              rawInput: boundedInput(call.rawInput),
-            },
+            input: boundedInput({ title: call.title, rawInput: call.rawInput }),
             output: truncate(call.output),
             ...(call.status === 'failed' ? { error: 'failed' } : {}),
             at: new Date().toISOString(),

@@ -489,12 +489,10 @@ test('large tool title and rawInput are bounded', async (t) => {
       output: 'ok',
     },
   ]);
-  const input = calls[0].input as { title: string; rawInput: string };
-  const cap = 8192 + '…[truncated]'.length;
-  // Each of title and rawInput is capped at 8 KiB plus the suffix.
-  assert.ok(input.title.length <= cap);
-  assert.ok(input.title.endsWith('…[truncated]'));
-  assert.equal(typeof input.rawInput, 'string');
-  assert.ok(input.rawInput.length <= cap);
-  assert.ok(JSON.stringify(input).length <= 2 * cap + 100);
+  // Oversized input degrades to its truncated JSON string, so the string
+  // itself is the stringified input and is capped at 8 KiB plus the suffix.
+  const input = calls[0].input;
+  assert.equal(typeof input, 'string');
+  assert.ok((input as string).length <= 8192 + '…[truncated]'.length);
+  assert.ok((input as string).endsWith('…[truncated]'));
 });
