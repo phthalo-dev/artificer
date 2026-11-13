@@ -1,21 +1,31 @@
-import { Alert, Anchor, Card, Group, Loader, Stack, Text, Title } from '../ds';
+import {
+  Alert,
+  Heading,
+  HStack,
+  Link,
+  Spinner,
+  Stack,
+  Surface,
+  Text,
+} from '@var-ui/react';
 import { IconArrowLeft } from '@tabler/icons-react';
-import { Link, useParams } from 'react-router-dom';
+import { useParams } from 'react-router-dom';
 import { useMessageCost, useWorkstreams } from '../api/hooks';
 import { BreakdownTable } from '../components/BreakdownTable';
 import { CallTree } from '../components/CallTree';
 import { UsageStats } from '../components/UsageStats';
 import { formatTime } from '../format';
+import { t } from '../styles/system';
 
 export function MessageCostPage() {
   const { id } = useParams();
   const { data, isLoading, error } = useMessageCost(id);
   const { data: workstreams } = useWorkstreams();
 
-  if (isLoading) return <Loader size="sm" />;
+  if (isLoading) return <Spinner size="sm" label="Loading message cost" />;
   if (error || !data) {
     return (
-      <Alert color="red" title="Could not load message cost">
+      <Alert tone="danger" title="Could not load message cost">
         {error instanceof Error ? error.message : 'Not found'}
       </Alert>
     );
@@ -26,42 +36,49 @@ export function MessageCostPage() {
 
   return (
     <Stack gap="lg">
-      <Anchor component={Link} to="/usage" size="sm">
-        <Group gap={4}>
-          <IconArrowLeft size={14} /> Back to usage
-        </Group>
-      </Anchor>
+      <Link
+        href="/usage"
+        style={{
+          display: 'inline-flex',
+          alignItems: 'center',
+          gap: t.space.xxs.var,
+          alignSelf: 'flex-start',
+          fontSize: t.fontSize.sm.var,
+        }}
+      >
+        <IconArrowLeft size={14} /> Back to usage
+      </Link>
 
-      <div>
-        <Stack gap="xs">
-          <Title order={3}>Message cost</Title>
-          <Card padding="sm">
-            <Text size="sm" preWrap>
+      <Stack gap="xs">
+        <Heading level={3} size="md">
+          Message cost
+        </Heading>
+        <Surface padding="sm">
+          <Stack gap="xs">
+            <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
               {data.message.content}
             </Text>
-            <Text size="xs" c="dimmed" mt={4}>
+            <Text size="xs" tone="secondary">
               {formatTime(data.message.createdAt)}
             </Text>
-          </Card>
-        </Stack>
-      </div>
+          </Stack>
+        </Surface>
+      </Stack>
 
-      <div>
-        <Text fw={600} mb={4}>
-          Total
-        </Text>
+      <Stack gap="xs">
+        <Text weight="semibold">Total</Text>
         <UsageStats usage={data.total} />
-      </div>
+      </Stack>
 
-      <Group align="flex-start" wrap="wrap">
-        <div>
-          <Text fw={600} size="sm" mb={4}>
+      <HStack align="start" wrap gap="md">
+        <Stack gap="xs">
+          <Text weight="semibold" size="sm">
             By role
           </Text>
           <BreakdownTable label="Role" data={data.byRole} />
-        </div>
-        <div>
-          <Text fw={600} size="sm" mb={4}>
+        </Stack>
+        <Stack gap="xs">
+          <Text weight="semibold" size="sm">
             By workstream
           </Text>
           <BreakdownTable
@@ -72,19 +89,19 @@ export function MessageCostPage() {
               to: `/workstreams/${wid}`,
             })}
           />
-        </div>
-      </Group>
+        </Stack>
+      </HStack>
 
-      <div>
-        <Title order={5} mb="sm">
+      <Stack gap="xs">
+        <Heading level={5} size="xs">
           Call tree
-        </Title>
-        <Text size="xs" c="dimmed" mb={8}>
+        </Heading>
+        <Text size="xs" tone="secondary">
           Each call shows its own (self) cost and the cumulative cost (Σ) of its
           whole subtree.
         </Text>
         <CallTree tree={data.tree} />
-      </div>
+      </Stack>
     </Stack>
   );
 }

@@ -1,5 +1,4 @@
-import { Anchor, Table, Text } from '../ds';
-import { Link } from 'react-router-dom';
+import { Link, Table, Text } from '@var-ui/react';
 import type { UsageSummary } from '../api/types';
 import { formatCost, formatTokens } from '../format';
 
@@ -18,45 +17,43 @@ export function BreakdownTable({
   const rows = Object.entries(data).sort((a, b) => b[1].costUsd - a[1].costUsd);
   if (rows.length === 0) {
     return (
-      <Text c="dimmed" size="sm">
+      <Text tone="secondary" size="sm">
         No data.
       </Text>
     );
   }
   return (
-    <Table striped highlightOnHover withTableBorder>
-      <Table.Thead>
-        <Table.Tr>
-          <Table.Th>{label}</Table.Th>
-          <Table.Th>Calls</Table.Th>
-          <Table.Th>In / Out tokens</Table.Th>
-          <Table.Th>Cost</Table.Th>
-        </Table.Tr>
-      </Table.Thead>
-      <Table.Tbody>
+    <Table striped hasHover>
+      <Table.Header>
+        <Table.Row>
+          <Table.Column rowHeader>{label}</Table.Column>
+          <Table.Column>Calls</Table.Column>
+          <Table.Column>In / Out tokens</Table.Column>
+          <Table.Column>Cost</Table.Column>
+        </Table.Row>
+      </Table.Header>
+      <Table.Body>
         {rows.map(([key, usage]) => {
           const rendered = renderKey?.(key) ?? { label: key };
           return (
-            <Table.Tr key={key}>
-              <Table.Td>
+            <Table.Row key={key}>
+              <Table.Cell rowHeader>
                 {rendered.to ? (
-                  <Anchor component={Link} to={rendered.to} size="sm">
-                    {rendered.label}
-                  </Anchor>
+                  <Link href={rendered.to}>{rendered.label}</Link>
                 ) : (
-                  <Text size="sm">{rendered.label}</Text>
+                  rendered.label
                 )}
-              </Table.Td>
-              <Table.Td>{usage.runs}</Table.Td>
-              <Table.Td>
+              </Table.Cell>
+              <Table.Cell>{usage.runs}</Table.Cell>
+              <Table.Cell>
                 {formatTokens(usage.inputTokens)} /{' '}
                 {formatTokens(usage.outputTokens)}
-              </Table.Td>
-              <Table.Td>{formatCost(usage.costUsd)}</Table.Td>
-            </Table.Tr>
+              </Table.Cell>
+              <Table.Cell>{formatCost(usage.costUsd)}</Table.Cell>
+            </Table.Row>
           );
         })}
-      </Table.Tbody>
+      </Table.Body>
     </Table>
   );
 }

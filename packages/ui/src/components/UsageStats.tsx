@@ -1,11 +1,11 @@
-import { Group } from '../ds';
+import { HStack } from '@var-ui/react';
 import type { UsageSummary } from '../api/types';
 import { DataCard } from './DataCard';
 import { formatCost, formatTokens } from '../format';
 
 export function UsageStats({ usage }: { usage: UsageSummary }) {
   return (
-    <Group gap="sm" wrap="wrap" alignStretch>
+    <HStack gap="sm" wrap align="stretch">
       <DataCard bordered label="Cost" value={formatCost(usage.costUsd)} />
       <DataCard bordered label="Calls" value={String(usage.runs)} />
       <DataCard bordered label="Requests" value={String(usage.requests)} />
@@ -19,6 +19,6 @@ export function UsageStats({ usage }: { usage: UsageSummary }) {
         label="Output tokens"
         value={formatTokens(usage.outputTokens)}
       />
-    </Group>
+    </HStack>
   );
 }

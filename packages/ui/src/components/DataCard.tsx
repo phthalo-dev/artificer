@@ -1,5 +1,10 @@
 import { type ReactNode } from 'react';
-import { Paper, Stack, Text } from '../ds';
+import { Stack, Surface, Text } from '@var-ui/react';
+import {
+  dataCardLabel,
+  dataCardTile,
+  dataCardValueHero,
+} from './DataCard.styles';
 
 export type DataCardProps = {
   label: string;
@@ -17,16 +22,21 @@ export function DataCard({
   bordered = false,
 }: DataCardProps) {
   const content = (
-    <Stack gap={4}>
-      <Text component="div" size="xs" c="dimmed" tt="uppercase" fw={600}>
+    <Stack gap="xs">
+      <Text
+        as="div"
+        size="xs"
+        tone="secondary"
+        weight="semibold"
+        className={dataCardLabel}
+      >
         {label}
       </Text>
       <Text
-        component="div"
-        size={size === 'lg' ? undefined : 'lg'}
-        fz={size === 'lg' ? 22 : undefined}
-        fw={700}
-        lh={size === 'lg' ? 1 : undefined}
+        as="div"
+        size="lg"
+        weight="semibold"
+        className={size === 'lg' ? dataCardValueHero : undefined}
       >
         {value}
       </Text>
@@ -35,9 +45,9 @@ export function DataCard({
 
   if (bordered) {
     return (
-      <Paper p="sm" flex>
+      <Surface padding="sm" className={dataCardTile}>
         {content}
-      </Paper>
+      </Surface>
     );
   }
 
