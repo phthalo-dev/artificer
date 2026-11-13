@@ -49,6 +49,8 @@ const sessions = new Map();
 /** sessionId -> resolve fn for the in-flight prompt's cancel waiter */
 const cancelWaiters = new Map();
 const cancelled = new Set();
+/** sessionIds whose prompt must end `cancelled` after a reject_once (OpenCode). */
+const rejectedStop = new Set();
 let lastClient;
 
 /** Call `report_status` on a stdio MCP server using minimal JSON lines. */
@@ -127,7 +129,7 @@ async function runTool(client, sessionId, step) {
     const options = step.options ?? DEFAULT_OPTIONS;
     const response = await client.request(
       methods.client.session.requestPermission,
-      { sessionId, toolCall, options },
+      { sessionId, toolCall: step.permissionToolCall ?? toolCall, options },
     );
     record({ permissionResponse: response, toolCallId: step.id });
     const outcome = response?.outcome;
@@ -136,6 +138,9 @@ async function runTool(client, sessionId, step) {
         ? options.find((o) => o.optionId === outcome.optionId)
         : undefined;
     allowed = Boolean(chosen && String(chosen.kind).startsWith('allow'));
+    if (chosen?.kind === 'reject_once' && scenario.stopAfterPermissionReject) {
+      rejectedStop.add(sessionId);
+    }
   }
 
   await update(client, sessionId, {
@@ -218,7 +223,7 @@ const app = agent({ name: 'fake' })
       cancelWaiters.set(sessionId, resolve),
     );
     for (const step of steps) {
-      if (cancelled.has(sessionId)) break;
+      if (cancelled.has(sessionId) || rejectedStop.has(sessionId)) break;
       if (step.type === 'message') {
         await update(client, sessionId, {
           sessionUpdate: 'agent_message_chunk',
@@ -244,7 +249,10 @@ const app = agent({ name: 'fake' })
       }
     }
     cancelWaiters.delete(sessionId);
-    if (cancelled.has(sessionId)) return { stopReason: 'cancelled' };
+    if (cancelled.has(sessionId) || rejectedStop.has(sessionId)) {
+      rejectedStop.delete(sessionId);
+      return { stopReason: 'cancelled' };
+    }
     return {
       stopReason: scenario.stopReason ?? 'end_turn',
       ...('promptUsage' in scenario ? { usage: scenario.promptUsage } : {}),

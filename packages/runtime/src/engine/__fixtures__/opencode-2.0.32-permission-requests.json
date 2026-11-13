@@ -1,0 +1,154 @@
+[
+  {
+    "sessionId": "ses_e29679b7fffejyAOKbepkGLguZ",
+    "toolCall": {
+      "toolCallId": "call_3922357410972690305",
+      "name": "shell",
+      "title": "ls -la",
+      "kind": "execute",
+      "status": "pending",
+      "locations": [
+        {
+          "path": "{{WS}}"
+        }
+      ],
+      "rawInput": {
+        "command": "ls -la",
+        "cwd": "{{WS}}"
+      }
+    },
+    "options": [
+      {
+        "optionId": "once",
+        "kind": "allow_once",
+        "name": "Allow once"
+      },
+      {
+        "optionId": "always",
+        "kind": "allow_always",
+        "name": "Always allow"
+      },
+      {
+        "optionId": "reject",
+        "kind": "reject_once",
+        "name": "Reject"
+      }
+    ]
+  },
+  {
+    "sessionId": "ses_e29679b7fffejyAOKbepkGLguZ",
+    "toolCall": {
+      "toolCallId": "call_11795578932707669512",
+      "name": "write",
+      "title": "hello.txt",
+      "kind": "edit",
+      "status": "pending",
+      "locations": [
+        {
+          "path": "{{WS}}/hello.txt"
+        }
+      ],
+      "rawInput": {
+        "path": "hello.txt",
+        "content": "hi"
+      },
+      "content": [
+        {
+          "type": "diff",
+          "path": "{{WS}}/hello.txt",
+          "oldText": null,
+          "newText": "hi"
+        }
+      ]
+    },
+    "options": [
+      {
+        "optionId": "once",
+        "kind": "allow_once",
+        "name": "Allow once"
+      },
+      {
+        "optionId": "always",
+        "kind": "allow_always",
+        "name": "Always allow"
+      },
+      {
+        "optionId": "reject",
+        "kind": "reject_once",
+        "name": "Reject"
+      }
+    ]
+  },
+  {
+    "sessionId": "ses_e29679b7fffejyAOKbepkGLguZ",
+    "toolCall": {
+      "toolCallId": "call_5450572455296284542",
+      "name": "write",
+      "title": "../outside.txt",
+      "kind": "edit",
+      "status": "pending",
+      "locations": [
+        {
+          "path": "{{PARENT}}/outside.txt"
+        }
+      ],
+      "rawInput": {
+        "content": "x",
+        "path": "../outside.txt"
+      }
+    },
+    "options": [
+      {
+        "optionId": "once",
+        "kind": "allow_once",
+        "name": "Allow once"
+      },
+      {
+        "optionId": "always",
+        "kind": "allow_always",
+        "name": "Always allow"
+      },
+      {
+        "optionId": "reject",
+        "kind": "reject_once",
+        "name": "Reject"
+      }
+    ]
+  },
+  {
+    "sessionId": "ses_e29679b7fffejyAOKbepkGLguZ",
+    "toolCall": {
+      "toolCallId": "call_8006168804181226041",
+      "name": "shell",
+      "title": "rm -rf build",
+      "kind": "execute",
+      "status": "pending",
+      "locations": [
+        {
+          "path": "{{WS}}"
+        }
+      ],
+      "rawInput": {
+        "command": "rm -rf build",
+        "cwd": "{{WS}}"
+      }
+    },
+    "options": [
+      {
+        "optionId": "once",
+        "kind": "allow_once",
+        "name": "Allow once"
+      },
+      {
+        "optionId": "always",
+        "kind": "allow_always",
+        "name": "Always allow"
+      },
+      {
+        "optionId": "reject",
+        "kind": "reject_once",
+        "name": "Reject"
+      }
+    ]
+  }
+]
