@@ -72,6 +72,7 @@ test('live: opencode denies rm -rf and still reports status', async (t) => {
     onToolCall: (inv) => calls.push(inv),
   });
 
+  // Reaching this line means execute() resolved rather than rejecting 'cancelled'.
   assert.equal(result.workerStatus, 'done');
   const permissions = calls.filter((c) => c.name === 'acp:permission');
   assert.ok(

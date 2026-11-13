@@ -38,7 +38,12 @@ By default OpenCode does not ask before running commands: it ran `rm -rf build` 
 
 This overrides a repo's own `opencode.json`. If you set your own `OPENCODE_CONFIG_CONTENT`, it is merged, but the preset's `permission` block always wins, so you cannot loosen it there.
 
-OpenCode then sends a `session/request_permission` for every shell command, edit, web fetch and outside-workspace access. Artificer maps each to its tool policy (the same rules as the other executors) and answers allow or deny. Each decision is recorded as an `acp:permission` tool call.
+With that config OpenCode sends a `session/request_permission` for shell commands and writes (including writes outside the workspace); this was verified in recordings. Web fetch and `external_directory` are also configured to `ask`, but those were not exercised. Artificer decides each request as follows, and records every decision as an `acp:permission` tool call:
+
+- **Shell commands** are allowed unless they match the dangerous-command check, and those go through the tool policy. Reviewer writes, `git stash` and cloning into the workspace are always denied.
+- **Web fetches** are allowed for GET and HEAD and policy-gated otherwise.
+- **Edits** are allowed unless the role is a reviewer (or reviewer-based) or a path resolves outside the workspace. Edits are not gated by policy rules.
+- **Any other kind of request**, including MCP tools and reads, is allowed.
 
 **Not covered:**
 
