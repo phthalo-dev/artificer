@@ -15,9 +15,15 @@ import {
   type AuthMethod,
   type ClientContext,
   type StopReason,
+  type ToolCallContent,
+  type ToolKind,
+  type ToolCallStatus,
 } from '@agentclientprotocol/sdk';
 import type { AcpExecutorConfig } from '../api/types.js';
-import type { RunRecord } from '../storage/types.js';
+import type { RuntimeEvent } from '../context.js';
+import type { RunRecord, ToolInvocation } from '../storage/types.js';
+import type { ToolPolicyFile } from '../tools/tool-policy.js';
+import { decidePermission } from './acp-permissions.js';
 import type { ExecutorResult, WorkerExecutor } from './executor.js';
 import {
   executorStateDir,
@@ -37,6 +43,9 @@ const TERM_GRACE_MS = 1_000;
 const EXIT_SETTLE_MS = 1_000;
 /** How long to wait for stderr to drain after the agent exits. */
 const STDERR_DRAIN_MS = 500;
+const MAX_TOOL_TEXT = 8 * 1024;
+const TRUNCATED_SUFFIX = '…[truncated]';
+const EMPTY_POLICY: ToolPolicyFile = { version: 1, rules: [] };
 const CLIENT_CAPABILITIES = {
   fs: { readTextFile: false, writeTextFile: false },
   terminal: false,
@@ -52,6 +61,45 @@ function readRuntimeVersion(): string {
   } catch {
     return '0.0.0';
   }
+}
+
+function truncate(text: string): string {
+  return text.length > MAX_TOOL_TEXT
+    ? text.slice(0, MAX_TOOL_TEXT) + TRUNCATED_SUFFIX
+    : text;
+}
+
+/** Keep raw tool input small; oversized input is replaced by its truncated JSON. */
+function boundedInput(value: unknown): unknown {
+  if (value === undefined) return undefined;
+  let json: string | undefined;
+  try {
+    json = JSON.stringify(value);
+  } catch {
+    json = String(value);
+  }
+  if (json === undefined || json.length <= MAX_TOOL_TEXT) return value;
+  return truncate(json);
+}
+
+function contentText(content: ToolCallContent[] | null | undefined): string {
+  return (content ?? [])
+    .map((item) =>
+      item.type === 'content' && item.content.type === 'text'
+        ? item.content.text
+        : '',
+    )
+    .filter(Boolean)
+    .join('\n');
+}
+
+interface TrackedToolCall {
+  title?: string;
+  kind?: ToolKind | null;
+  status?: ToolCallStatus | null;
+  rawInput?: unknown;
+  output: string;
+  reported: boolean;
 }
 
 /** Error whose message is already final and must not be re-wrapped. */
@@ -122,12 +170,19 @@ export class AcpExecutor implements WorkerExecutor {
   async execute({
     context,
     workspaceDir,
+    run,
+    policy,
+    onToolCall,
+    emit,
   }: {
     context: string;
     workspaceDir: string;
     run: RunRecord;
     sessionId?: string;
     signal?: AbortSignal;
+    policy?: ToolPolicyFile;
+    onToolCall?: (invocation: ToolInvocation) => void;
+    emit?: (event: RuntimeEvent) => void;
   }): Promise<ExecutorResult> {
     const { config, name } = this;
     const statusFile = path.join(
@@ -222,6 +277,46 @@ export class AcpExecutor implements WorkerExecutor {
 
       let text = '';
       let activeSessionId: string | undefined;
+      // Task 6's abort path flips this once session/cancel has been sent.
+      const cancelling = false;
+      const toolCalls = new Map<string, TrackedToolCall>();
+      const track = (
+        id: string,
+        patch: {
+          title?: string | null;
+          kind?: ToolKind | null;
+          status?: ToolCallStatus | null;
+          rawInput?: unknown;
+          content?: ToolCallContent[] | null;
+        },
+      ) => {
+        const call = toolCalls.get(id) ?? { output: '', reported: false };
+        toolCalls.set(id, call);
+        if (patch.title != null) call.title = patch.title;
+        if (patch.kind != null) call.kind = patch.kind;
+        if (patch.status != null) call.status = patch.status;
+        if (patch.rawInput !== undefined) call.rawInput = patch.rawInput;
+        if (patch.content) {
+          const out = contentText(patch.content);
+          if (out) call.output = out;
+        }
+        if (
+          !call.reported &&
+          (call.status === 'completed' || call.status === 'failed')
+        ) {
+          call.reported = true;
+          onToolCall?.({
+            name: 'acp:' + (call.kind ?? 'other'),
+            input: {
+              title: call.title,
+              rawInput: boundedInput(call.rawInput),
+            },
+            output: truncate(call.output),
+            ...(call.status === 'failed' ? { error: 'failed' } : {}),
+            at: new Date().toISOString(),
+          });
+        }
+      };
       const app = client({ name: 'artificer' })
         .onNotification(methods.client.session.update, ({ params }) => {
           if (params.sessionId !== activeSessionId) return;
@@ -231,12 +326,51 @@ export class AcpExecutor implements WorkerExecutor {
             update.content.type === 'text'
           ) {
             text += update.content.text;
+          } else if (
+            update.sessionUpdate === 'tool_call' ||
+            update.sessionUpdate === 'tool_call_update'
+          ) {
+            track(update.toolCallId, update);
           }
         })
-        .onRequest(methods.client.session.requestPermission, () => ({
-          // Permission handling arrives with the tool-policy mapping.
-          outcome: { outcome: 'cancelled' },
-        }));
+        .onRequest(methods.client.session.requestPermission, ({ params }) => {
+          const outcome = decidePermission(params, {
+            role: run.role,
+            workspaceDir,
+            policy: policy ?? EMPTY_POLICY,
+            cancelling,
+          });
+          const at = new Date().toISOString();
+          if (outcome.proposedRule) {
+            emit?.({
+              kind: 'approval',
+              at,
+              data: {
+                tool: outcome.tool,
+                approvalKey: outcome.approvalKey,
+                proposedRule: outcome.proposedRule,
+                runId: run.id,
+                ...(run.workstreamId ? { workstreamId: run.workstreamId } : {}),
+              },
+            });
+          }
+          const detail =
+            outcome.decision +
+            (outcome.ruleId ? ' ' + outcome.ruleId : '') +
+            (outcome.reason ? ': ' + outcome.reason : '');
+          emit?.({
+            kind: 'tool',
+            at,
+            data: {
+              runId: run.id,
+              name: 'acp:permission',
+              input: { tool: outcome.tool, approvalKey: outcome.approvalKey },
+              output: detail,
+              at,
+            },
+          });
+          return outcome.response;
+        });
 
       const session = app.connectWith(stream, async (ctx) => {
         const init = await this.call(ctx, methods.agent.initialize, {

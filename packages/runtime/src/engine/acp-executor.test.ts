@@ -7,7 +7,13 @@ import { fileURLToPath } from 'node:url';
 import { test, type TestContext } from 'node:test';
 import { promisify } from 'node:util';
 import type { AcpExecutorConfig } from '../api/types.js';
-import { emptyUsage, type RunRecord } from '../storage/types.js';
+import type { RuntimeEvent } from '../context.js';
+import {
+  emptyUsage,
+  type RunRecord,
+  type ToolInvocation,
+} from '../storage/types.js';
+import { shellApprovalKey, type ToolPolicyFile } from '../tools/tool-policy.js';
 import { AcpExecutor } from './acp-executor.js';
 import type { ExecutorResult } from './executor.js';
 
@@ -64,6 +70,12 @@ async function run(
   t: TestContext,
   scenario: object,
   overrides: Partial<AcpExecutorConfig> = {},
+  extra: {
+    policy?: ToolPolicyFile;
+    role?: string;
+    onToolCall?: (invocation: ToolInvocation) => void;
+    emit?: (event: RuntimeEvent) => void;
+  } = {},
 ) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-acp-'));
   const workspaceDir = await repo();
@@ -94,7 +106,10 @@ async function run(
   const promise: Promise<ExecutorResult> = executor.execute({
     context: 'do the thing',
     workspaceDir,
-    run: runRecord,
+    run: extra.role ? { ...runRecord, role: extra.role } : runRecord,
+    policy: extra.policy,
+    onToolCall: extra.onToolCall,
+    emit: extra.emit,
   });
   // Rejections are asserted by the tests; avoid unhandled-rejection noise.
   promise.catch(() => {});
@@ -303,4 +318,162 @@ test('agent process exits after a successful run', async (t) => {
   const [first] = await records();
   assert.ok(first?.pid);
   assert.throws(() => process.kill(first.pid!, 0));
+});
+
+const GATE_OPTIONS = [
+  { optionId: 'a1', name: 'Allow', kind: 'allow_once' },
+  { optionId: 'r1', name: 'Reject', kind: 'reject_once' },
+];
+
+async function runTools(
+  t: TestContext,
+  steps: object[],
+  extra: Parameters<typeof run>[3] = {},
+) {
+  const calls: ToolInvocation[] = [];
+  const events: RuntimeEvent[] = [];
+  const r = await run(
+    t,
+    { steps },
+    {},
+    {
+      ...extra,
+      onToolCall: (i) => calls.push(i),
+      emit: (e) => events.push(e),
+    },
+  );
+  await r.promise;
+  return { ...r, calls, events };
+}
+
+function permissionResponse(records: Record[]): Record | undefined {
+  return records.find((r) => r.permissionResponse);
+}
+
+test('completed tool calls are reported once each', async (t) => {
+  const { calls } = await runTools(t, [
+    { type: 'tool', id: 't1', title: 'Read a.txt', kind: 'read', output: 'x' },
+    { type: 'tool', id: 't2', title: 'ls', kind: 'execute', output: 'y' },
+  ]);
+  assert.deepEqual(
+    calls.map((c) => c.name),
+    ['acp:read', 'acp:execute'],
+  );
+});
+
+test('tool output text is extracted', async (t) => {
+  const { calls } = await runTools(t, [
+    {
+      type: 'tool',
+      id: 't1',
+      title: 'Read a.txt',
+      kind: 'read',
+      rawInput: { path: 'a.txt' },
+      output: 'file contents',
+    },
+  ]);
+  assert.equal(calls[0].output, 'file contents');
+  assert.deepEqual(calls[0].input, {
+    title: 'Read a.txt',
+    rawInput: { path: 'a.txt' },
+  });
+  assert.equal(calls[0].error, undefined);
+});
+
+test('large tool output is truncated', async (t) => {
+  const { calls } = await runTools(t, [
+    {
+      type: 'tool',
+      id: 't1',
+      title: 'dump',
+      kind: 'read',
+      output: 'z'.repeat(100_000),
+    },
+  ]);
+  const suffix = '…[truncated]';
+  assert.ok(calls[0].output.length <= 8192 + suffix.length);
+  assert.ok(calls[0].output.endsWith(suffix));
+});
+
+test('gated execute without rule is rejected and approval emitted', async (t) => {
+  const { calls, events, records } = await runTools(t, [
+    {
+      type: 'tool',
+      id: 't1',
+      title: 'rm -rf build',
+      kind: 'execute',
+      rawInput: { command: 'rm -rf build' },
+      askPermission: true,
+      options: GATE_OPTIONS,
+      output: 'removed',
+    },
+  ]);
+  const res = permissionResponse(await records());
+  assert.equal(res?.permissionResponse.outcome.optionId, 'r1');
+  const approval = events.find((e) => e.kind === 'approval');
+  assert.ok(approval && approval.kind === 'approval');
+  assert.equal(approval.data.proposedRule.tool, 'run_shell');
+  assert.equal(approval.data.runId, 'run-1');
+  assert.equal(calls[0].error, 'failed');
+  const perm = events.find(
+    (e) => e.kind === 'tool' && e.data.name === 'acp:permission',
+  );
+  assert.ok(perm);
+});
+
+test('allow rule lets gated execute through', async (t) => {
+  const policy: ToolPolicyFile = {
+    version: 1,
+    rules: [
+      {
+        id: 'rule1',
+        tool: 'run_shell',
+        pattern: shellApprovalKey('rm -rf build'),
+        effect: 'allow',
+        scope: 'agent',
+        createdAt: '2026-01-01T00:00:00Z',
+      },
+    ],
+  };
+  const { calls, events, records } = await runTools(
+    t,
+    [
+      {
+        type: 'tool',
+        id: 't1',
+        title: 'rm -rf build',
+        kind: 'execute',
+        rawInput: { command: 'rm -rf build' },
+        askPermission: true,
+        options: GATE_OPTIONS,
+        output: 'removed',
+      },
+    ],
+    { policy },
+  );
+  const res = permissionResponse(await records());
+  assert.equal(res?.permissionResponse.outcome.optionId, 'a1');
+  assert.equal(calls[0].error, undefined);
+  assert.equal(events.filter((e) => e.kind === 'approval').length, 0);
+});
+
+test('reviewer edits are rejected', async (t) => {
+  const { records } = await runTools(
+    t,
+    [
+      {
+        type: 'tool',
+        id: 't1',
+        title: 'Edit a.txt',
+        kind: 'edit',
+        locations: ['a.txt'],
+        askPermission: true,
+        options: GATE_OPTIONS,
+        output: 'edited',
+      },
+    ],
+    { role: 'reviewer' },
+  );
+  const res = permissionResponse(await records());
+  assert.equal(res?.permissionResponse.outcome.optionId, 'r1');
 });
