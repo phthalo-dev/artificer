@@ -3,22 +3,23 @@ import {
   Button,
   Card,
   Code,
-  Group,
-  Progress,
+  Heading,
+  HStack,
+  Meter,
   Stack,
+  Surface,
   Text,
-  Title,
-} from '../ds';
+} from '@var-ui/react';
 import { useResetQuotaWindow, useUsage } from '../api/hooks';
 import type { QuotaAccountState, QuotaWindowState } from '../api/types';
 import {
-  accountStatusColor,
   formatQuotaUnit,
   formatUntil,
   windowLabel,
   windowPercent,
   windowUsed,
 } from '../quota';
+import { accountStatusTone } from './QuotaBanner';
 
 function WindowRow({ window }: { window: QuotaWindowState }) {
   const pct = windowPercent(window);
@@ -27,29 +28,23 @@ function WindowRow({ window }: { window: QuotaWindowState }) {
   const blockPct = Math.min(100, blockAtPercent);
 
   return (
-    <Stack gap={4}>
-      <Group justify="space-between" wrap="nowrap">
-        <Text size="sm" fw={500}>
-          {windowLabel(window)}
-        </Text>
-        <Text size="xs" c="dimmed">
-          {formatQuotaUnit(unit, used)} / {formatQuotaUnit(unit, limit)}
-        </Text>
-      </Group>
-      <Progress
+    <Stack gap="xs">
+      <Meter
+        label={windowLabel(window)}
         value={pct}
-        color={pct >= blockPct ? 'red' : pct >= 70 ? 'yellow' : 'blue'}
+        valueLabel={`${formatQuotaUnit(unit, used)} / ${formatQuotaUnit(unit, limit)}`}
+        tone={pct >= blockPct ? 'danger' : pct >= 70 ? 'warning' : 'info'}
       />
-      <Group justify="space-between">
-        <Text size="xs" c="dimmed">
+      <HStack justify="between">
+        <Text size="xs" tone="secondary">
           {Math.round(pct)}% used · source: {window.source}
         </Text>
         {window.resetsAt && (
-          <Text size="xs" c="dimmed">
+          <Text size="xs" tone="secondary">
             resets {formatUntil(window.resetsAt)}
           </Text>
         )}
-      </Group>
+      </HStack>
     </Stack>
   );
 }
@@ -59,33 +54,33 @@ function AccountCard({ account }: { account: QuotaAccountState }) {
   const activeRoute = account.config.id;
 
   return (
-    <Card padding="md" withBorder>
-      <Group justify="space-between" mb="sm">
-        <Group gap="xs">
-          <Text fw={600}>{account.config.id}</Text>
-          <Badge color={accountStatusColor(account.status)} variant="light">
-            {account.status}
-          </Badge>
-          <Badge color="gray" variant="outline">
-            {account.config.mode}
-          </Badge>
-        </Group>
-        {account.config.onExhausted && (
-          <Text size="xs" c="dimmed">
-            on exhaust: {account.config.onExhausted}
-          </Text>
-        )}
-      </Group>
+    <Card>
       <Stack gap="md">
+        <HStack justify="between">
+          <HStack gap="xs">
+            <Text weight="semibold">{account.config.id}</Text>
+            <Badge tone={accountStatusTone(account.status)}>
+              {account.status}
+            </Badge>
+            <Badge appearance="outline">{account.config.mode}</Badge>
+          </HStack>
+          {account.config.onExhausted && (
+            <Text size="xs" tone="secondary">
+              on exhaust: {account.config.onExhausted}
+            </Text>
+          )}
+        </HStack>
         {account.windows.map((w) => (
-          <div key={w.config.id}>
-            <WindowRow window={w} />
+          <Stack key={w.config.id} gap="xs" align="start">
+            <div style={{ alignSelf: 'stretch' }}>
+              <WindowRow window={w} />
+            </div>
             {w.config.period === 'fixed' && (
               <Button
-                variant="outline"
+                appearance="outline"
                 size="sm"
                 loading={reset.isPending}
-                onPress={() =>
+                onClick={() =>
                   reset.mutate({
                     accountId: activeRoute,
                     windowId: w.config.id,
@@ -95,10 +90,10 @@ function AccountCard({ account }: { account: QuotaAccountState }) {
                 Reset window
               </Button>
             )}
-          </div>
+          </Stack>
         ))}
         {(account.config.failover?.length ?? 0) > 0 && (
-          <Text size="xs" c="dimmed">
+          <Text size="xs" tone="secondary">
             Failover: {account.config.failover!.map((f) => f.id).join(' → ')}
           </Text>
         )}
@@ -113,7 +108,7 @@ export function QuotaPanel() {
 
   if (!snapshot || Object.keys(snapshot.accounts).length === 0) {
     return (
-      <Text c="dimmed" size="sm">
+      <Text tone="secondary" size="sm">
         No quota windows configured. Add a <Code>quota</Code> block to{' '}
         <Code>artificer.config.json</Code> or set{' '}
         <Code>QUOTA_DAILY_BUDGET_USD</Code> for a metered cap.
@@ -127,24 +122,28 @@ export function QuotaPanel() {
 
   return (
     <Stack gap="md">
-      <Group justify="space-between">
-        <Title order={5}>Quota &amp; budgets</Title>
-        <Text size="xs" c="dimmed">
+      <HStack justify="between">
+        <Heading level={5} size="xs">
+          Quota &amp; budgets
+        </Heading>
+        <Text size="xs" tone="secondary">
           communicator reserve: {snapshot.reservePercent}%
         </Text>
-      </Group>
+      </HStack>
 
       {failoverRoutes.length > 0 && (
-        <Card padding="sm" withBorder>
-          <Text size="sm" fw={600} mb={4}>
-            Active failover routes
-          </Text>
-          {failoverRoutes.map(([accountId, route]) => (
-            <Text key={accountId} size="sm" c="dimmed">
-              {accountId} → <strong>{route}</strong>
+        <Surface padding="sm">
+          <Stack gap="xs">
+            <Text size="sm" weight="semibold">
+              Active failover routes
             </Text>
-          ))}
-        </Card>
+            {failoverRoutes.map(([accountId, route]) => (
+              <Text key={accountId} size="sm" tone="secondary">
+                {accountId} → <strong>{route}</strong>
+              </Text>
+            ))}
+          </Stack>
+        </Surface>
       )}
 
       {Object.values(snapshot.accounts).map((account) => (

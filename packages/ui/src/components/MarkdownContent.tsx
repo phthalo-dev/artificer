@@ -1,6 +1,6 @@
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
-import { Anchor, Code } from '../ds';
+import { Code, CodeBlock, Link } from '@var-ui/react';
 import { prose, preWrapper } from './MarkdownContent.styles';
 
 export function MarkdownContent({ content }: { content: string }) {
@@ -10,26 +10,18 @@ export function MarkdownContent({ content }: { content: string }) {
         remarkPlugins={[remarkGfm]}
         components={{
           a: ({ href, children }) => (
-            <Anchor
-              href={href}
-              target="_blank"
-              rel="noopener noreferrer"
-              size="sm"
-            >
+            <Link href={href} target="_blank" rel="noopener noreferrer">
               {children}
-            </Anchor>
+            </Link>
           ),
-          code: ({ className, children, ...props }) => {
+          code: ({ className, children }) => {
             const text = String(children).replace(/\n$/, '');
             const isBlock = Boolean(className) || text.includes('\n');
             if (isBlock) {
-              return (
-                <Code block className={className} {...props}>
-                  {text}
-                </Code>
-              );
+              const language = /language-([\w-]+)/.exec(className ?? '')?.[1];
+              return <CodeBlock code={text} language={language} />;
             }
-            return <Code {...props}>{children}</Code>;
+            return <Code>{children}</Code>;
           },
           pre: ({ children }) => <div className={preWrapper}>{children}</div>,
         }}

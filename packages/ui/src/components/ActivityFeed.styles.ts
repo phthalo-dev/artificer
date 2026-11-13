@@ -1,66 +1,64 @@
-import { styles } from '../ds/styles';
-import { color, space } from '../ds/tokens';
+import { style, t } from '../styles/system';
 
-export const feedRoot = styles.class('activity-feed-root', {
+export const feedRoot = style('activity-feed-root', {
   display: 'flex',
   flexDirection: 'column',
   height: '100%',
   overflow: 'hidden',
+  padding: t.space.sm.var,
 });
 
-export const feedHeader = styles.class('activity-feed-header', {
-  padding: '0 0 8px',
-  borderBottom: `1px solid ${color.border}`,
-  marginBottom: '8px',
+export const feedHeader = style('activity-feed-header', {
+  paddingBottom: t.space.xs.var,
+  borderBottom: `1px solid ${t.color.border.default.var}`,
+  marginBottom: t.space.xs.var,
   flexShrink: 0,
-  fontWeight: 600,
-  fontSize: '13px',
 });
 
-export const feedScroll = styles.class('activity-feed-scroll', {
+export const feedScroll = style('activity-feed-scroll', {
   flex: 1,
   overflowY: 'auto',
   minHeight: 0,
 });
 
-export const feedEmpty = styles.class('activity-feed-empty', {
-  padding: '8px 0',
-});
-
-export const feedRow = styles.class('activity-feed-row', {
+export const feedRow = style('activity-feed-row', {
   padding: '3px 0',
   display: 'flex',
   justifyContent: 'space-between',
   alignItems: 'baseline',
-  gap: space.xs,
+  gap: t.space.xxs.var,
 });
 
-export const feedRowMain = styles.class('activity-feed-row-main', {
+export const feedRowMain = style('activity-feed-row-main', {
   display: 'flex',
   alignItems: 'center',
   minWidth: 0,
   flex: 1,
-  gap: space.xs,
+  gap: t.space.xxs.var,
 });
 
-export const feedDot = styles.class('activity-feed-dot', {
+export const feedDot = style('activity-feed-dot', {
   width: '6px',
   height: '6px',
-  borderRadius: '50%',
+  borderRadius: t.radius.full.var,
   flexShrink: 0,
 });
 
-export const feedLabel = styles.class('activity-feed-label', {
+export const feedLabel = style('activity-feed-label', {
   overflow: 'hidden',
   textOverflow: 'ellipsis',
   whiteSpace: 'nowrap',
-  fontFamily: 'monospace',
-  fontSize: '11px',
+  fontFamily: t.fontFamily.mono.var,
+  fontSize: t.fontSize.xs.var,
 });
 
-export const feedTime = styles.class('activity-feed-time', {
+export const feedTime = style('activity-feed-time', {
   flexShrink: 0,
   whiteSpace: 'nowrap',
-  fontSize: '11px',
-  color: color.dimmed,
+  fontSize: t.fontSize.xs.var,
+  color: t.color.text.secondary.var,
+});
+
+export const feedEmpty = style('activity-feed-empty', {
+  padding: `${t.space.xs.var} 0`,
 });

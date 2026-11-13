@@ -1,74 +1,83 @@
-import { Code, Table, Text } from '../ds';
+import { Code, Table, Text } from '@var-ui/react';
 import type { RunRecord } from '../api/types';
 import { formatCost, formatTokens, relativeTime } from '../format';
 import { costForRun } from '../cost';
 import { StatusBadge } from './StatusBadge';
+import { runsTable } from './RunsTable.styles';
 
 export function RunsTable({ runs }: { runs: RunRecord[] }) {
   if (runs.length === 0) {
     return (
-      <Text c="dimmed" size="sm">
+      <Text tone="secondary" size="sm">
         No runs yet.
       </Text>
     );
   }
   return (
-    <Table.ScrollContainer minWidth={680}>
-      <Table striped highlightOnHover withTableBorder>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Role</Table.Th>
-            <Table.Th>Status</Table.Th>
-            <Table.Th>Model</Table.Th>
-            <Table.Th>Tokens (in/out)</Table.Th>
-            <Table.Th>Cost</Table.Th>
-            <Table.Th>When</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {runs.map((run) => (
-            <Table.Tr key={run.id}>
-              <Table.Td>
-                <Text size="sm" fw={600}>
-                  {run.role}
+    <Table striped hasHover className={runsTable}>
+      <Table.Header>
+        <Table.Row>
+          <Table.Column rowHeader>Role</Table.Column>
+          <Table.Column>Status</Table.Column>
+          <Table.Column>Model</Table.Column>
+          <Table.Column>Tokens (in/out)</Table.Column>
+          <Table.Column>Cost</Table.Column>
+          <Table.Column>When</Table.Column>
+        </Table.Row>
+      </Table.Header>
+      <Table.Body>
+        {runs.map((run) => (
+          <Table.Row key={run.id}>
+            <Table.Cell rowHeader>
+              <Text size="sm" weight="semibold">
+                {run.role}
+              </Text>
+              <Text
+                size="xs"
+                tone="secondary"
+                lineClamp={1}
+                style={{ maxWidth: 260 }}
+              >
+                {run.task}
+              </Text>
+            </Table.Cell>
+            <Table.Cell>
+              <StatusBadge status={run.status} />
+              {run.error && (
+                <Text
+                  size="xs"
+                  tone="danger"
+                  lineClamp={1}
+                  style={{ maxWidth: 220 }}
+                >
+                  {run.error}
                 </Text>
-                <Text size="xs" c="dimmed" lineClamp={1} maw={260}>
-                  {run.task}
+              )}
+            </Table.Cell>
+            <Table.Cell>
+              {run.executor ? (
+                <Code>{run.executor}</Code>
+              ) : run.model ? (
+                <Code>{run.model}</Code>
+              ) : (
+                <Text as="span" size="xs" tone="secondary">
+                  —
                 </Text>
-              </Table.Td>
-              <Table.Td>
-                <StatusBadge status={run.status} />
-                {run.error && (
-                  <Text size="xs" c="red" lineClamp={1} maw={220}>
-                    {run.error}
-                  </Text>
-                )}
-              </Table.Td>
-              <Table.Td>
-                {run.executor ? (
-                  <Code>{run.executor}</Code>
-                ) : run.model ? (
-                  <Code>{run.model}</Code>
-                ) : (
-                  <Text size="xs" c="dimmed">
-                    —
-                  </Text>
-                )}
-              </Table.Td>
-              <Table.Td>
-                <Text size="sm">
-                  {formatTokens(run.usage.inputTokens)} /{' '}
-                  {formatTokens(run.usage.outputTokens)}
-                </Text>
-              </Table.Td>
-              <Table.Td>{formatCost(costForRun(run))}</Table.Td>
-              <Table.Td>
-                <Text size="xs">{relativeTime(run.createdAt)}</Text>
-              </Table.Td>
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
-    </Table.ScrollContainer>
+              )}
+            </Table.Cell>
+            <Table.Cell>
+              {formatTokens(run.usage.inputTokens)} /{' '}
+              {formatTokens(run.usage.outputTokens)}
+            </Table.Cell>
+            <Table.Cell>{formatCost(costForRun(run))}</Table.Cell>
+            <Table.Cell>
+              <Text as="span" size="xs">
+                {relativeTime(run.createdAt)}
+              </Text>
+            </Table.Cell>
+          </Table.Row>
+        ))}
+      </Table.Body>
+    </Table>
   );
 }

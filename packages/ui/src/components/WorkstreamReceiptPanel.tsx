@@ -1,22 +1,32 @@
 import { IconCheck, IconCopy, IconDownload } from '@tabler/icons-react';
-import { useEffect, useState } from 'react';
+import type { Tone } from '@var-ui/core';
+import { type ReactNode, useEffect, useState } from 'react';
 import {
   Alert,
   Badge,
   Button,
+  Card,
   Code,
-  Group,
-  Loader,
-  Paper,
+  HStack,
+  Spinner,
   Stack,
   Text,
-  notifications,
-} from '../ds';
+  toast,
+} from '@var-ui/react';
 import { useWorkstreamReceipt } from '../api/hooks';
 import type { ReceiptValidation, Workstream } from '../api/types';
 import { MarkdownContent } from './MarkdownContent';
 import { StatusBadge } from './StatusBadge';
+import { eyebrow } from './Workstream.styles';
 import { formatCost, formatDuration, formatTime } from '../format';
+
+function SectionLabel({ children }: { children: ReactNode }) {
+  return (
+    <Text size="xs" tone="secondary" weight="semibold" className={eyebrow}>
+      {children}
+    </Text>
+  );
+}
 
 function downloadBlob(content: string, filename: string, type: string) {
   const blob = new Blob([content], { type });
@@ -32,24 +42,21 @@ function receiptFreshness(
   workstream: Workstream,
   sourceUpdatedAt: string,
   traceSequence?: number,
-): { label: string; color: 'green' | 'yellow' | 'gray' } {
+): { label: string; tone: Tone } {
   if (sourceUpdatedAt === workstream.updatedAt) {
-    return { label: 'Current', color: 'green' };
+    return { label: 'Current', tone: 'success' };
   }
   if (traceSequence !== undefined) {
-    return { label: 'Refreshing', color: 'yellow' };
+    return { label: 'Refreshing', tone: 'warning' };
   }
-  return { label: 'Stale', color: 'yellow' };
+  return { label: 'Stale', tone: 'warning' };
 }
 
-const VALIDATION_COLORS: Record<
-  ReceiptValidation['status'],
-  'green' | 'red' | 'gray' | 'yellow'
-> = {
-  passed: 'green',
-  failed: 'red',
-  skipped: 'gray',
-  unknown: 'yellow',
+const VALIDATION_TONES: Record<ReceiptValidation['status'], Tone> = {
+  passed: 'success',
+  failed: 'danger',
+  skipped: 'neutral',
+  unknown: 'warning',
 };
 
 export function WorkstreamReceiptPanel({
@@ -66,10 +73,10 @@ export function WorkstreamReceiptPanel({
     return () => window.clearTimeout(timer);
   }, [copied]);
 
-  if (isLoading) return <Loader size="sm" />;
+  if (isLoading) return <Spinner size="sm" label="Loading receipt" />;
   if (error || !data) {
     return (
-      <Alert color="red" title="Could not load receipt">
+      <Alert tone="danger" title="Could not load receipt">
         {error instanceof Error ? error.message : 'Receipt unavailable'}
       </Alert>
     );
@@ -86,53 +93,49 @@ export function WorkstreamReceiptPanel({
     try {
       await navigator.clipboard.writeText(markdown);
       setCopied(true);
-      notifications.show({
+      toast({
         title: 'Copied',
-        message: 'Receipt Markdown copied to clipboard.',
-        color: 'green',
+        description: 'Receipt Markdown copied to clipboard.',
+        tone: 'success',
       });
     } catch {
-      notifications.show({
+      toast({
         title: 'Copy failed',
-        message: 'Could not copy receipt to the clipboard.',
-        color: 'red',
+        description: 'Could not copy receipt to the clipboard.',
+        tone: 'danger',
       });
     }
   }
 
   return (
     <Stack gap="md">
-      <Group justify="space-between" align="flex-start">
-        <Stack gap={4}>
-          <Group gap="xs">
-            <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
-              Delivery receipt
-            </Text>
-            <Badge color={freshness.color} size="sm">
-              {freshness.label}
-            </Badge>
-          </Group>
-          <Text size="xs" c="dimmed">
+      <HStack justify="between" align="start" wrap>
+        <Stack gap="xs">
+          <HStack gap="xs">
+            <SectionLabel>Delivery receipt</SectionLabel>
+            <Badge tone={freshness.tone}>{freshness.label}</Badge>
+          </HStack>
+          <Text size="xs" tone="secondary">
             Updated {formatTime(receipt.updatedAt)}
             {receipt.provenance.generatedFromTraceSequence !== undefined
               ? ` · trace seq ${receipt.provenance.generatedFromTraceSequence}`
               : ''}
           </Text>
         </Stack>
-        <Group gap="xs">
+        <HStack gap="xs">
           <Button
-            variant="outline"
+            appearance="outline"
             size="sm"
-            onPress={() => void copyMarkdown()}
+            onClick={() => void copyMarkdown()}
           >
             {copied ? <IconCheck size={14} /> : <IconCopy size={14} />}
             {copied ? 'Copied' : 'Copy Markdown'}
           </Button>
           {markdown && (
             <Button
-              variant="outline"
+              appearance="outline"
               size="sm"
-              onPress={() =>
+              onClick={() =>
                 downloadBlob(
                   markdown,
                   `receipt-${workstream.id}.md`,
@@ -145,9 +148,9 @@ export function WorkstreamReceiptPanel({
             </Button>
           )}
           <Button
-            variant="outline"
+            appearance="outline"
             size="sm"
-            onPress={() =>
+            onClick={() =>
               downloadBlob(
                 JSON.stringify(receipt, null, 2),
                 `receipt-${workstream.id}.json`,
@@ -158,158 +161,156 @@ export function WorkstreamReceiptPanel({
             <IconDownload size={14} />
             JSON
           </Button>
-        </Group>
-      </Group>
+        </HStack>
+      </HStack>
 
-      <Alert color="gray" title="Facts vs summary">
+      <Alert tone="neutral" title="Facts vs summary">
         Structured fields such as status, steps, usage, and repository changes
         are derived from stored records. Summary text may come from workstream
         notes or agent output and is redacted before display.
       </Alert>
 
       {receipt.nextAction && (
-        <Alert color="blue" title="Next action">
+        <Alert tone="info" title="Next action">
           {receipt.nextAction}
         </Alert>
       )}
 
       {receipt.steps.length > 0 && (
-        <Paper p="md" withBorder>
-          <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb="sm">
-            Steps
-          </Text>
-          <Stack gap="xs">
-            {receipt.steps.map((step) => (
-              <Group key={step.id} justify="space-between" align="flex-start">
-                <Stack gap={2} style={{ flex: 1 }}>
-                  <Group gap="xs">
-                    <Text size="sm" fw={600}>
-                      {step.order}. {step.label}
-                    </Text>
-                    <Badge color="gray" size="sm" variant="light">
-                      {step.role}
-                    </Badge>
-                    <StatusBadge status={step.status} />
-                  </Group>
-                  {step.summary && (
-                    <Text size="sm" c="dimmed">
-                      {step.summary}
+        <Card>
+          <Stack gap="sm">
+            <SectionLabel>Steps</SectionLabel>
+            <Stack gap="xs">
+              {receipt.steps.map((step) => (
+                <HStack key={step.id} justify="between" align="start">
+                  <Stack gap="none" style={{ flex: 1 }}>
+                    <HStack gap="xs">
+                      <Text as="span" size="sm" weight="semibold">
+                        {step.order}. {step.label}
+                      </Text>
+                      <Badge>{step.role}</Badge>
+                      <StatusBadge status={step.status} />
+                    </HStack>
+                    {step.summary && (
+                      <Text size="sm" tone="secondary">
+                        {step.summary}
+                      </Text>
+                    )}
+                  </Stack>
+                  {step.finishedAt && (
+                    <Text size="xs" tone="secondary">
+                      {formatTime(step.finishedAt)}
                     </Text>
                   )}
-                </Stack>
-                {step.finishedAt && (
-                  <Text size="xs" c="dimmed">
-                    {formatTime(step.finishedAt)}
-                  </Text>
-                )}
-              </Group>
-            ))}
+                </HStack>
+              ))}
+            </Stack>
           </Stack>
-        </Paper>
+        </Card>
       )}
 
       {(receipt.changes.files.length > 0 ||
         receipt.changes.commits.length > 0 ||
         receipt.changes.pullRequestUrl) && (
-        <Paper p="md" withBorder>
-          <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb="sm">
-            Repository changes
-          </Text>
-          <Stack gap="xs">
-            {receipt.changes.branch && (
-              <Text size="sm">
-                branch: <Code>{receipt.changes.branch}</Code>
-              </Text>
-            )}
-            {receipt.changes.pullRequestUrl && (
-              <Text size="sm">
-                PR: <Code>{receipt.changes.pullRequestUrl}</Code>
-              </Text>
-            )}
-            {receipt.changes.files.length > 0 && (
-              <Stack gap={2}>
-                <Text size="sm" fw={600}>
-                  Files ({receipt.changes.files.length})
+        <Card>
+          <Stack gap="sm">
+            <SectionLabel>Repository changes</SectionLabel>
+            <Stack gap="xs">
+              {receipt.changes.branch && (
+                <Text size="sm">
+                  branch: <Code>{receipt.changes.branch}</Code>
                 </Text>
-                {receipt.changes.files.slice(0, 12).map((file) => (
-                  <Text key={file} size="sm" c="dimmed">
-                    {file}
+              )}
+              {receipt.changes.pullRequestUrl && (
+                <Text size="sm">
+                  PR: <Code>{receipt.changes.pullRequestUrl}</Code>
+                </Text>
+              )}
+              {receipt.changes.files.length > 0 && (
+                <Stack gap="none">
+                  <Text size="sm" weight="semibold">
+                    Files ({receipt.changes.files.length})
                   </Text>
-                ))}
-                {receipt.changes.files.length > 12 && (
-                  <Text size="xs" c="dimmed">
-                    +{receipt.changes.files.length - 12} more
-                  </Text>
-                )}
-              </Stack>
-            )}
-          </Stack>
-        </Paper>
-      )}
-
-      {receipt.validation.length > 0 && (
-        <Paper p="md" withBorder>
-          <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb="sm">
-            Validation
-          </Text>
-          <Stack gap="xs">
-            {receipt.validation.map((item) => (
-              <Group
-                key={item.label}
-                justify="space-between"
-                align="flex-start"
-              >
-                <Stack gap={2}>
-                  <Group gap="xs">
-                    <Text size="sm" fw={600}>
-                      {item.label}
+                  {receipt.changes.files.slice(0, 12).map((file) => (
+                    <Text key={file} size="sm" tone="secondary">
+                      {file}
                     </Text>
-                    <Badge color={VALIDATION_COLORS[item.status]} size="sm">
-                      {item.status}
-                    </Badge>
-                  </Group>
-                  {item.summary && (
-                    <Text size="sm" c="dimmed">
-                      {item.summary}
+                  ))}
+                  {receipt.changes.files.length > 12 && (
+                    <Text size="xs" tone="secondary">
+                      +{receipt.changes.files.length - 12} more
                     </Text>
                   )}
                 </Stack>
-                {item.command && (
-                  <Code style={{ maxWidth: 280 }}>{item.command}</Code>
-                )}
-              </Group>
-            ))}
+              )}
+            </Stack>
           </Stack>
-        </Paper>
+        </Card>
       )}
 
-      <Paper p="md" withBorder>
-        <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb="sm">
-          Usage
-        </Text>
-        <Group gap="lg">
-          <Text size="sm">{receipt.usage.runCount} runs</Text>
-          <Text size="sm">
-            {receipt.usage.inputTokens.toLocaleString()} in /{' '}
-            {receipt.usage.outputTokens.toLocaleString()} out tok
-          </Text>
-          {receipt.usage.estimatedCostDollars !== undefined && (
-            <Text size="sm">
-              {formatCost(receipt.usage.estimatedCostDollars)}
-            </Text>
-          )}
-          {receipt.usage.durationMs !== undefined && (
-            <Text size="sm">{formatDuration(receipt.usage.durationMs)}</Text>
-          )}
-        </Group>
-      </Paper>
+      {receipt.validation.length > 0 && (
+        <Card>
+          <Stack gap="sm">
+            <SectionLabel>Validation</SectionLabel>
+            <Stack gap="xs">
+              {receipt.validation.map((item) => (
+                <HStack key={item.label} justify="between" align="start">
+                  <Stack gap="none">
+                    <HStack gap="xs">
+                      <Text as="span" size="sm" weight="semibold">
+                        {item.label}
+                      </Text>
+                      <Badge tone={VALIDATION_TONES[item.status]}>
+                        {item.status}
+                      </Badge>
+                    </HStack>
+                    {item.summary && (
+                      <Text size="sm" tone="secondary">
+                        {item.summary}
+                      </Text>
+                    )}
+                  </Stack>
+                  {item.command && (
+                    <Code style={{ maxWidth: 280 }}>{item.command}</Code>
+                  )}
+                </HStack>
+              ))}
+            </Stack>
+          </Stack>
+        </Card>
+      )}
 
-      <Paper p="md" withBorder>
-        <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb="sm">
-          Markdown receipt
-        </Text>
-        <MarkdownContent content={markdown} />
-      </Paper>
+      <Card>
+        <Stack gap="sm">
+          <SectionLabel>Usage</SectionLabel>
+          <HStack gap="lg" wrap>
+            <Text as="span" size="sm">
+              {receipt.usage.runCount} runs
+            </Text>
+            <Text as="span" size="sm">
+              {receipt.usage.inputTokens.toLocaleString()} in /{' '}
+              {receipt.usage.outputTokens.toLocaleString()} out tok
+            </Text>
+            {receipt.usage.estimatedCostDollars !== undefined && (
+              <Text as="span" size="sm">
+                {formatCost(receipt.usage.estimatedCostDollars)}
+              </Text>
+            )}
+            {receipt.usage.durationMs !== undefined && (
+              <Text as="span" size="sm">
+                {formatDuration(receipt.usage.durationMs)}
+              </Text>
+            )}
+          </HStack>
+        </Stack>
+      </Card>
+
+      <Card>
+        <Stack gap="sm">
+          <SectionLabel>Markdown receipt</SectionLabel>
+          <MarkdownContent content={markdown} />
+        </Stack>
+      </Card>
     </Stack>
   );
 }
