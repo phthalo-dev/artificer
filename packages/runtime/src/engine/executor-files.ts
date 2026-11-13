@@ -198,7 +198,8 @@ export function reapAgentGroups(): void {
   agentGroups.clear();
 }
 
-function trackAgentProcess(child: ChildProcess): void {
+/** Register a detached agent so its group is reaped if the runtime exits. */
+export function trackAgentProcess(child: ChildProcess): void {
   const pid = child.pid;
   if (pid === undefined) return;
   installAgentReaper();

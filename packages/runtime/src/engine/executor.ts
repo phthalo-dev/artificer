@@ -1,4 +1,6 @@
-import type { RunRecord } from '../storage/types.js';
+import type { RuntimeEvent } from '../context.js';
+import type { RunRecord, ToolInvocation } from '../storage/types.js';
+import type { ToolPolicyFile } from '../tools/tool-policy.js';
 import type { WorkerStatus } from './worker-report.js';
 
 export interface ExecutorReview {
@@ -30,5 +32,11 @@ export interface WorkerExecutor {
     run: RunRecord;
     sessionId?: string;
     signal?: AbortSignal;
+    /** Tool policy for executors that gate the agent's own permission requests. */
+    policy?: ToolPolicyFile;
+    /** Called once per agent tool call that reaches a final state. */
+    onToolCall?: (invocation: ToolInvocation) => void;
+    /** Emits runtime events (for example approvals) from inside the executor. */
+    emit?: (event: RuntimeEvent) => void;
   }): Promise<ExecutorResult>;
 }
