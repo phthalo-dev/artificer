@@ -2,9 +2,11 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import {
   useCreateWorkstream,
+  useExecutors,
   useRepos,
   type CreateWorkstreamInput,
 } from '../api/hooks';
+import type { ExecutorOption } from '../api/types';
 import {
   Button,
   Dialog,
@@ -15,7 +17,14 @@ import {
   TextField,
 } from '@var-ui/react';
 
-type AgentChoice = 'instance' | 'llm' | 'claude-code' | 'cursor-agent';
+type AgentChoice = string;
+
+const FALLBACK_EXECUTORS: ExecutorOption[] = [
+  { id: 'instance', label: 'Instance default', executor: null },
+  { id: 'llm', label: 'Built-in loop', executor: 'llm' },
+  { id: 'claude-code', label: 'Claude Code', executor: 'claude-code' },
+  { id: 'cursor-agent', label: 'Cursor', executor: 'cursor-agent' },
+];
 
 export function NewWorkstreamModal({
   opened,
@@ -26,6 +35,7 @@ export function NewWorkstreamModal({
 }) {
   const navigate = useNavigate();
   const repos = useRepos();
+  const executors = useExecutors();
   const create = useCreateWorkstream();
   const [title, setTitle] = useState('');
   const [repoId, setRepoId] = useState('');
@@ -38,6 +48,20 @@ export function NewWorkstreamModal({
       value: repo.id,
       label: `${repo.id} — ${repo.url}`,
     })) ?? [];
+  const executorEntries =
+    executors.error || !executors.data?.length
+      ? FALLBACK_EXECUTORS
+      : executors.data;
+  const agentOptions = executorEntries.map((entry) => ({
+    value: entry.id,
+    label:
+      entry.permissionEnforcement === 'acp-requests'
+        ? `${entry.label} · policy-gated`
+        : entry.label,
+  }));
+  const selectedExecutor = executorEntries.find(
+    (e) => e.id === agent,
+  )?.executor;
   const disabled =
     !title.trim() ||
     !goal.trim() ||
@@ -51,7 +75,9 @@ export function NewWorkstreamModal({
       title: title.trim(),
       goal: goal.trim(),
       repoId,
-      ...(agent === 'instance' ? {} : { executor: agent }),
+      ...(agent === 'instance' || !selectedExecutor
+        ? {}
+        : { executor: selectedExecutor }),
       ...(message.trim() ? { message: message.trim() } : {}),
     };
     const result = await create.mutateAsync(input);
@@ -100,16 +126,9 @@ export function NewWorkstreamModal({
           )}
           <Select
             label="Agent"
-            options={[
-              { value: 'instance', label: 'Instance default' },
-              { value: 'llm', label: 'Built-in loop' },
-              { value: 'claude-code', label: 'Claude Code' },
-              { value: 'cursor-agent', label: 'Cursor' },
-            ]}
+            options={agentOptions}
             value={agent}
-            onValueChange={(value) =>
-              setAgent((value ?? 'instance') as AgentChoice)
-            }
+            onValueChange={(value) => setAgent(value ?? 'instance')}
           />
           <TextAreaField
             label="Goal"

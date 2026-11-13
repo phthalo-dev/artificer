@@ -7,6 +7,7 @@ import type {
   BenchRunDetail,
   BenchSuiteCatalogEntry,
   ExecutorConfig,
+  ExecutorOption,
   Memory,
   Message,
   MessageCost,
@@ -71,6 +72,14 @@ export function useRepos() {
     queryKey: ['repos'],
     queryFn: () => api.get<{ repos: RepoConfig[] }>('/repos'),
     select: (d) => d.repos,
+  });
+}
+
+export function useExecutors() {
+  return useQuery({
+    queryKey: ['executors'],
+    queryFn: () => api.get<{ executors: ExecutorOption[] }>('/executors'),
+    select: (d) => d.executors,
   });
 }
 

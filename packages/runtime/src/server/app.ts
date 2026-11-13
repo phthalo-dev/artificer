@@ -19,6 +19,7 @@ import {
 import { runGithubWatchOnce as defaultRunGithubWatchOnce } from '../engine/github-watch-runner.js';
 import type { GithubWatchState } from '../engine/github-watch.js';
 import { loadRepos } from '../engine/repos.js';
+import { ACP_PRESETS } from '../engine/acp-presets.js';
 import { type LlmSdkPackage, MODEL_CATALOG } from '../llm/catalog.js';
 import { listPresets } from '../engine/presets.js';
 import { primaryAccountIdFor } from '../engine/quota-config.js';
@@ -36,7 +37,7 @@ import { bearerAuth, sseAuth } from './auth.js';
 import { serveUI } from './static.js';
 import { resolveUiDistDir } from './ui-dist.js';
 import { mountChannels } from '../channels/mount.js';
-import type { ArtificerChannel } from '../api/types.js';
+import type { ArtificerChannel, ExecutorConfig } from '../api/types.js';
 import type { IdentityStore } from '../storage/identity-store.js';
 import {
   loadEffectivePolicy,
@@ -576,6 +577,30 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     const loaded = loadRepos(engine.config.repos);
     if (!loaded.ok) return c.json({ error: loaded.error }, 400);
     return c.json({ repos: loaded.repos });
+  });
+
+  api.get('/executors', (c) => {
+    const executors: Array<{
+      id: string;
+      label: string;
+      executor: ExecutorConfig | null;
+      permissionEnforcement?: 'acp-requests' | 'none';
+    }> = [
+      { id: 'instance', label: 'Instance default', executor: null },
+      { id: 'llm', label: 'Built-in loop', executor: 'llm' },
+      { id: 'claude-code', label: 'Claude Code', executor: 'claude-code' },
+      { id: 'cursor-agent', label: 'Cursor', executor: 'cursor-agent' },
+    ];
+    for (const preset of Object.values(ACP_PRESETS)) {
+      if (!preset.certified) continue;
+      executors.push({
+        id: `acp:${preset.id}`,
+        label: `${preset.label} (ACP)`,
+        executor: { type: 'acp', agent: preset.id },
+        permissionEnforcement: preset.permissionEnforcement,
+      });
+    }
+    return c.json({ executors });
   });
 
   api.post('/workstreams', async (c) => {

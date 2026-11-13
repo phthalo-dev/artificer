@@ -18,3 +18,14 @@ test('agentLabel names the shortcuts', () => {
     'qwen',
   );
 });
+
+test('agentLabel names ACP presets and custom commands', () => {
+  assert.equal(
+    agentLabel({ type: 'acp', agent: 'opencode' }),
+    'OpenCode (ACP)',
+  );
+  assert.equal(
+    agentLabel({ type: 'acp', command: '/x/gemini', args: [] }),
+    'gemini (ACP)',
+  );
+});

@@ -854,3 +854,23 @@ test('conversation chat stays out of the inbox and channel fallback', async () =
     restore();
   }
 });
+
+test('GET /api/executors lists built-ins then certified presets', async () => {
+  const { app } = await buildApp();
+  const res = await app.request('/api/executors');
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as {
+    executors: Array<{
+      id: string;
+      executor: unknown;
+      permissionEnforcement?: string;
+    }>;
+  };
+  assert.deepEqual(
+    body.executors.map((e) => e.id),
+    ['instance', 'llm', 'claude-code', 'cursor-agent', 'acp:opencode'],
+  );
+  const opencode = body.executors[4];
+  assert.deepEqual(opencode.executor, { type: 'acp', agent: 'opencode' });
+  assert.equal(opencode.permissionEnforcement, 'acp-requests');
+});
