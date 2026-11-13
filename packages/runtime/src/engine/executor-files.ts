@@ -4,6 +4,8 @@ import { createHash } from 'node:crypto';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
+import type { ExecutorResult, ExecutorReview } from './executor.js';
+import type { WorkerStatus } from './worker-report.js';
 
 /**
  * Directory for executor-generated state (status file, MCP config, published
@@ -258,4 +260,41 @@ export function abortAgent(
     if (escalate) clearTimeout(escalate);
     killProcessGroup(child, 'SIGKILL');
   };
+}
+
+/**
+ * Parse the status file written by the MCP status server (`report_status` or
+ * `submit_review`). Returns `{}` when the file is missing or malformed.
+ */
+export function readExecutorStatus(
+  statusFile: string,
+): Pick<
+  ExecutorResult,
+  'workerStatus' | 'workerSummary' | 'workerFollowUps' | 'review'
+> {
+  try {
+    if (!fs.existsSync(statusFile)) return {};
+    const raw = JSON.parse(fs.readFileSync(statusFile, 'utf-8')) as Record<
+      string,
+      unknown
+    >;
+    if (raw.tool === 'submit_review') {
+      return {
+        review: {
+          target: String(raw.target ?? 'work'),
+          notes: String(raw.notes ?? ''),
+          approved: Boolean(raw.approved),
+          stage: (raw.stage as 'plan' | 'work' | undefined) ?? 'work',
+          severity: raw.severity as ExecutorReview['severity'] | undefined,
+        },
+      };
+    }
+    return {
+      workerStatus: raw.status as WorkerStatus | undefined,
+      workerSummary: raw.summary as string | undefined,
+      workerFollowUps: raw.followUps as string | undefined,
+    };
+  } catch {
+    return {};
+  }
 }

@@ -3,17 +3,13 @@ import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import type { RunRecord } from '../storage/types.js';
-import type {
-  ExecutorReview,
-  ExecutorResult,
-  WorkerExecutor,
-} from './executor.js';
+import type { ExecutorResult, WorkerExecutor } from './executor.js';
 import {
   abortAgent,
   executorStateDir,
   killProcessGroup,
+  readExecutorStatus,
 } from './executor-files.js';
-import type { WorkerStatus } from './worker-report.js';
 
 const TIMEOUT_MS = 10 * 60 * 1000;
 const MCP_SERVER = path.join(
@@ -109,35 +105,6 @@ export class ClaudeCodeExecutor implements WorkerExecutor {
           }
         }
 
-        let workerStatus: WorkerStatus | undefined;
-        let workerSummary: string | undefined;
-        let workerFollowUps: string | undefined;
-        let review: ExecutorReview | undefined;
-        try {
-          if (fs.existsSync(statusFile)) {
-            const raw = JSON.parse(
-              fs.readFileSync(statusFile, 'utf-8'),
-            ) as Record<string, unknown>;
-            if (raw.tool === 'submit_review') {
-              review = {
-                target: String(raw.target ?? 'work'),
-                notes: String(raw.notes ?? ''),
-                approved: Boolean(raw.approved),
-                stage: (raw.stage as 'plan' | 'work' | undefined) ?? 'work',
-                severity: raw.severity as
-                  | ExecutorReview['severity']
-                  | undefined,
-              };
-            } else {
-              workerStatus = raw.status as WorkerStatus | undefined;
-              workerSummary = raw.summary as string | undefined;
-              workerFollowUps = raw.followUps as string | undefined;
-            }
-          }
-        } catch {
-          /* ignore malformed status file */
-        }
-
         if (code !== 0) {
           const errText = Buffer.concat(stderr).toString('utf-8').trim();
           reject(
@@ -150,10 +117,7 @@ export class ClaudeCodeExecutor implements WorkerExecutor {
             text: text || '(no output)',
             sessionId: resultSessionId,
             usage: { inputTokens: 0, outputTokens: 0 },
-            workerStatus,
-            workerSummary,
-            workerFollowUps,
-            review,
+            ...readExecutorStatus(statusFile),
           });
         }
       });

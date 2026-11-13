@@ -11,6 +11,7 @@ import { CursorAgentExecutor } from './cursor-executor.js';
 import {
   abortAgent,
   executorStateDir,
+  readExecutorStatus,
   reapAgentGroups,
   writeProjectFile,
 } from './executor-files.js';
@@ -310,4 +311,49 @@ test('a cursor turn sees its MCP config and leaves the repo clean', async () => 
   assert.equal(result.text, 'found');
   assert.equal((await git(['-C', dir, 'status', '--porcelain'])).trim(), '');
   await assert.rejects(fs.access(path.join(dir, '.cursor')));
+});
+
+async function statusFixture(content?: string): Promise<string> {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'status-'));
+  const file = path.join(dir, 'status.json');
+  if (content !== undefined) await fs.writeFile(file, content);
+  return file;
+}
+
+test('readExecutorStatus returns {} for a missing file', async () => {
+  assert.deepEqual(readExecutorStatus(await statusFixture()), {});
+});
+
+test('readExecutorStatus returns {} for malformed JSON', async () => {
+  assert.deepEqual(readExecutorStatus(await statusFixture('{nope')), {});
+});
+
+test('readExecutorStatus parses report_status', async () => {
+  const file = await statusFixture(
+    JSON.stringify({ status: 'done', summary: 's', followUps: 'f' }),
+  );
+  assert.deepEqual(readExecutorStatus(file), {
+    workerStatus: 'done',
+    workerSummary: 's',
+    workerFollowUps: 'f',
+  });
+});
+
+test('readExecutorStatus parses submit_review', async () => {
+  const file = await statusFixture(
+    JSON.stringify({
+      tool: 'submit_review',
+      target: 'work',
+      notes: 'n',
+      approved: true,
+      severity: 'minor',
+    }),
+  );
+  assert.deepEqual(readExecutorStatus(file).review, {
+    target: 'work',
+    notes: 'n',
+    approved: true,
+    stage: 'work',
+    severity: 'minor',
+  });
 });
