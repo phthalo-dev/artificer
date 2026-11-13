@@ -35,6 +35,8 @@ const EXIT_GRACE_MS = 2_000;
 const TERM_GRACE_MS = 1_000;
 /** How long to wait for the exit event after the connection drops. */
 const EXIT_SETTLE_MS = 1_000;
+/** How long to wait for stderr to drain after the agent exits. */
+const STDERR_DRAIN_MS = 500;
 const CLIENT_CAPABILITIES = {
   fs: { readTextFile: false, writeTextFile: false },
   terminal: false,
@@ -168,7 +170,26 @@ export class AcpExecutor implements WorkerExecutor {
         ),
       );
     });
-    child.on('exit', (code, sig) => {
+    // 'exit' can fire before stderr is drained. Wait for stderr to end, but
+    // only briefly: a grandchild that inherited it can hold it open forever,
+    // which is also why this does not use 'close'.
+    let stderrEnded = false;
+    child.stderr.once('end', () => {
+      stderrEnded = true;
+    });
+    const stderrDrained = (): Promise<void> =>
+      stderrEnded
+        ? Promise.resolve()
+        : new Promise((resolve) => {
+            const timer = setTimeout(resolve, STDERR_DRAIN_MS);
+            child.stderr.once('end', () => {
+              clearTimeout(timer);
+              resolve();
+            });
+          });
+    child.on('exit', async (code, sig) => {
+      if (promptDone) return;
+      await stderrDrained();
       if (promptDone) return;
       const how = code !== null ? `code ${code}` : `signal ${sig}`;
       failTransport(new AcpRunError(withStderr(`${name} exited with ${how}`)));
@@ -280,8 +301,18 @@ export class AcpExecutor implements WorkerExecutor {
         // A dropped connection usually means the agent died. Let the exit
         // event, which carries the code and stderr, win that race.
         if (!(err instanceof AcpRunError)) {
-          await waitForExit(child, EXIT_SETTLE_MS);
-          await Promise.race([transportFailure, Promise.resolve()]);
+          let settle: ReturnType<typeof setTimeout> | undefined;
+          try {
+            // Rejects with the exit error if it arrives in time.
+            await Promise.race([
+              transportFailure,
+              new Promise((resolve) => {
+                settle = setTimeout(resolve, EXIT_SETTLE_MS + STDERR_DRAIN_MS);
+              }),
+            ]);
+          } finally {
+            clearTimeout(settle);
+          }
         }
         throw err;
       }
