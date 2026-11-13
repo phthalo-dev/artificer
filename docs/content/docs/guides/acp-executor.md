@@ -1,0 +1,74 @@
+---
+title: Using the ACP Executor
+description: Run OpenCode, or any Agent Client Protocol agent, as Artificer's worker executor with policy-gated shell commands and edits.
+---
+
+# Using the ACP Executor
+
+The [Agent Client Protocol](https://agentclientprotocol.com) (ACP) is a JSON-RPC protocol over stdio that lets a client drive a coding agent. Artificer's `acp` executor spawns an ACP agent in the workspace, sends it the role prompt, and answers the agent's permission requests using Artificer's tool policy. Status is reported back through the same `report_status` MCP tool the other executors use.
+
+## The `opencode` preset
+
+OpenCode is the one certified preset (verified against OpenCode **2.0.32**).
+
+```json
+{
+  "executor": {
+    "type": "acp",
+    "agent": "opencode",
+    "model": "opencode/claude-sonnet-5-5",
+    "env": { "OPENCODE_API_KEY": "..." }
+  }
+}
+```
+
+- `agent` selects the preset (it launches `opencode acp`). It is mutually exclusive with `command`.
+- `model` is optional. Artificer selects it through ACP's `session/set_config_option`. If the agent has no model option, or doesn't offer the model you named, the run fails with the available values **before** the prompt is sent, so no tokens are spent on the wrong model.
+- `env` adds environment variables for the agent process.
+- Sessions resume across turns (`session/resume`), so conversations keep context.
+- The quota account is `acp:opencode`, and the agent's reported token usage is recorded.
+
+## How permission enforcement works
+
+By default OpenCode does not ask before running commands: it ran `rm -rf build` unasked in testing. The preset therefore forces this inline config through `OPENCODE_CONFIG_CONTENT`:
+
+```json
+{"permission":{"bash":"ask","edit":"ask","webfetch":"ask","external_directory":"ask"}}
+```
+
+This overrides a repo's own `opencode.json`. If you set your own `OPENCODE_CONFIG_CONTENT`, it is merged, but the preset's `permission` block always wins, so you cannot loosen it there.
+
+OpenCode then sends a `session/request_permission` for every shell command, edit, web fetch and outside-workspace access. Artificer maps each to its tool policy (the same rules as the other executors) and answers allow or deny. Each decision is recorded as an `acp:permission` tool call.
+
+**Not covered:**
+
+- MCP tool calls (including `report_status`) are not permission-gated.
+- File reads are not gated.
+
+## A denial ends OpenCode's turn
+
+When Artificer rejects a request, OpenCode ends its turn with a `cancelled` stop reason even though Artificer never cancelled. Artificer treats this as a stop, not a user cancellation: the run completes with the text suffix `[agent stopped: cancelled]`. Cancels and timeouts that Artificer initiates still fail the run.
+
+## Signing in on a headless host
+
+OpenCode needs credentials in the environment where Artificer runs. Either run `opencode auth login` once as the same user, or supply an API key through `executor.env` or the process environment.
+
+## Custom ACP commands
+
+Any other ACP agent can be run with `command` and `args`:
+
+```json
+{ "executor": { "type": "acp", "command": "my-agent", "args": ["--acp"] } }
+```
+
+Custom commands are **not policy-gated** unless the agent itself sends `session/request_permission`; Artificer cannot force it to ask. The quota account is `acp:<basename(command)>`.
+
+## Live smoke test
+
+`packages/runtime/src/engine/acp-opencode.live.test.ts` runs the preset against a real OpenCode and checks that `rm -rf build` is denied while status is still reported. It is skipped unless you opt in (it spends a small model call):
+
+```bash
+ARTIFICER_ACP_LIVE=opencode pnpm --filter @artificer-ai/runtime test
+```
+
+See the [config reference](/docs/reference/config) for every field.

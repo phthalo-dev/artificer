@@ -142,8 +142,10 @@ Runs any agent that speaks the [Agent Client Protocol](https://agentclientprotoc
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `executor.type` | `"acp"` | Yes | — | Must be `"acp"` to enable the ACP executor |
-| `executor.command` | string | Yes | — | Agent binary to spawn. Quota accounts are named `acp:<basename(command)>` |
-| `executor.args` | string[] | Yes | — | Arguments passed to the command (put the agent's ACP flag and any model selection here) |
+| `executor.agent` | `"opencode"` | One of `agent` / `command` | — | Certified preset. Mutually exclusive with `command`. Quota account is `acp:opencode` |
+| `executor.command` | string | One of `agent` / `command` | — | Custom agent binary to spawn. Quota accounts are named `acp:<basename(command)>` |
+| `executor.args` | string[] | With `command` | — | Arguments passed to the command (put the agent's ACP flag here). Optional with `agent` (the preset supplies it) |
+| `executor.model` | string | No | agent default | Model id to select via the agent's `model` config option. Run fails before the prompt if the agent doesn't offer it |
 | `executor.env` | object (string values) | No | — | Extra environment variables for the agent process |
 | `executor.mode` | string | No | — | Session mode id to select after the session starts |
 | `executor.resumes` | boolean | No | `false` | Set `true` if the agent supports resuming sessions (`session/resume` or `session/load`) so conversations continue the same agent session |
@@ -159,7 +161,19 @@ Runs any agent that speaks the [Agent Client Protocol](https://agentclientprotoc
 }
 ```
 
-Phase 1: custom command only. Permission enforcement depends on the agent sending `session/request_permission`; agents that don't are not policy-gated.
+With `agent: "opencode"`:
+
+```json
+{
+  "executor": {
+    "type": "acp",
+    "agent": "opencode",
+    "model": "opencode/claude-sonnet-5-5"
+  }
+}
+```
+
+Custom `command` executors: permission enforcement depends on the agent sending `session/request_permission`; agents that don't are not policy-gated. See the [ACP executor guide](/docs/guides/acp-executor).
 
 ### `.artificer/workspace.json` (target repo) and `workspaceServices` override
 
