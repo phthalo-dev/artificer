@@ -285,6 +285,9 @@ importers:
 
   packages/runtime:
     dependencies:
+      '@agentclientprotocol/sdk':
+        specifier: 2.6.0
+        version: 2.6.0(zod@3.25.76)
       '@ai-sdk/anthropic':
         specifier: 3.0.81
         version: 3.0.81(zod@3.25.76)
@@ -400,6 +403,15 @@ packages:
     peerDependencies:
       react: ^16.8.0 || ^17.0.0-rc.1 || ^18.0.0 || ^19.0.0-rc.1
       react-dom: ^16.8.0 || ^17.0.0-rc.1 || ^18.0.0 || ^19.0.0-rc.1
+
+  '@agentclientprotocol/sdk@2.6.0':
+    resolution: {integrity: sha512-3FtL6MkAV5F9qxg0FQV8wmBszIm2xuVPoDWOILIFSDQ+Vq3Twdh7Cw6Hk2GOPUbevgrTUpUAqZXQy7Geaj79mw==}
+    peerDependencies:
+      '@modelcontextprotocol/server': ^2.4.0
+      zod: ^3.25.76 || ^4.0.0
+    peerDependenciesMeta:
+      '@modelcontextprotocol/server':
+        optional: true
 
   '@ai-sdk/anthropic@3.0.81':
     resolution: {integrity: sha512-B1JDd9Ugq9R5AgIaW3674lhGCMMYJcPUxnrZh8fzbGojgg4QvHFRv6eZahGQAUsmGHbcf74G9bdSBDLWQGY2GA==}
@@ -3863,6 +3875,10 @@ snapshots:
       react-stately: 3.50.0(react@18.3.1)
       react-transition-group: 4.4.5(react-dom@18.3.1(react@18.3.1))(react@18.3.1)
       use-sync-external-store: 1.7.0(react@18.3.1)
+
+  '@agentclientprotocol/sdk@2.6.0(zod@3.25.76)':
+    dependencies:
+      zod: 3.25.76
 
   '@ai-sdk/anthropic@3.0.81(zod@3.25.76)':
     dependencies:
