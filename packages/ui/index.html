@@ -3,17 +3,19 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <meta name="theme-color" content="#ffffff" />
     <title>Artificer Runtime</title>
     <script>
+      // Mirrors Var UI getColorModeInitScript({ storageKey: 'theme' }) so the
+      // first paint uses the saved color mode.
       (function () {
-        var theme =
-          localStorage.getItem('theme') ||
-          (window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light');
-        var meta = document.querySelector('meta[name="theme-color"]');
-        if (theme === 'dark') {
-          document.documentElement.classList.add('theme-dark');
-          if (meta) meta.setAttribute('content', '#121212');
+        var stored = null;
+        try {
+          stored = localStorage.getItem('theme');
+        } catch (e) {}
+        var root = document.documentElement;
+        root.classList.add('theme-var-ui-default');
+        if (stored === 'light' || stored === 'dark') {
+          root.setAttribute('data-color-mode', stored);
         }
       })();
     </script>

@@ -1,49 +1,55 @@
-import { styles } from '../ds/styles';
-import { color } from '../ds/tokens';
+import { style, t } from '../styles/system';
 
-export const legendSwatch = styles.class('chart-legend-swatch', {
-  borderRadius: '2px',
+export const eyebrow = style('chart-eyebrow', {
+  textTransform: 'uppercase',
+  letterSpacing: t.letterSpacing.caps.var,
 });
 
-export const legendSwatchSm = styles.class('chart-legend-swatch-sm', {
-  borderRadius: '2px',
-  width: '8px',
-  height: '8px',
+export const legendSwatchSm = style('chart-legend-swatch-sm', {
+  display: 'inline-block',
+  borderRadius: t.radius.sm.var,
+  width: '0.5rem',
+  height: '0.5rem',
+  flexShrink: 0,
 });
 
-export const legendSwatchMd = styles.class('chart-legend-swatch-md', {
-  borderRadius: '2px',
-  width: '10px',
-  height: '10px',
+export const legendSwatchMd = style('chart-legend-swatch-md', {
+  display: 'inline-block',
+  borderRadius: t.radius.sm.var,
+  width: '0.625rem',
+  height: '0.625rem',
+  flexShrink: 0,
 });
 
-export const roleBarTrack = styles.class('chart-role-bar-track', {
+export const roleBarTrack = style('chart-role-bar-track', {
   display: 'flex',
-  height: '28px',
+  height: '1.75rem',
   overflow: 'hidden',
-  backgroundColor: color.grayLight,
+  borderRadius: t.radius.sm.var,
+  backgroundColor: t.color.track.default.var,
 });
 
-export const roleBarSegment = styles.class('chart-role-bar-segment', {
+export const roleBarSegment = style('chart-role-bar-segment', {
   height: '100%',
   opacity: 0.9,
 });
 
-export const stackedBarEmpty = styles.class('chart-stacked-bar-empty', {
+export const stackedBarEmpty = style('chart-stacked-bar-empty', {
   flex: '0 0 auto',
-  backgroundColor: color.grayBg,
+  backgroundColor: t.color.track.default.var,
 });
 
-export const stackedBar = styles.class('chart-stacked-bar', {
+export const stackedBar = style('chart-stacked-bar', {
   flex: '0 0 auto',
   display: 'flex',
   flexDirection: 'column-reverse',
   overflow: 'hidden',
 });
 
-export const stackedBarLayer = styles.class('chart-stacked-bar-layer', {});
-
-export const timelineScroll = styles.class('chart-timeline-scroll', {
+export const timelineScroll = style('chart-timeline-scroll', {
+  display: 'flex',
+  alignItems: 'flex-end',
+  gap: '2px',
   overflowX: 'auto',
-  padding: '4px 0',
+  paddingBlock: t.space.xxs.var,
 });

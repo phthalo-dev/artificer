@@ -1,37 +1,35 @@
 import {
   Badge,
-  type BadgeProps,
-  Box,
   Code,
-  Collapse,
-  Group,
-  Paper,
-  Stack,
+  CodeBlock,
+  Collapsible,
   Text,
-  UnstyledButton,
-} from '../ds';
+  Stack,
+} from '@var-ui/react';
 import { IconChevronDown, IconChevronRight } from '@tabler/icons-react';
 import { useState } from 'react';
 import type { RunNode, RunRecord, ToolInvocation } from '../api/types';
+import { hue, roleColor } from '../styles/palette';
+import { cx } from '../styles/system';
 import { TokenSpendTimeline } from './TokenSpendChart';
-import { fullWidth, minWidthZero, stepHeader } from './BenchTrajectory.styles';
+import {
+  eyebrow,
+  minWidthZero,
+  preWrap,
+  roleDot,
+  stepIndex,
+  stepTrigger,
+  toolDetail,
+  toolIndex,
+  toolOutput,
+  toolTrigger,
+  triggerMeta,
+  triggerRow,
+} from './BenchTrajectory.styles';
 
-type BadgeColor = NonNullable<BadgeProps['color']>;
-
-const ROLE_COLOR: Record<string, BadgeColor> = {
-  communicator: 'grape',
-  orchestrator: 'indigo',
-  planner: 'blue',
-  worker: 'teal',
-  reviewer: 'violet',
-  librarian: 'orange',
-};
-
-function roleColor(role: string): BadgeColor {
-  return ROLE_COLOR[role] ?? 'gray';
+function colorForRole(role: string): string {
+  return roleColor[role] ?? hue.gray;
 }
-
-const stepHeaderCls = stepHeader;
 
 function normalizeTree(tree: RunNode[] | null | undefined): RunNode[] {
   return Array.isArray(tree) ? tree : [];
@@ -82,49 +80,62 @@ function ToolCall({ call, index }: { call: ToolInvocation; index: number }) {
   const [open, setOpen] = useState(false);
   const hint = toolHint(call.input);
   return (
-    <Box>
-      <UnstyledButton onPress={() => setOpen((o) => !o)} className={fullWidth}>
-        <Group gap={6} wrap="nowrap" align="center">
+    <Collapsible
+      headingLevel={5}
+      expanded={open}
+      onExpandedChange={setOpen}
+      trigger={
+        <span className={toolTrigger}>
           {open ? (
             <IconChevronDown size={13} />
           ) : (
             <IconChevronRight size={13} />
           )}
-          <Text size="xs" c="dimmed" w={18} ta="right">
+          <Text as="span" size="xs" tone="secondary" className={toolIndex}>
             {index + 1}
           </Text>
-          <Code size="xs">{call.name}</Code>
+          <Code>{call.name}</Code>
           {hint && (
-            <Text size="xs" c="dimmed" lineClamp={1} className={minWidthZero}>
+            <Text
+              as="span"
+              size="xs"
+              tone="secondary"
+              lineClamp={1}
+              className={minWidthZero}
+            >
               {hint}
             </Text>
           )}
-          {call.error && (
-            <Badge size="xs" color="red" variant="light">
-              error
-            </Badge>
-          )}
-        </Group>
-      </UnstyledButton>
-      <Collapse in={open}>
-        <Box ml={37} mt={6} mb={6}>
-          <Text size="xs" c="dimmed" fw={600} mb={2}>
-            Input
-          </Text>
-          <Code block size="xs">
-            {typeof call.input === 'string'
+          {call.error && <Badge tone="danger">error</Badge>}
+        </span>
+      }
+    >
+      <Stack gap="xs" className={toolDetail}>
+        <Text size="xs" tone="secondary" weight="semibold">
+          Input
+        </Text>
+        <CodeBlock
+          code={
+            typeof call.input === 'string'
               ? call.input
-              : JSON.stringify(call.input, null, 2)}
-          </Code>
-          <Text size="xs" c="dimmed" fw={600} mt={6} mb={2}>
-            Output
-          </Text>
-          <Code block size="xs" scroll>
-            {call.error ? `${call.error}\n${call.output}` : call.output || '—'}
-          </Code>
-        </Box>
-      </Collapse>
-    </Box>
+              : JSON.stringify(call.input, null, 2)
+          }
+          language="json"
+          wrapLongLines
+        />
+        <Text size="xs" tone="secondary" weight="semibold">
+          Output
+        </Text>
+        <div className={toolOutput}>
+          <CodeBlock
+            code={
+              call.error ? `${call.error}\n${call.output}` : call.output || '—'
+            }
+            wrapLongLines
+          />
+        </div>
+      </Stack>
+    </Collapsible>
   );
 }
 
@@ -132,32 +143,34 @@ function Step({ run, index }: { run: RunRecord; index: number }) {
   const [open, setOpen] = useState(index < 6);
   const dur = runDurationMs(run);
   return (
-    <Paper p="0">
-      <UnstyledButton
-        className={stepHeaderCls}
-        onPress={() => setOpen((o) => !o)}
-      >
-        <Group justify="space-between" wrap="nowrap" className={fullWidth}>
-          <Group gap={8} wrap="nowrap" className={minWidthZero}>
-            <Text size="sm" c="dimmed" w={28} ta="right">
+    <Collapsible
+      variant="bordered"
+      headingLevel={4}
+      expanded={open}
+      onExpandedChange={setOpen}
+      trigger={
+        <span className={stepTrigger}>
+          <span className={cx(triggerRow, minWidthZero)}>
+            <Text as="span" size="sm" tone="secondary" className={stepIndex}>
               #{index + 1}
             </Text>
-            <Badge color={roleColor(run.role)} variant="light">
+            <Badge tone="neutral">
+              <span
+                className={roleDot}
+                style={{ backgroundColor: colorForRole(run.role) }}
+                aria-hidden
+              />
               {run.role}
             </Badge>
-            {run.model && <Code size="xs">{run.model}</Code>}
-            {run.status === 'failed' && (
-              <Badge size="sm" color="red" variant="light">
-                failed
-              </Badge>
-            )}
-          </Group>
-          <Group gap="md" wrap="nowrap">
-            <Text size="xs" c="dimmed">
+            {run.model && <Code>{run.model}</Code>}
+            {run.status === 'failed' && <Badge tone="danger">failed</Badge>}
+          </span>
+          <span className={cx(triggerRow, triggerMeta)}>
+            <Text as="span" size="xs" tone="secondary">
               {run.toolCalls.length} tools
             </Text>
             {dur !== null && (
-              <Text size="xs" c="dimmed">
+              <Text as="span" size="xs" tone="secondary">
                 {(dur / 1000).toFixed(1)}s
               </Text>
             )}
@@ -166,50 +179,58 @@ function Step({ run, index }: { run: RunRecord; index: number }) {
             ) : (
               <IconChevronRight size={15} />
             )}
-          </Group>
-        </Group>
-      </UnstyledButton>
-
-      <Collapse in={open}>
-        <Box p="sm">
-          {run.task && (
-            <>
-              <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={2}>
-                Task
-              </Text>
-              <Text size="sm" mb={8} preWrap>
-                {run.task}
-              </Text>
-            </>
-          )}
-
-          {run.toolCalls.length > 0 && (
-            <Stack gap={2} mb={8}>
-              {run.toolCalls.map((call, i) => (
-                <ToolCall key={`${run.id}-${i}`} call={call} index={i} />
-              ))}
-            </Stack>
-          )}
-
-          {run.output && (
-            <>
-              <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={2}>
-                Output
-              </Text>
-              <Text size="sm" preWrap>
-                {run.output}
-              </Text>
-            </>
-          )}
-
-          {run.error && (
-            <Text size="sm" c="red" mt={4}>
-              {run.error}
+          </span>
+        </span>
+      }
+    >
+      <Stack gap="sm">
+        {run.task && (
+          <Stack gap="xs">
+            <Text
+              size="xs"
+              tone="secondary"
+              weight="semibold"
+              className={eyebrow}
+            >
+              Task
             </Text>
-          )}
-        </Box>
-      </Collapse>
-    </Paper>
+            <Text size="sm" className={preWrap}>
+              {run.task}
+            </Text>
+          </Stack>
+        )}
+
+        {run.toolCalls.length > 0 && (
+          <Stack gap="none">
+            {run.toolCalls.map((call, i) => (
+              <ToolCall key={`${run.id}-${i}`} call={call} index={i} />
+            ))}
+          </Stack>
+        )}
+
+        {run.output && (
+          <Stack gap="xs">
+            <Text
+              size="xs"
+              tone="secondary"
+              weight="semibold"
+              className={eyebrow}
+            >
+              Output
+            </Text>
+            <Text size="sm" className={preWrap}>
+              {run.output}
+            </Text>
+          </Stack>
+        )}
+
+        {run.error && (
+          <Text size="sm" tone="danger">
+            {run.error}
+          </Text>
+        )}
+      </Stack>
+    </Collapsible>
   );
 }
 
@@ -221,14 +242,14 @@ export function BenchTrajectory({
   const runs = flattenRuns(tree);
   if (runs.length === 0) {
     return (
-      <Text c="dimmed" size="sm">
+      <Text tone="secondary" size="sm">
         No trajectory captured for this instance. Re-run <Code>pnpm bench</Code>{' '}
         to record one.
       </Text>
     );
   }
   return (
-    <Stack gap="xs">
+    <Stack gap="sm">
       <TokenSpendTimeline runs={runs} />
       {runs.map((run, i) => (
         <Step key={run.id} run={run} index={i} />

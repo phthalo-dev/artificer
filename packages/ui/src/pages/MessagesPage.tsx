@@ -1,44 +1,42 @@
 import {
   Card,
-  Group,
-  Loader,
-  Paper,
+  ChatMessage,
+  ChatMessageBubble,
+  ChatMessageList,
+  Heading,
+  Link,
   ScrollArea,
+  Spinner,
   Stack,
   Text,
-  Title,
-  color,
-} from '../ds';
-import { Link } from 'react-router-dom';
+} from '@var-ui/react';
 import { useMessages } from '../api/hooks';
 import { MessageComposer } from '../components/MessageComposer';
 import { MarkdownContent } from '../components/MarkdownContent';
 import type { Message } from '../api/types';
 import { formatTime } from '../format';
+import { userBubble } from '../styles/chat';
+import { t } from '../styles/system';
 
 function Bubble({ message }: { message: Message }) {
   const inbound = message.direction === 'inbound';
   return (
-    <Group justify={inbound ? 'flex-end' : 'flex-start'} align="flex-start">
-      <Paper p="sm" maw="80%" bg={inbound ? color.blueLight : color.surface}>
-        <Group justify="space-between" gap="xs" mb={4}>
-          <Text size="xs" c="dimmed" fw={600}>
-            {inbound ? 'You' : 'Agent'}
-          </Text>
-          <Text size="xs" c="dimmed">
-            {formatTime(message.createdAt)}
-          </Text>
-        </Group>
+    <ChatMessage
+      sender={inbound ? 'user' : 'assistant'}
+      name={inbound ? 'You' : 'Agent'}
+      metadata={formatTime(message.createdAt)}
+    >
+      <ChatMessageBubble className={inbound ? userBubble : undefined}>
         <MarkdownContent content={message.content} />
         {message.workstreamId && (
-          <Text size="xs" mt={4}>
-            <Link to={`/workstreams/${message.workstreamId}`}>
+          <Text size="xs" style={{ marginTop: t.space.xxs.var }}>
+            <Link href={`/workstreams/${message.workstreamId}`}>
               View workstream →
             </Link>
           </Text>
         )}
-      </Paper>
-    </Group>
+      </ChatMessageBubble>
+    </ChatMessage>
   );
 }
 
@@ -47,23 +45,32 @@ export function MessagesPage() {
 
   return (
     <Stack gap="lg">
-      <Title order={3}>Messages</Title>
+      <Heading level={3} size="md">
+        Messages
+      </Heading>
 
-      <Card padding="md">
-        <ScrollArea.Autosize mah="calc(100vh - 220px)" mb="md">
-          <Stack gap="sm">
-            {messages.isLoading && <Loader size="sm" />}
-            {messages.data?.length === 0 && (
-              <Text c="dimmed" size="sm">
-                No messages yet. Say hello to the agent below.
-              </Text>
+      <Card>
+        <Stack gap="md">
+          <ScrollArea style={{ maxHeight: 'calc(100vh - 220px)' }}>
+            {messages.isLoading ? (
+              <Spinner size="sm" label="Loading messages" />
+            ) : (
+              <ChatMessageList
+                density="compact"
+                emptyState={
+                  <Text tone="secondary" size="sm">
+                    No messages yet. Say hello to the agent below.
+                  </Text>
+                }
+              >
+                {messages.data?.map((m) => (
+                  <Bubble key={m.id} message={m} />
+                ))}
+              </ChatMessageList>
             )}
-            {messages.data?.map((m) => (
-              <Bubble key={m.id} message={m} />
-            ))}
-          </Stack>
-        </ScrollArea.Autosize>
-        <MessageComposer />
+          </ScrollArea>
+          <MessageComposer />
+        </Stack>
       </Card>
     </Stack>
   );

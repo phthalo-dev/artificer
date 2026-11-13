@@ -3,14 +3,15 @@ import {
   Button,
   Card,
   Code,
-  Group,
+  HStack,
+  IconButton,
   Select,
   Stack,
   Table,
   Text,
-  TextInput,
-} from '../ds';
-import { notifications } from '../ds/notifications';
+  TextField,
+  toast,
+} from '@var-ui/react';
 import {
   IconArrowDown,
   IconArrowUp,
@@ -29,8 +30,27 @@ import type {
   QuotaConfig,
   QuotaWindowConfig,
 } from '../api/types';
+import {
+  capitalize,
+  fill,
+  modelCell,
+  modelGroupLabel,
+  modelOptionRow,
+} from './RoutesEditor.styles';
 
 const TIERS: ModelTier[] = ['low', 'medium', 'high'];
+
+const EXECUTION_OPTIONS = [
+  { value: 'llm', label: 'LLM (internal loop)' },
+  { value: 'cursor-agent', label: 'Cursor agent' },
+  { value: 'claude-code', label: 'Claude Code' },
+  { value: 'opencode', label: 'opencode' },
+];
+
+type ModelGroup = {
+  group: string;
+  items: { value: string; label: string }[];
+};
 
 function parseNum(value: string, fallback: number): number {
   const n = Number(value);
@@ -46,6 +66,59 @@ function priceLabel(model: CatalogModel | undefined): string {
   const { inputPerMTok: i, outputPerMTok: o } = model.pricing;
   if (i === 0 && o === 0) return 'free';
   return `in ${money(i)} · out ${money(o)} /Mtok`;
+}
+
+/**
+ * Model picker. Var UI's `Select` has no option sections, so the provider
+ * group is shown as a muted prefix on each row instead of a section header.
+ */
+function ModelSelect({
+  ariaLabel,
+  value,
+  groups,
+  byId,
+  onChange,
+}: {
+  ariaLabel: string;
+  value: string;
+  groups: ModelGroup[];
+  byId: Map<string, CatalogModel>;
+  onChange: (modelId: string) => void;
+}) {
+  return (
+    <Select.Root
+      aria-label={ariaLabel}
+      value={value}
+      onValueChange={(v) => v && onChange(v)}
+    >
+      <Select.Trigger>
+        <Select.Value>{({ selectedText }) => selectedText}</Select.Value>
+      </Select.Trigger>
+      <Select.Popover>
+        <Select.ListBox>
+          {groups.flatMap((g) =>
+            g.items.map((item) => (
+              <Select.Item
+                key={item.value}
+                value={item.value}
+                textValue={item.label}
+              >
+                <span className={modelOptionRow}>
+                  <Text as="span" size="sm">
+                    <span className={modelGroupLabel}>{g.group} /</span>
+                    {item.label}
+                  </Text>
+                  <Text as="span" size="xs" tone="secondary">
+                    {priceLabel(byId.get(item.value))}
+                  </Text>
+                </span>
+              </Select.Item>
+            )),
+          )}
+        </Select.ListBox>
+      </Select.Popover>
+    </Select.Root>
+  );
 }
 
 function RouteCard({
@@ -64,10 +137,7 @@ function RouteCard({
   index: number;
   total: number;
   presets: ModelPresetInfo[];
-  selectData: Array<{
-    group: string;
-    items: { value: string; label: string }[];
-  }>;
+  selectData: ModelGroup[];
   byId: Map<string, CatalogModel>;
   onChange: (next: ExecutionRouteConfig) => void;
   onMoveUp: () => void;
@@ -76,7 +146,7 @@ function RouteCard({
 }) {
   const usesLlm = route.execution === 'llm';
 
-  const optionsFor = (current: string) => {
+  const optionsFor = (current: string): ModelGroup[] => {
     if (byId.has(current)) return selectData;
     return [
       { group: 'Current', items: [{ value: current, label: current }] },
@@ -111,228 +181,223 @@ function RouteCard({
   };
 
   return (
-    <Card padding="md" withBorder>
-      <Group justify="space-between" mb="sm">
-        <Group gap="xs">
-          <Badge variant="filled" color={index === 0 ? 'blue' : 'gray'}>
-            {index === 0 ? 'primary' : `failover ${index}`}
-          </Badge>
-          <Text fw={600}>{route.id}</Text>
-          <Badge variant="outline">{route.accountId}</Badge>
-          <Badge variant="outline">{route.mode}</Badge>
-        </Group>
-        <Group gap="xs">
-          <Button
-            size="xs"
-            variant="subtle"
-            isDisabled={index === 0}
-            onPress={onMoveUp}
-            aria-label="Move route up"
-          >
-            <IconArrowUp size={16} />
-          </Button>
-          <Button
-            size="xs"
-            variant="subtle"
-            isDisabled={index >= total - 1}
-            onPress={onMoveDown}
-            aria-label="Move route down"
-          >
-            <IconArrowDown size={16} />
-          </Button>
-          {index > 0 && (
-            <Button
-              size="xs"
-              variant="subtle"
-              onPress={onRemove}
-              aria-label="Remove route"
-            >
-              <IconTrash size={16} />
-            </Button>
-          )}
-        </Group>
-      </Group>
+    <Card>
+      <Stack gap="md">
+        <HStack justify="between">
+          <HStack gap="xs">
+            <Badge appearance="solid" tone={index === 0 ? 'info' : 'neutral'}>
+              {index === 0 ? 'primary' : `failover ${index}`}
+            </Badge>
+            <Text as="span" weight="semibold">
+              {route.id}
+            </Text>
+            <Badge appearance="outline">{route.accountId}</Badge>
+            <Badge appearance="outline">{route.mode}</Badge>
+          </HStack>
+          <HStack gap="xs">
+            <IconButton
+              size="sm"
+              appearance="ghost"
+              disabled={index === 0}
+              onClick={onMoveUp}
+              aria-label="Move route up"
+              icon={<IconArrowUp size={16} />}
+            />
+            <IconButton
+              size="sm"
+              appearance="ghost"
+              disabled={index >= total - 1}
+              onClick={onMoveDown}
+              aria-label="Move route down"
+              icon={<IconArrowDown size={16} />}
+            />
+            {index > 0 && (
+              <IconButton
+                size="sm"
+                appearance="ghost"
+                onClick={onRemove}
+                aria-label="Remove route"
+                icon={<IconTrash size={16} />}
+              />
+            )}
+          </HStack>
+        </HStack>
 
-      <Group grow align="flex-start" mb="md">
-        <TextInput
-          label="Route id"
-          value={route.id}
-          onChange={(v) => onChange({ ...route, id: v })}
-        />
-        <TextInput
-          label="Quota account id"
-          value={route.accountId}
-          onChange={(v) => onChange({ ...route, accountId: v })}
-        />
-        <Select
-          label="Execution"
-          data={[
-            { value: 'llm', label: 'LLM (internal loop)' },
-            { value: 'cursor-agent', label: 'Cursor agent' },
-            { value: 'claude-code', label: 'Claude Code' },
-            { value: 'opencode', label: 'opencode' },
-          ]}
-          value={route.execution}
-          onChange={(v) => {
-            const execution = (v as ExecutionRouteConfig['execution']) ?? 'llm';
-            onChange({
-              ...route,
-              execution,
-              ...(execution !== 'llm' ? { llm: undefined } : {}),
-            });
-          }}
-        />
-      </Group>
-
-      {usesLlm ? (
-        <>
-          <TextInput
-            label="Provider base URL"
-            value={route.llm?.baseURL ?? ''}
-            onChange={(v) =>
+        <HStack align="start">
+          <TextField
+            className={fill}
+            label="Route id"
+            value={route.id}
+            onValueChange={(v) => onChange({ ...route, id: v })}
+          />
+          <TextField
+            className={fill}
+            label="Quota account id"
+            value={route.accountId}
+            onValueChange={(v) => onChange({ ...route, accountId: v })}
+          />
+          <Select
+            className={fill}
+            label="Execution"
+            options={EXECUTION_OPTIONS}
+            value={route.execution}
+            onValueChange={(v) => {
+              const execution =
+                (v as ExecutionRouteConfig['execution'] | null) ?? 'llm';
               onChange({
                 ...route,
-                llm: { ...route.llm, baseURL: v },
-              })
-            }
+                execution,
+                ...(execution !== 'llm' ? { llm: undefined } : {}),
+              });
+            }}
           />
+        </HStack>
 
-          <Group align="flex-end" mt="md" mb="sm">
-            <Select
-              label="Model preset"
-              data={[
-                { value: 'custom', label: 'Custom tiers' },
-                ...presets.map((p) => ({ value: p.id, label: p.name })),
-              ]}
-              value={route.presetId ?? 'custom'}
-              onChange={(v) => {
-                if (!v || v === 'custom') {
-                  onChange({ ...route, presetId: 'custom' });
-                } else {
-                  applyPreset(v);
-                }
-              }}
+        {usesLlm ? (
+          <>
+            <TextField
+              label="Provider base URL"
+              value={route.llm?.baseURL ?? ''}
+              onValueChange={(v) =>
+                onChange({
+                  ...route,
+                  llm: { ...route.llm, baseURL: v },
+                })
+              }
             />
-            {route.presetId === 'custom' && (
-              <Badge size="sm" variant="light">
-                custom tiers
-              </Badge>
-            )}
-          </Group>
 
-          <Table highlightOnHover>
-            <Table.Thead>
-              <Table.Tr>
-                <Table.Th>Tier</Table.Th>
-                <Table.Th>Model</Table.Th>
-                <Table.Th>Provider</Table.Th>
-              </Table.Tr>
-            </Table.Thead>
-            <Table.Tbody>
-              {TIERS.map((tier) => {
-                const selected = byId.get(route.models[tier]);
-                return (
-                  <Table.Tr key={tier}>
-                    <Table.Td>
-                      <Text fw={500} tt="capitalize">
-                        {tier}
-                      </Text>
-                    </Table.Td>
-                    <Table.Td style={{ minWidth: 260 }}>
-                      <Select
-                        aria-label={`${route.id} ${tier} model`}
-                        data={optionsFor(route.models[tier])}
-                        value={route.models[tier]}
-                        searchable
-                        allowDeselect={false}
-                        onChange={(value) => value && updateTier(tier, value)}
-                        renderOption={({ option }) => (
-                          <Group justify="space-between" wrap="nowrap" w="100%">
-                            <Text size="sm">{option.label}</Text>
-                            <Text size="xs" c="dimmed">
-                              {priceLabel(byId.get(option.value))}
-                            </Text>
-                          </Group>
-                        )}
-                      />
-                    </Table.Td>
-                    <Table.Td>
-                      <Text size="sm">{selected?.provider ?? '—'}</Text>
-                    </Table.Td>
-                  </Table.Tr>
-                );
-              })}
-            </Table.Tbody>
+            <HStack align="end">
+              <Select
+                label="Model preset"
+                options={[
+                  { value: 'custom', label: 'Custom tiers' },
+                  ...presets.map((p) => ({ value: p.id, label: p.name })),
+                ]}
+                value={route.presetId ?? 'custom'}
+                onValueChange={(v) => {
+                  if (!v || v === 'custom') {
+                    onChange({ ...route, presetId: 'custom' });
+                  } else {
+                    applyPreset(v);
+                  }
+                }}
+              />
+              {route.presetId === 'custom' && <Badge>custom tiers</Badge>}
+            </HStack>
+
+            <Table hasHover>
+              <Table.Header>
+                <Table.Row>
+                  <Table.Column>Tier</Table.Column>
+                  <Table.Column>Model</Table.Column>
+                  <Table.Column>Provider</Table.Column>
+                </Table.Row>
+              </Table.Header>
+              <Table.Body>
+                {TIERS.map((tier) => {
+                  const selected = byId.get(route.models[tier]);
+                  return (
+                    <Table.Row key={tier}>
+                      <Table.Cell>
+                        <Text weight="medium" className={capitalize}>
+                          {tier}
+                        </Text>
+                      </Table.Cell>
+                      <Table.Cell className={modelCell}>
+                        <ModelSelect
+                          ariaLabel={`${route.id} ${tier} model`}
+                          value={route.models[tier]}
+                          groups={optionsFor(route.models[tier])}
+                          byId={byId}
+                          onChange={(modelId) => updateTier(tier, modelId)}
+                        />
+                      </Table.Cell>
+                      <Table.Cell>
+                        <Text size="sm">{selected?.provider ?? '—'}</Text>
+                      </Table.Cell>
+                    </Table.Row>
+                  );
+                })}
+              </Table.Body>
+            </Table>
+          </>
+        ) : (
+          <Text size="sm" tone="secondary">
+            Agent executors run work directly — model presets and tier models do
+            not apply on this route.
+          </Text>
+        )}
+
+        <Stack gap="xs">
+          <Text size="sm" weight="semibold">
+            Quota windows
+          </Text>
+          <Table hasHover>
+            <Table.Header>
+              <Table.Row>
+                <Table.Column>Window</Table.Column>
+                <Table.Column>Limit</Table.Column>
+                <Table.Column>Warn %</Table.Column>
+                <Table.Column>Block %</Table.Column>
+              </Table.Row>
+            </Table.Header>
+            <Table.Body>
+              {route.windows.map((window, wi) => (
+                <Table.Row key={window.id}>
+                  <Table.Cell>
+                    <Text size="sm" weight="medium">
+                      {window.id}
+                    </Text>
+                    <Text size="xs" tone="secondary">
+                      {window.period} · {window.unit}
+                    </Text>
+                  </Table.Cell>
+                  <Table.Cell>
+                    <TextField
+                      aria-label={`${window.id} limit`}
+                      type="number"
+                      value={String(window.limit)}
+                      onValueChange={(v) =>
+                        updateWindow(wi, { limit: parseNum(v, window.limit) })
+                      }
+                    />
+                  </Table.Cell>
+                  <Table.Cell>
+                    <TextField
+                      aria-label={`${window.id} warn`}
+                      type="number"
+                      value={String(window.warnAtPercent ?? 70)}
+                      onValueChange={(v) =>
+                        updateWindow(wi, {
+                          warnAtPercent: parseNum(
+                            v,
+                            window.warnAtPercent ?? 70,
+                          ),
+                        })
+                      }
+                    />
+                  </Table.Cell>
+                  <Table.Cell>
+                    <TextField
+                      aria-label={`${window.id} block`}
+                      type="number"
+                      value={String(window.blockAtPercent ?? 90)}
+                      onValueChange={(v) =>
+                        updateWindow(wi, {
+                          blockAtPercent: parseNum(
+                            v,
+                            window.blockAtPercent ?? 90,
+                          ),
+                        })
+                      }
+                    />
+                  </Table.Cell>
+                </Table.Row>
+              ))}
+            </Table.Body>
           </Table>
-        </>
-      ) : (
-        <Text size="sm" c="dimmed" mt="md">
-          Agent executors run work directly — model presets and tier models do
-          not apply on this route.
-        </Text>
-      )}
-
-      <Text size="sm" fw={600} mt="lg" mb={6}>
-        Quota windows
-      </Text>
-      <Table highlightOnHover>
-        <Table.Thead>
-          <Table.Tr>
-            <Table.Th>Window</Table.Th>
-            <Table.Th>Limit</Table.Th>
-            <Table.Th>Warn %</Table.Th>
-            <Table.Th>Block %</Table.Th>
-          </Table.Tr>
-        </Table.Thead>
-        <Table.Tbody>
-          {route.windows.map((window, wi) => (
-            <Table.Tr key={window.id}>
-              <Table.Td>
-                <Text size="sm" fw={500}>
-                  {window.id}
-                </Text>
-                <Text size="xs" c="dimmed">
-                  {window.period} · {window.unit}
-                </Text>
-              </Table.Td>
-              <Table.Td>
-                <TextInput
-                  aria-label={`${window.id} limit`}
-                  type="number"
-                  value={String(window.limit)}
-                  onChange={(v) =>
-                    updateWindow(wi, { limit: parseNum(v, window.limit) })
-                  }
-                />
-              </Table.Td>
-              <Table.Td>
-                <TextInput
-                  aria-label={`${window.id} warn`}
-                  type="number"
-                  value={String(window.warnAtPercent ?? 70)}
-                  onChange={(v) =>
-                    updateWindow(wi, {
-                      warnAtPercent: parseNum(v, window.warnAtPercent ?? 70),
-                    })
-                  }
-                />
-              </Table.Td>
-              <Table.Td>
-                <TextInput
-                  aria-label={`${window.id} block`}
-                  type="number"
-                  value={String(window.blockAtPercent ?? 90)}
-                  onChange={(v) =>
-                    updateWindow(wi, {
-                      blockAtPercent: parseNum(v, window.blockAtPercent ?? 90),
-                    })
-                  }
-                />
-              </Table.Td>
-            </Table.Tr>
-          ))}
-        </Table.Tbody>
-      </Table>
+        </Stack>
+      </Stack>
     </Card>
   );
 }
@@ -382,7 +447,7 @@ export function RoutesEditor() {
 
   if (!draft?.routes?.length) {
     return (
-      <Text c="dimmed" size="sm">
+      <Text tone="secondary" size="sm">
         No routes configured. Set <Code>QUOTA_DAILY_BUDGET_USD</Code> or add
         routes via <Code>artificer.config.json</Code>.
       </Text>
@@ -395,16 +460,16 @@ export function RoutesEditor() {
         reservePercent: draft.reservePercent,
         routes: draft.routes,
       });
-      notifications.show({
+      toast({
         title: 'Routes saved',
-        message: 'Execution chain and quotas updated for subsequent runs.',
-        color: 'green',
+        description: 'Execution chain and quotas updated for subsequent runs.',
+        tone: 'success',
       });
     } catch (err) {
-      notifications.show({
+      toast({
         title: 'Save failed',
-        message: err instanceof Error ? err.message : String(err),
-        color: 'red',
+        description: err instanceof Error ? err.message : String(err),
+        tone: 'danger',
       });
     }
   };
@@ -446,40 +511,42 @@ export function RoutesEditor() {
 
   return (
     <Stack gap="md">
-      <Group justify="space-between" align="flex-end">
-        <TextInput
+      <HStack justify="between" align="end">
+        <TextField
           label="Communicator reserve (%)"
           type="number"
           value={String(draft.reservePercent ?? 10)}
-          onChange={(v) =>
+          onValueChange={(v) =>
             setDraft({
               ...draft,
               reservePercent: parseNum(v, draft.reservePercent ?? 10),
             })
           }
         />
-        <Group gap="xs">
+        <HStack gap="xs">
           <Button
-            variant="default"
-            leftSection={<IconRefresh size={16} />}
-            isDisabled={!dirty || update.isPending}
-            onPress={() => source && setDraft(structuredClone(source))}
+            appearance="subtle"
+            disabled={!dirty || update.isPending}
+            onClick={() => source && setDraft(structuredClone(source))}
           >
+            <IconRefresh size={16} />
             Reset
           </Button>
           <Button
-            leftSection={<IconDeviceFloppy size={16} />}
+            tone="accent"
+            appearance="filled"
             loading={update.isPending}
-            isDisabled={!dirty}
-            onPress={save}
+            disabled={!dirty}
+            onClick={save}
           >
+            <IconDeviceFloppy size={16} />
             Save routes
           </Button>
-        </Group>
-      </Group>
+        </HStack>
+      </HStack>
 
       {!data.configured?.routes?.length && (
-        <Text size="xs" c="dimmed">
+        <Text size="xs" tone="secondary">
           Showing auto-detected defaults. Saving writes an explicit route chain
           to config.
         </Text>
@@ -511,11 +578,8 @@ export function RoutesEditor() {
         />
       ))}
 
-      <Button
-        variant="light"
-        leftSection={<IconPlus size={16} />}
-        onPress={addFailoverRoute}
-      >
+      <Button appearance="subtle" onClick={addFailoverRoute}>
+        <IconPlus size={16} />
         Add failover route
       </Button>
     </Stack>

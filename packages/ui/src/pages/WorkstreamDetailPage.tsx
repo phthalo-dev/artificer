@@ -1,22 +1,22 @@
+import type { Tone } from '@var-ui/core';
 import {
   Alert,
   Badge,
-  type BadgeColor,
   Button,
   Card,
   Code,
-  Group,
-  Loader,
-  Modal,
-  Paper,
-  SimpleGrid,
+  Dialog,
+  Grid,
+  HStack,
+  Heading,
+  Spinner,
   Stack,
+  Surface,
   Table,
   Tabs,
   Text,
-  Title,
-  color,
-} from '../ds';
+  type TabsProps,
+} from '@var-ui/react';
 import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
@@ -47,16 +47,36 @@ import { WorkstreamArtifactsPanel } from '../components/WorkstreamArtifactsPanel
 import { WorkstreamChat } from '../components/WorkstreamChat';
 import { WorkstreamReceiptPanel } from '../components/WorkstreamReceiptPanel';
 import { WorkstreamTracePanel } from '../components/WorkstreamTracePanel';
+import {
+  cellMaxWidth,
+  eyebrow,
+  preWrap,
+  statGrid,
+} from '../components/Workstream.styles';
 import { formatCost, formatDuration, formatTime } from '../format';
 import { agentLabel } from '../format-agent';
 import { earliestQuotaReset, formatUntil } from '../quota';
 
-const SEVERITY_COLORS: Record<ReviewSeverity, BadgeColor> = {
-  critical: 'red',
-  important: 'orange',
-  minor: 'yellow',
-  none: 'green',
+const SEVERITY_TONES: Record<ReviewSeverity, Tone> = {
+  critical: 'danger',
+  important: 'warning',
+  minor: 'warning',
+  none: 'success',
 };
+
+function SectionLabel({ children }: { children: string }) {
+  return (
+    <Text
+      as="span"
+      size="xs"
+      tone="secondary"
+      weight="semibold"
+      className={eyebrow}
+    >
+      {children}
+    </Text>
+  );
+}
 
 function workstreamDurationMs(ws: Workstream, runs: RunRecord[]): number {
   if (runs.length === 0) {
@@ -99,10 +119,10 @@ export function WorkstreamDetailPage() {
   const [confirmRemove, setConfirmRemove] = useState(false);
   const [removeError, setRemoveError] = useState<string | null>(null);
 
-  if (isLoading) return <Loader size="sm" />;
+  if (isLoading) return <Spinner size="sm" label="Loading workstream" />;
   if (error || !data) {
     return (
-      <Alert color="red" title="Could not load workstream">
+      <Alert tone="danger" title="Could not load workstream">
         {error instanceof Error ? error.message : 'Not found'}
       </Alert>
     );
@@ -143,10 +163,192 @@ export function WorkstreamDetailPage() {
     });
   };
 
+  const trajectoryPanel = (
+    <Stack gap="sm">
+      <HStack justify="between">
+        <HStack gap="xs">
+          <SectionLabel>{model ?? 'sub-agents'}</SectionLabel>
+          <Text as="span" size="xs" tone="secondary">
+            · {usage.total.runs} calls · {formatCost(usage.total.costUsd)}
+          </Text>
+        </HStack>
+        <ViewRawLink
+          data={{ workstream: ws, tasks, reviews, plan, tree, usage }}
+          filename={`workstream-${ws.id}.json`}
+        />
+      </HStack>
+      {runs.length > 0 ? (
+        <BenchTrajectory tree={tree} />
+      ) : (
+        <Alert tone="neutral">
+          No agent calls recorded for this workstream yet.
+        </Alert>
+      )}
+    </Stack>
+  );
+
+  const planPanel = plan ? (
+    <Card>
+      <MarkdownContent content={plan} />
+    </Card>
+  ) : (
+    <Text tone="secondary" size="sm">
+      No plan yet.
+    </Text>
+  );
+
+  const tasksPanel =
+    tasks.length === 0 ? (
+      <Text tone="secondary" size="sm">
+        No tasks yet.
+      </Text>
+    ) : (
+      <Table striped>
+        <Table.Header>
+          <Table.Row>
+            <Table.Column>Role</Table.Column>
+            <Table.Column>Status</Table.Column>
+            <Table.Column>Description</Table.Column>
+            <Table.Column>Result</Table.Column>
+          </Table.Row>
+        </Table.Header>
+        <Table.Body>
+          {tasks.map((task) => (
+            <Table.Row key={task.id}>
+              <Table.Cell>
+                <Text size="sm" weight="semibold">
+                  {task.role}
+                </Text>
+              </Table.Cell>
+              <Table.Cell>
+                <StatusBadge status={task.status} />
+              </Table.Cell>
+              <Table.Cell className={cellMaxWidth}>
+                <Text size="sm">{task.description}</Text>
+              </Table.Cell>
+              <Table.Cell className={cellMaxWidth}>
+                <Text size="sm" tone="secondary" lineClamp={3}>
+                  {task.result ?? '—'}
+                </Text>
+              </Table.Cell>
+            </Table.Row>
+          ))}
+        </Table.Body>
+      </Table>
+    );
+
+  const reviewsPanel =
+    reviews.length === 0 ? (
+      <Text tone="secondary" size="sm">
+        No reviews yet.
+      </Text>
+    ) : (
+      <Stack gap="sm">
+        {reviews.map((r) => (
+          <Card key={r.id}>
+            <Stack gap="xs">
+              <HStack justify="between">
+                <HStack gap="xs">
+                  <Text as="span" size="sm" weight="semibold">
+                    {r.target}
+                  </Text>
+                  {r.stage ? <Badge>{r.stage}</Badge> : null}
+                </HStack>
+                <HStack gap="xs">
+                  {r.severity && r.severity !== 'none' ? (
+                    <Badge tone={SEVERITY_TONES[r.severity]}>
+                      {r.severity}
+                    </Badge>
+                  ) : null}
+                  <Badge tone={r.approved ? 'success' : 'warning'}>
+                    {r.approved ? 'approved' : 'changes requested'}
+                  </Badge>
+                </HStack>
+              </HStack>
+              <MarkdownContent content={r.notes} />
+              <Text size="xs" tone="secondary">
+                {formatTime(r.createdAt)}
+              </Text>
+            </Stack>
+          </Card>
+        ))}
+      </Stack>
+    );
+
+  const metricsPanel = (
+    <Stack gap="lg">
+      <Grid columns="auto" className={statGrid}>
+        <DataCard label="Requests" value={String(usage.total.requests)} />
+        <DataCard
+          label="Cache read"
+          value={usage.total.cacheReadInputTokens.toLocaleString()}
+        />
+        <DataCard
+          label="Cache write"
+          value={usage.total.cacheCreationInputTokens.toLocaleString()}
+        />
+        <DataCard label="Updated" value={formatTime(ws.updatedAt)} />
+      </Grid>
+      <Stack gap="xs">
+        <Text weight="semibold" size="sm">
+          By route
+        </Text>
+        <BreakdownTable label="Route" data={summarizeByRoute(data.runs)} />
+      </Stack>
+      <Stack gap="xs">
+        <Text weight="semibold" size="sm">
+          By role
+        </Text>
+        <BreakdownTable label="Role" data={usage.byRole} />
+      </Stack>
+      <Stack gap="xs">
+        <Text weight="semibold" size="sm">
+          By task
+        </Text>
+        <BreakdownTable label="Task" data={usage.byTask} />
+      </Stack>
+    </Stack>
+  );
+
+  const tracePanel = <WorkstreamTracePanel workstreamId={ws.id} />;
+  const artifactsPanel = <WorkstreamArtifactsPanel workstreamId={ws.id} />;
+
+  const tabs: TabsProps['tabs'] = conversation
+    ? [
+        {
+          value: 'chat',
+          label: 'Chat',
+          content: (
+            <WorkstreamChat
+              workstreamId={ws.id}
+              status={ws.status}
+              runs={data.runs}
+            />
+          ),
+        },
+        { value: 'artifacts', label: 'Artifacts', content: artifactsPanel },
+        { value: 'trajectory', label: 'Trajectory', content: trajectoryPanel },
+        { value: 'trace', label: 'Trace', content: tracePanel },
+      ]
+    : [
+        { value: 'trajectory', label: 'Trajectory', content: trajectoryPanel },
+        { value: 'plan', label: 'Plan', content: planPanel },
+        { value: 'tasks', label: 'Tasks', content: tasksPanel },
+        { value: 'reviews', label: 'Reviews', content: reviewsPanel },
+        { value: 'metrics', label: 'Metrics', content: metricsPanel },
+        { value: 'trace', label: 'Trace', content: tracePanel },
+        { value: 'artifacts', label: 'Artifacts', content: artifactsPanel },
+        {
+          value: 'receipt',
+          label: 'Receipt',
+          content: <WorkstreamReceiptPanel workstream={ws} />,
+        },
+      ];
+
   return (
     <Stack gap="lg">
       {ws.status === 'paused_quota' && (
-        <Alert color="orange" title="Paused — usage quota">
+        <Alert tone="warning" title="Paused — usage quota">
           Work is temporarily paused until the quota window resets.
           {quotaReset && (
             <>
@@ -167,98 +369,95 @@ export function WorkstreamDetailPage() {
       )}
 
       <QuotaAlert />
-      <div>
-        <Group gap={8} mb={4}>
-          <Text size="xs" c="dimmed">
-            <Code>{ws.id}</Code>
-          </Text>
-        </Group>
-        <Group gap="sm" align="center">
-          <Title order={2}>{ws.title}</Title>
+      <Stack gap="xs">
+        <Text size="xs" tone="secondary">
+          <Code>{ws.id}</Code>
+        </Text>
+        <HStack gap="sm" wrap>
+          <Heading level={2} size="lg">
+            {ws.title}
+          </Heading>
           <StatusBadge status={ws.status} />
           {canStop && (
             <Button
-              variant="outline"
+              tone="danger"
+              appearance="outline"
               size="sm"
               loading={cancel.isPending}
-              onPress={() => cancel.mutate()}
-              style={{
-                color: color.red,
-                borderColor: color.red,
-              }}
+              onClick={() => cancel.mutate()}
             >
               Stop
             </Button>
           )}
           {conversation && ws.status === 'in_progress' && (
             <Button
-              variant="outline"
+              appearance="outline"
               size="sm"
               loading={markDone.isPending}
-              onPress={() => markDone.mutate()}
+              onClick={() => markDone.mutate()}
             >
               Mark done
             </Button>
           )}
           {canRemove && (
             <Button
-              variant="outline"
+              appearance="outline"
               size="sm"
               loading={removeWorktree.isPending}
-              onPress={() => remove()}
+              onClick={() => remove()}
             >
               Remove working tree
             </Button>
           )}
-        </Group>
+        </HStack>
         {data?.progress && (
           <WorkstreamProgress progress={data.progress} status={ws.status} />
         )}
-        <Text c="dimmed" size="sm" mt={4} preWrap>
+        <Text tone="secondary" size="sm" className={preWrap}>
           {ws.goal}
         </Text>
         {ws.repoUrl && (
-          <Text size="sm" mt={4}>
+          <Text size="sm">
             repo: <Code>{ws.repoUrl}</Code>
           </Text>
         )}
         {conversation && (
-          <Group gap="sm" mt={4}>
+          <HStack gap="sm" wrap>
             {ws.repoId && (
-              <Text size="sm">
+              <Text as="span" size="sm">
                 repo id: <Code>{ws.repoId}</Code>
               </Text>
             )}
-            <Text size="sm">
+            <Text as="span" size="sm">
               branch: <Code>{`artificer/${ws.id}`}</Code>
             </Text>
             {hasExecutorLabel && (
-              <Text size="sm">
+              <Text as="span" size="sm">
                 agent: <Code>{agentLabel(resolvedExecutor)}</Code>
               </Text>
             )}
-          </Group>
+          </HStack>
         )}
         {removeError && (
-          <Text size="sm" c="red" mt={4}>
+          <Text size="sm" tone="danger">
             {removeError}
           </Text>
         )}
-      </div>
+      </Stack>
 
       {ws.summary && (
-        <Card padding="md">
-          <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={4}>
-            Summary
-          </Text>
-          <Text size="sm" preWrap>
-            {ws.summary}
-          </Text>
+        <Card>
+          <Stack gap="xs">
+            <SectionLabel>Summary</SectionLabel>
+            <Text size="sm" className={preWrap}>
+              {ws.summary}
+            </Text>
+          </Stack>
         </Card>
       )}
 
-      <Paper p="lg">
-        <SimpleGrid cols={{ base: 2, sm: 3, md: 4, lg: 7 }}>
+      <Surface padding="md">
+        <Grid columns="auto" className={statGrid}>
           <DataCard size="lg" label="Steps" value={String(steps)} />
           <DataCard size="lg" label="Calls" value={String(usage.total.runs)} />
           <DataCard
@@ -286,254 +485,44 @@ export function WorkstreamDetailPage() {
             label="Duration"
             value={formatDuration(durationMs)}
           />
-        </SimpleGrid>
-      </Paper>
+        </Grid>
+      </Surface>
 
       {runs.length > 0 && <TokenSpendByRole byRole={usage.byRole} />}
 
-      <Tabs
-        defaultValue={conversation ? 'chat' : 'trajectory'}
-        keepMounted={false}
+      <Tabs tabs={tabs} defaultValue={conversation ? 'chat' : 'trajectory'} />
+
+      <Dialog
+        open={confirmRemove}
+        onOpenChange={(open) => {
+          if (!open) setConfirmRemove(false);
+        }}
       >
-        <Tabs.List>
-          {conversation ? (
-            <>
-              <Tabs.Tab value="chat">Chat</Tabs.Tab>
-              <Tabs.Tab value="artifacts">Artifacts</Tabs.Tab>
-              <Tabs.Tab value="trajectory">Trajectory</Tabs.Tab>
-              <Tabs.Tab value="trace">Trace</Tabs.Tab>
-            </>
-          ) : (
-            <>
-              <Tabs.Tab value="trajectory">Trajectory</Tabs.Tab>
-              <Tabs.Tab value="plan">Plan</Tabs.Tab>
-              <Tabs.Tab value="tasks">Tasks</Tabs.Tab>
-              <Tabs.Tab value="reviews">Reviews</Tabs.Tab>
-              <Tabs.Tab value="metrics">Metrics</Tabs.Tab>
-              <Tabs.Tab value="trace">Trace</Tabs.Tab>
-              <Tabs.Tab value="artifacts">Artifacts</Tabs.Tab>
-              <Tabs.Tab value="receipt">Receipt</Tabs.Tab>
-            </>
-          )}
-        </Tabs.List>
-
-        {conversation && (
-          <Tabs.Panel value="chat" pt="md">
-            <WorkstreamChat
-              workstreamId={ws.id}
-              status={ws.status}
-              runs={data.runs}
-            />
-          </Tabs.Panel>
-        )}
-
-        <Tabs.Panel value="trajectory" pt="md">
-          <Group justify="space-between" mb="sm">
-            <Group gap="xs">
-              <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
-                {model ?? 'sub-agents'}
-              </Text>
-              <Text size="xs" c="dimmed">
-                · {usage.total.runs} calls · {formatCost(usage.total.costUsd)}
-              </Text>
-            </Group>
-            <ViewRawLink
-              data={{ workstream: ws, tasks, reviews, plan, tree, usage }}
-              filename={`workstream-${ws.id}.json`}
-            />
-          </Group>
-          {runs.length > 0 ? (
-            <BenchTrajectory tree={tree} />
-          ) : (
-            <Alert color="gray">
-              No agent calls recorded for this workstream yet.
-            </Alert>
-          )}
-        </Tabs.Panel>
-
-        {!conversation && (
-          <Tabs.Panel value="plan" pt="md">
-            {plan ? (
-              <Paper p="md">
-                <MarkdownContent content={plan} />
-              </Paper>
-            ) : (
-              <Text c="dimmed" size="sm">
-                No plan yet.
-              </Text>
-            )}
-          </Tabs.Panel>
-        )}
-
-        {!conversation && (
-          <Tabs.Panel value="tasks" pt="md">
-            {tasks.length === 0 ? (
-              <Text c="dimmed" size="sm">
-                No tasks yet.
-              </Text>
-            ) : (
-              <Table striped withTableBorder>
-                <Table.Thead>
-                  <Table.Tr>
-                    <Table.Th>Role</Table.Th>
-                    <Table.Th>Status</Table.Th>
-                    <Table.Th>Description</Table.Th>
-                    <Table.Th>Result</Table.Th>
-                  </Table.Tr>
-                </Table.Thead>
-                <Table.Tbody>
-                  {tasks.map((t) => (
-                    <Table.Tr key={t.id}>
-                      <Table.Td>
-                        <Text size="sm" fw={600}>
-                          {t.role}
-                        </Text>
-                      </Table.Td>
-                      <Table.Td>
-                        <StatusBadge status={t.status} />
-                      </Table.Td>
-                      <Table.Td maw={320}>
-                        <Text size="sm">{t.description}</Text>
-                      </Table.Td>
-                      <Table.Td maw={320}>
-                        <Text size="sm" c="dimmed" lineClamp={3}>
-                          {t.result ?? '—'}
-                        </Text>
-                      </Table.Td>
-                    </Table.Tr>
-                  ))}
-                </Table.Tbody>
-              </Table>
-            )}
-          </Tabs.Panel>
-        )}
-
-        {!conversation && (
-          <Tabs.Panel value="reviews" pt="md">
-            {reviews.length === 0 ? (
-              <Text c="dimmed" size="sm">
-                No reviews yet.
-              </Text>
-            ) : (
-              <Stack gap="sm">
-                {reviews.map((r) => (
-                  <Card key={r.id} padding="sm">
-                    <Group justify="space-between" mb={4}>
-                      <Group gap="xs">
-                        <Text size="sm" fw={600}>
-                          {r.target}
-                        </Text>
-                        {r.stage ? (
-                          <Badge color="gray" size="sm">
-                            {r.stage}
-                          </Badge>
-                        ) : null}
-                      </Group>
-                      <Group gap="xs">
-                        {r.severity && r.severity !== 'none' ? (
-                          <Badge color={SEVERITY_COLORS[r.severity]} size="sm">
-                            {r.severity}
-                          </Badge>
-                        ) : null}
-                        <Badge color={r.approved ? 'green' : 'orange'}>
-                          {r.approved ? 'approved' : 'changes requested'}
-                        </Badge>
-                      </Group>
-                    </Group>
-                    <MarkdownContent content={r.notes} />
-                    <Text size="xs" c="dimmed" mt={4}>
-                      {formatTime(r.createdAt)}
-                    </Text>
-                  </Card>
-                ))}
-              </Stack>
-            )}
-          </Tabs.Panel>
-        )}
-
-        {!conversation && (
-          <Tabs.Panel value="metrics" pt="md">
-            <Stack gap="lg">
-              <SimpleGrid cols={{ base: 2, sm: 4 }}>
-                <DataCard
-                  label="Requests"
-                  value={String(usage.total.requests)}
-                />
-                <DataCard
-                  label="Cache read"
-                  value={usage.total.cacheReadInputTokens.toLocaleString()}
-                />
-                <DataCard
-                  label="Cache write"
-                  value={usage.total.cacheCreationInputTokens.toLocaleString()}
-                />
-                <DataCard label="Updated" value={formatTime(ws.updatedAt)} />
-              </SimpleGrid>
-              <div>
-                <Text fw={600} size="sm" mb={6}>
-                  By route
-                </Text>
-                <BreakdownTable
-                  label="Route"
-                  data={summarizeByRoute(data.runs)}
-                />
-              </div>
-              <div>
-                <Text fw={600} size="sm" mb={6}>
-                  By role
-                </Text>
-                <BreakdownTable label="Role" data={usage.byRole} />
-              </div>
-              <div>
-                <Text fw={600} size="sm" mb={6}>
-                  By task
-                </Text>
-                <BreakdownTable label="Task" data={usage.byTask} />
-              </div>
-            </Stack>
-          </Tabs.Panel>
-        )}
-
-        <Tabs.Panel value="trace" pt="md">
-          <WorkstreamTracePanel workstreamId={ws.id} />
-        </Tabs.Panel>
-
-        <Tabs.Panel value="artifacts" pt="md">
-          <WorkstreamArtifactsPanel workstreamId={ws.id} />
-        </Tabs.Panel>
-
-        {!conversation && (
-          <Tabs.Panel value="receipt" pt="md">
-            <WorkstreamReceiptPanel workstream={ws} />
-          </Tabs.Panel>
-        )}
-      </Tabs>
-
-      <Modal
-        opened={confirmRemove}
-        onClose={() => setConfirmRemove(false)}
-        title={<Text fw={600}>Remove working tree?</Text>}
-      >
-        <Stack gap="md">
-          <Text size="sm">
+        <Dialog.Popup>
+          <Dialog.Header>
+            <Dialog.Title>Remove working tree?</Dialog.Title>
+            <Dialog.Close />
+          </Dialog.Header>
+          <Dialog.Description>
             This checkout has uncommitted files or commits that are not on the
             base branch. Force removal discards uncommitted files. Commits stay
             on <Code>{`artificer/${ws.id}`}</Code>.
-          </Text>
-          <Group justify="flex-end">
-            <Button variant="default" onPress={() => setConfirmRemove(false)}>
+          </Dialog.Description>
+          <Dialog.Actions>
+            <Button appearance="subtle" onClick={() => setConfirmRemove(false)}>
               Cancel
             </Button>
             <Button
+              tone="danger"
+              appearance="filled"
               loading={removeWorktree.isPending}
-              onPress={() => remove(true)}
-              style={{ color: color.red }}
+              onClick={() => remove(true)}
             >
               Force remove
             </Button>
-          </Group>
-        </Stack>
-      </Modal>
+          </Dialog.Actions>
+        </Dialog.Popup>
+      </Dialog>
     </Stack>
   );
 }

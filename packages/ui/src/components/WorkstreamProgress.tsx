@@ -1,4 +1,5 @@
-import { Badge, type BadgeColor, Group } from '../ds';
+import type { Tone } from '@var-ui/core';
+import { Badge, HStack } from '@var-ui/react';
 import type {
   RetryCounter,
   WorkstreamProgress as Progress,
@@ -16,7 +17,7 @@ const LABELS: Record<keyof Progress, string> = {
 
 /**
  * Counters whose cap is a structurally benign transition, never a cause of
- * `blocked`, so they should never escalate to orange/red — the count is
+ * `blocked`, so they should never escalate to warning/danger — the count is
  * still shown, just never alarm-colored:
  *  - workerRunsSinceReview hitting MAX_WORKER_RUNS_BEFORE_REVIEW just
  *    dispatches a reviewer (workstream-machine.ts:198-204).
@@ -42,24 +43,24 @@ const LIVE_RISK_STATUSES = new Set<WorkstreamStatus>([
   'paused_quota',
 ]);
 
-function escalate(c: RetryCounter): BadgeColor {
-  if (c.max <= 0) return 'gray';
-  if (c.count >= c.max) return 'red';
-  if (c.count >= c.max - 1) return 'orange';
-  return 'gray';
+function escalate(c: RetryCounter): Tone {
+  if (c.max <= 0) return 'neutral';
+  if (c.count >= c.max) return 'danger';
+  if (c.count >= c.max - 1) return 'warning';
+  return 'neutral';
 }
 
 function counterColor(
   key: keyof Progress,
   c: RetryCounter,
   status: WorkstreamStatus,
-): BadgeColor {
+): Tone {
   // Structurally benign counters never alarm, regardless of status.
-  if (NEVER_ALARM.has(key)) return 'gray';
+  if (NEVER_ALARM.has(key)) return 'neutral';
 
   // done/cancelled: nothing is wrong — the counters are historical record,
   // not a live risk signal, so never alarm-color them.
-  if (status === 'done' || status === 'cancelled') return 'gray';
+  if (status === 'done' || status === 'cancelled') return 'neutral';
 
   // Live in-progress statuses (a cap could still lead to blocked) and
   // blocked/failed (the color explains why it stopped) both escalate.
@@ -70,7 +71,7 @@ function counterColor(
   ) {
     return escalate(c);
   }
-  return 'gray';
+  return 'neutral';
 }
 
 /**
@@ -93,15 +94,15 @@ export function WorkstreamProgress({
   if (visible.length === 0) return null;
 
   return (
-    <Group gap="xs" wrap="wrap">
+    <HStack gap="xs" wrap>
       {visible.map((key) => {
         const c = progress[key];
         return (
-          <Badge key={key} color={counterColor(key, c, status)} variant="light">
+          <Badge key={key} tone={counterColor(key, c, status)}>
             {LABELS[key]}: {c.count} of {c.max}
           </Badge>
         );
       })}
-    </Group>
+    </HStack>
   );
 }

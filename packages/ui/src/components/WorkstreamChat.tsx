@@ -6,34 +6,33 @@ import type { Message, RunRecord, WorkstreamStatus } from '../api/types';
 import {
   Button,
   Card,
-  Group,
-  Loader,
-  Paper,
-  ScrollArea,
+  ChatLayout,
+  ChatMessage,
+  ChatMessageBubble,
+  ChatMessageList,
+  HStack,
+  Spinner,
   Stack,
   Text,
-  Textarea,
-  color,
-} from '../ds';
+  TextAreaField,
+} from '@var-ui/react';
 import { formatTime } from '../format';
+import { userBubble } from '../styles/chat';
 import { MarkdownContent } from './MarkdownContent';
+import { chatLayout } from './Workstream.styles';
 
 function Bubble({ message }: { message: Message }) {
   const inbound = message.direction === 'inbound';
   return (
-    <Group justify={inbound ? 'flex-end' : 'flex-start'} align="flex-start">
-      <Paper p="sm" maw="80%" bg={inbound ? color.blueLight : color.surface}>
-        <Group justify="space-between" gap="xs" mb={4}>
-          <Text size="xs" c="dimmed" fw={600}>
-            {inbound ? 'You' : 'Agent'}
-          </Text>
-          <Text size="xs" c="dimmed">
-            {formatTime(message.createdAt)}
-          </Text>
-        </Group>
+    <ChatMessage
+      sender={inbound ? 'user' : 'assistant'}
+      name={inbound ? 'You' : 'Agent'}
+      metadata={formatTime(message.createdAt)}
+    >
+      <ChatMessageBubble className={inbound ? userBubble : undefined}>
         <MarkdownContent content={message.content} />
-      </Paper>
-    </Group>
+      </ChatMessageBubble>
+    </ChatMessage>
   );
 }
 
@@ -78,54 +77,65 @@ export function WorkstreamChat({
   };
 
   return (
-    <Card padding="md">
-      <ScrollArea.Autosize mah="calc(100vh - 320px)" mb="md">
-        <Stack gap="sm">
-          {messages.isLoading && <Loader size="sm" />}
-          {messages.data?.length === 0 && (
-            <Text c="dimmed" size="sm">
-              No messages yet.
-            </Text>
-          )}
-          {messages.data?.map((message) => (
-            <Bubble key={message.id} message={message} />
-          ))}
-        </Stack>
-      </ScrollArea.Autosize>
-      <Textarea
-        placeholder="Message the agent…"
-        autosize
-        minRows={2}
-        maxRows={6}
-        value={content}
-        isDisabled={disabled}
-        onChange={(event) => setContent(event.currentTarget.value)}
-        onKeyDown={(event) => {
-          if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
-            submit();
-          }
-        }}
-      />
-      {error && (
-        <Text size="sm" c="red" mt="xs">
-          {error}
-        </Text>
-      )}
-      <Group justify="space-between" mt="xs">
-        <Text size="xs" c="dimmed">
-          {workerBusy
-            ? 'The agent is still working on the previous message'
-            : '⌘/Ctrl + Enter to send'}
-        </Text>
-        <Button
-          leftSection={<IconSend size={16} />}
-          onPress={submit}
-          loading={post.isPending}
-          isDisabled={disabled || !content.trim()}
-        >
-          Send
-        </Button>
-      </Group>
+    <Card>
+      <ChatLayout
+        className={chatLayout}
+        composer={
+          <Stack gap="xs">
+            <TextAreaField
+              aria-label="Message the agent"
+              placeholder="Message the agent…"
+              rows={2}
+              value={content}
+              disabled={disabled}
+              onValueChange={setContent}
+              onKeyDown={(event) => {
+                if ((event.metaKey || event.ctrlKey) && event.key === 'Enter') {
+                  submit();
+                }
+              }}
+            />
+            {error && (
+              <Text size="sm" tone="danger">
+                {error}
+              </Text>
+            )}
+            <HStack justify="between">
+              <Text size="xs" tone="secondary">
+                {workerBusy
+                  ? 'The agent is still working on the previous message'
+                  : '⌘/Ctrl + Enter to send'}
+              </Text>
+              <Button
+                tone="accent"
+                appearance="filled"
+                onClick={submit}
+                loading={post.isPending}
+                disabled={disabled || !content.trim()}
+              >
+                <IconSend size={16} />
+                Send
+              </Button>
+            </HStack>
+          </Stack>
+        }
+      >
+        {messages.isLoading ? (
+          <Spinner size="sm" label="Loading messages" />
+        ) : (
+          <ChatMessageList
+            emptyState={
+              <Text tone="secondary" size="sm">
+                No messages yet.
+              </Text>
+            }
+          >
+            {messages.data?.map((message) => (
+              <Bubble key={message.id} message={message} />
+            ))}
+          </ChatMessageList>
+        )}
+      </ChatLayout>
     </Card>
   );
 }
