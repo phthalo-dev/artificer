@@ -477,3 +477,24 @@ test('reviewer edits are rejected', async (t) => {
   const res = permissionResponse(await records());
   assert.equal(res?.permissionResponse.outcome.optionId, 'r1');
 });
+
+test('large tool title and rawInput are bounded', async (t) => {
+  const { calls } = await runTools(t, [
+    {
+      type: 'tool',
+      id: 't1',
+      title: 'T'.repeat(100_000),
+      kind: 'read',
+      rawInput: { data: 'R'.repeat(100_000) },
+      output: 'ok',
+    },
+  ]);
+  const input = calls[0].input as { title: string; rawInput: string };
+  const cap = 8192 + '…[truncated]'.length;
+  // Each of title and rawInput is capped at 8 KiB plus the suffix.
+  assert.ok(input.title.length <= cap);
+  assert.ok(input.title.endsWith('…[truncated]'));
+  assert.equal(typeof input.rawInput, 'string');
+  assert.ok(input.rawInput.length <= cap);
+  assert.ok(JSON.stringify(input).length <= 2 * cap + 100);
+});
