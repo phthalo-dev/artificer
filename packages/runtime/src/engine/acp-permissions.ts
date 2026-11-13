@@ -64,6 +64,12 @@ export interface TrackedPermissionFields {
   kind?: ToolKind | null;
   rawInput?: unknown;
   locations?: ToolCallLocation[] | null;
+  /** `_meta` of the agent's tool_call / tool_call_update notifications. */
+  _meta?: Record<string, unknown> | null;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
 }
 
 function isEmpty(value: unknown): boolean {
@@ -77,8 +83,11 @@ function isEmpty(value: unknown): boolean {
  * Merge the tool call tracked under the request's toolCallId into the
  * request. Agents such as Codex send detail-free permission requests and put
  * the title, kind and input on the earlier tool_call update. A field is
- * copied only when the request's own field is missing, null or empty; the
- * request's top-level `_meta` passes through unchanged.
+ * copied only when the request's own field is missing, null or empty. When
+ * both rawInputs are objects they are shallow-merged, request keys winning,
+ * so a request that omits `command` is still judged on the tracked one. The
+ * tracked `_meta` is merged under the request's `toolCall._meta` (request
+ * keys winning); the request's top-level `_meta` passes through unchanged.
  */
 export function fillPermissionRequest(
   req: RequestPermissionRequest,
@@ -92,11 +101,19 @@ export function fillPermissionRequest(
   if (isEmpty(toolCall.kind) && !isEmpty(tracked.kind)) {
     toolCall.kind = tracked.kind;
   }
-  if (isEmpty(toolCall.rawInput) && !isEmpty(tracked.rawInput)) {
+  if (isPlainObject(toolCall.rawInput) && isPlainObject(tracked.rawInput)) {
+    toolCall.rawInput = { ...tracked.rawInput, ...toolCall.rawInput };
+  } else if (isEmpty(toolCall.rawInput) && !isEmpty(tracked.rawInput)) {
     toolCall.rawInput = tracked.rawInput;
   }
   if (isEmpty(toolCall.locations) && !isEmpty(tracked.locations)) {
     toolCall.locations = tracked.locations;
+  }
+  if (isPlainObject(tracked._meta)) {
+    toolCall._meta = {
+      ...tracked._meta,
+      ...(isPlainObject(toolCall._meta) ? toolCall._meta : {}),
+    };
   }
   return { ...req, toolCall };
 }
@@ -125,6 +142,25 @@ function decideMcp(
   const name = `mcp:${approvalKey}`;
   if (server === STATUS_SERVER) return allow(req, { tool: name, approvalKey });
   return gated(req, ctx, name, approvalKey);
+}
+
+/**
+ * An MCP approval is identified only by the adapter's explicit flag: the
+ * request's `_meta.is_mcp_tool_approval` or the tracked tool call's
+ * `_meta.is_mcp_tool_call`. A request that carries a shell command or is a
+ * write kind is never classified as MCP, so it keeps its normal checks.
+ */
+function isMcpApproval(req: RequestPermissionRequest, kind: ToolKind): boolean {
+  const call = req.toolCall;
+  const flagged =
+    req._meta?.is_mcp_tool_approval === true ||
+    call._meta?.is_mcp_tool_call === true;
+  if (!flagged || WRITE_KINDS.has(kind)) return false;
+  const command = asRecord(call.rawInput).command;
+  return !(
+    (typeof command === 'string' && command.length > 0) ||
+    (Array.isArray(command) && command.length > 0)
+  );
 }
 
 function commandOf(rawInput: unknown, title: string | null | undefined) {
@@ -202,12 +238,7 @@ export function decidePermission(
   }
 
   const input = asRecord(call.rawInput);
-  if (
-    req._meta?.is_mcp_tool_approval === true ||
-    (typeof input.server === 'string' && typeof input.tool === 'string')
-  ) {
-    return decideMcp(req, ctx, input);
-  }
+  if (isMcpApproval(req, kind)) return decideMcp(req, ctx, input);
 
   if (kind === 'execute') {
     const command = commandOf(call.rawInput, call.title);

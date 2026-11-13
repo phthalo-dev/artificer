@@ -296,6 +296,19 @@ describe('fillPermissionRequest', () => {
     assert.deepEqual(located.toolCall.locations, [{ path: 'a.txt' }]);
   });
 
+  it('shallow-merges object rawInput so a tracked command is used', () => {
+    const filled = fillPermissionRequest(req('execute', { cwd: '/ws' }), {
+      rawInput: { command: 'rm -rf build', cwd: '/other' },
+    });
+    assert.deepEqual(filled.toolCall.rawInput, {
+      command: 'rm -rf build',
+      cwd: '/ws',
+    });
+    const o = decidePermission(filled, ctx());
+    assert.equal(o.decision, 'deny');
+    assert.equal(o.proposedRule?.pattern, shellApprovalKey('rm -rf build'));
+  });
+
   it('keeps the request when nothing is tracked and passes _meta through', () => {
     const r: RequestPermissionRequest = {
       ...req('execute', { command: 'ls' }),
@@ -368,12 +381,86 @@ describe('MCP approvals', () => {
     assert.equal(optionOf(o), 'cancel');
   });
 
-  it('server/tool rawInput without meta flag is an MCP approval', () => {
+  it('server/tool rawInput without a flag is not an MCP approval', () => {
     const o = decidePermission(
-      req('execute', { server: 'evil', tool: 'exfil' }),
+      req('execute', { server: 'artificer-status', tool: 'report_status' }),
       ctx(),
     );
-    assert.equal(o.tool, 'mcp:evil.exfil');
+    assert.equal(o.tool, 'run_shell');
     assert.equal(o.decision, 'deny');
+    assert.equal(o.reason, 'no command to evaluate');
+
+    const other = decidePermission(
+      req('other', { server: 'evil', tool: 'exfil' }),
+      ctx(),
+    );
+    assert.equal(other.tool, 'acp:other');
+  });
+
+  it('unflagged execute with server/tool and a command is judged as shell', () => {
+    const o = decidePermission(
+      req('execute', {
+        command: 'rm -rf build',
+        server: 'artificer-status',
+        tool: 'x',
+      }),
+      ctx(),
+    );
+    assert.equal(o.tool, 'run_shell');
+    assert.equal(o.decision, 'deny');
+    assert.equal(o.proposedRule?.pattern, shellApprovalKey('rm -rf build'));
+  });
+
+  it('flagged request with a command is judged as shell', () => {
+    const o = decidePermission(
+      {
+        ...req('execute', {
+          command: 'rm -rf build',
+          server: 'artificer-status',
+          tool: 'x',
+        }),
+        _meta: { is_mcp_tool_approval: true },
+      },
+      ctx(),
+    );
+    assert.equal(o.tool, 'run_shell');
+    assert.equal(o.decision, 'deny');
+    assert.equal(o.proposedRule?.pattern, shellApprovalKey('rm -rf build'));
+  });
+
+  it('edit with server/tool rawInput is path-checked', () => {
+    const o = decidePermission(
+      {
+        ...req(
+          'edit',
+          { server: 'artificer-status', tool: 'report_status' },
+          DEFAULT_OPTIONS,
+          ['/etc/passwd'],
+        ),
+        _meta: { is_mcp_tool_approval: true },
+      },
+      ctx(),
+    );
+    assert.equal(o.tool, 'write_file');
+    assert.equal(o.decision, 'deny');
+    assert.match(o.reason ?? '', /path outside workspace/);
+  });
+
+  it('tracked is_mcp_tool_call flag alone marks MCP approval', () => {
+    const tracked = fixture.mcpToolCallUpdate.update;
+    const { _meta: _drop, ...unflagged } =
+      fixture.mcpPermissionRequest as RequestPermissionRequest;
+    const filled = fillPermissionRequest(unflagged, {
+      title: tracked.title,
+      kind: tracked.kind as ToolKind,
+      rawInput: tracked.rawInput,
+      _meta: tracked._meta,
+    });
+    assert.equal(filled._meta, undefined);
+    assert.equal(filled.toolCall._meta?.is_mcp_tool_call, true);
+    const o = decidePermission(filled, ctx());
+    assert.equal(o.decision, 'allow');
+    assert.equal(o.tool, 'mcp:artificer-status.report_status');
+    assert.equal(optionOf(o), 'allow_once');
   });
 });

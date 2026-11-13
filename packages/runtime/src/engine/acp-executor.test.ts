@@ -674,6 +674,33 @@ test('MCP approval is filled from tracked tool call and allowed', async (t) => {
   });
 });
 
+test('tracked is_mcp_tool_call flag alone allows artificer-status', async (t) => {
+  const { calls } = await runTools(t, [
+    {
+      type: 'tool',
+      id: 'exec-mcp',
+      title: 'mcp.artificer-status.report_status',
+      kind: 'execute',
+      rawInput: { server: 'artificer-status', tool: 'report_status' },
+      toolCallMeta: { is_mcp_tool_call: true },
+      askPermission: true,
+      options: GATE_OPTIONS,
+      permissionToolCall: {
+        toolCallId: 'exec-mcp',
+        kind: 'execute',
+        status: 'pending',
+      },
+      output: 'ok',
+    },
+  ]);
+  const perm = calls.find((c) => c.name === 'acp:permission');
+  assert.equal(perm?.output, 'allow');
+  assert.equal(
+    (perm?.input as { tool: string }).tool,
+    'mcp:artificer-status.report_status',
+  );
+});
+
 test('without onToolCall the permission decision is emitted live', async (t) => {
   const events: RuntimeEvent[] = [];
   const { promise } = await run(

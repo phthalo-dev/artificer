@@ -126,6 +126,7 @@ interface TrackedToolCall {
   status?: ToolCallStatus | null;
   rawInput?: unknown;
   locations?: ToolCallLocation[] | null;
+  _meta?: Record<string, unknown> | null;
   output: string;
   reported: boolean;
 }
@@ -396,6 +397,7 @@ export class AcpExecutor implements WorkerExecutor {
           rawInput?: unknown;
           locations?: ToolCallLocation[] | null;
           content?: ToolCallContent[] | null;
+          _meta?: Record<string, unknown> | null;
         },
       ) => {
         const call = toolCalls.get(id) ?? { output: '', reported: false };
@@ -405,6 +407,9 @@ export class AcpExecutor implements WorkerExecutor {
         if (patch.status != null) call.status = patch.status;
         if (patch.rawInput !== undefined) call.rawInput = patch.rawInput;
         if (patch.locations != null) call.locations = patch.locations;
+        if (patch._meta != null) {
+          call._meta = { ...(call._meta ?? {}), ...patch._meta };
+        }
         if (patch.content) {
           const out = contentText(patch.content);
           if (out) call.output = out;
