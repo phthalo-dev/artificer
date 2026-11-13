@@ -107,7 +107,7 @@ function gated(
   return deny(req, {
     tool,
     approvalKey,
-    proposedRule: d.proposedRule,
+    proposedRule: d.kind === 'approval_required' ? d.proposedRule : undefined,
     ruleId: d.kind === 'approval_denied' ? d.rule.id : undefined,
   });
 }

@@ -91,6 +91,35 @@ describe('decidePermission', () => {
     assert.equal(o.ruleId, 'rule1');
   });
 
+  it('explicit deny rule rejects without proposedRule', () => {
+    const policy: ToolPolicyFile = {
+      version: 1,
+      rules: [
+        {
+          id: 'deny1',
+          tool: 'run_shell',
+          pattern: shellApprovalKey('rm -rf build'),
+          effect: 'deny',
+          scope: 'agent',
+          createdAt: '2026-01-01T00:00:00Z',
+        },
+      ],
+    };
+    const o = decidePermission(
+      req('execute', { command: 'rm -rf build' }),
+      ctx({ policy }),
+    );
+    assert.equal(o.decision, 'deny');
+    assert.equal(selected(o), 'r1');
+    assert.equal(o.ruleId, 'deny1');
+    assert.equal(o.proposedRule, undefined);
+  });
+
+  it('write kind with no locations is allowed for worker', () => {
+    const o = decidePermission(req('edit', {}), ctx());
+    assert.equal(o.decision, 'allow');
+  });
+
   it('argv rawInput is joined', () => {
     const o = decidePermission(
       req('execute', { command: ['git', 'push', 'origin', 'x'] }),
