@@ -22,9 +22,9 @@ OpenCode is the one certified preset (verified against OpenCode **2.0.32**).
 }
 ```
 
-- `agent` selects the preset (it launches `opencode acp`). It is mutually exclusive with `command`.
+- `agent` selects the preset (it launches `opencode acp`). It is mutually exclusive with `command`, and `args` cannot be set with it: a certified preset keeps its verified launch line.
 - `model` is optional. Artificer selects it through ACP's `session/set_config_option`. If the agent has no model option, or doesn't offer the model you named, the run fails with the available values **before** the prompt is sent, so no tokens are spent on the wrong model.
-- `env` adds environment variables for the agent process.
+- `env` adds environment variables for the agent process. `OPENCODE_CONFIG_CONTENT`, if set, must be valid JSON; the API rejects the executor otherwise.
 - Sessions resume across turns (`session/resume`), so conversations keep context.
 - The quota account is `acp:opencode`, and the agent's reported token usage is recorded.
 
@@ -36,7 +36,14 @@ By default OpenCode does not ask before running commands: it ran `rm -rf build` 
 {"permission":{"bash":"ask","edit":"ask","webfetch":"ask","external_directory":"ask"}}
 ```
 
-This overrides a repo's own `opencode.json`. If you set your own `OPENCODE_CONFIG_CONTENT`, it is merged, but the preset's `permission` block always wins, so you cannot loosen it there.
+If you set your own `OPENCODE_CONFIG_CONTENT`, it is merged, but the preset's `permission` block always wins, so you cannot loosen it there.
+
+The inline config overrides a repo's **top-level** `permission` block, but not **agent-level** permissions: an `agent.<name>.permission` block in the repo's `opencode.json`, or `permission:` frontmatter in `.opencode/agent/*.md`, is applied after the top-level rules and wins. A repo with `{"agent":{"build":{"permission":{"bash":"allow"}}}}` made OpenCode run shell commands without asking. Because workers may write inside the workspace, a prompt-injected worker could write such a file and run ungated on the next turn. The preset therefore also sets `OPENCODE_DISABLE_PROJECT_CONFIG=1` (after your `env`, so it cannot be turned off), which was verified live to restore permission requests in both cases.
+
+Consequences and limits:
+
+- OpenCode ignores the repo's own `opencode.json` and `.opencode/` config for Artificer runs. Put settings you need into `executor.env.OPENCODE_CONFIG_CONTENT` instead.
+- Your own global OpenCode config (`~/.config/opencode`) and any `OPENCODE_CONFIG` or `OPENCODE_CONFIG_DIR` in the environment Artificer runs in are outside Artificer's control, and agent-level permissions there can loosen enforcement. Keep them free of `allow` rules for the agent OpenCode uses.
 
 With that config OpenCode sends a `session/request_permission` for shell commands and writes (including writes outside the workspace); this was verified in recordings. Web fetch and `external_directory` are also configured to `ask`, but those were not exercised. Artificer decides each request as follows, and records every decision as an `acp:permission` tool call. Requests that arrive while Artificer is cancelling are answered `cancelled`.
 
@@ -66,11 +73,11 @@ Any other ACP agent can be run with `command` and `args`:
 { "executor": { "type": "acp", "command": "my-agent", "args": ["--acp"] } }
 ```
 
-Custom commands are **not policy-gated** unless the agent itself sends `session/request_permission`; Artificer cannot force it to ask. The quota account is `acp:<basename(command)>`.
+Custom commands are **not policy-gated** unless the agent itself sends `session/request_permission`; Artificer cannot force it to ask. The quota account is `acp:<basename(command)>`, or `acp:custom:<basename>` when the basename equals a preset id, so running `command: "opencode"` yourself is never recorded as the certified preset (and gets none of its enforcement).
 
 ## Live smoke test
 
-`packages/runtime/src/engine/acp-opencode.live.test.ts` runs the preset against a real OpenCode and checks that `rm -rf build` is denied while status is still reported. It is skipped unless you opt in (it spends a small model call):
+`packages/runtime/src/engine/acp-opencode.live.test.ts` runs the preset against a real OpenCode and checks that `rm -rf build` is denied through a permission request, `build/out.txt` still exists afterwards, and status is still reported. A second case repeats this in a repo whose `opencode.json` sets an agent-level `allow`, to check that project config cannot bypass the ask block. Both are skipped unless you opt in (they spend a few small model calls):
 
 ```bash
 ARTIFICER_ACP_LIVE=opencode pnpm --filter @artificer-ai/runtime test
