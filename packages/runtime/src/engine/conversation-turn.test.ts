@@ -2,7 +2,9 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { test } from 'node:test';
+import { AcpExecutor } from './acp-executor.js';
 import { runConversationTurn } from './conversation-turn.js';
 import type { WorkerExecutor } from './executor.js';
 import { executorStateDir } from './executor-files.js';
@@ -152,4 +154,50 @@ test('artifacts are ingested after a failed resume and its retry', async () => {
   } finally {
     await fs.rm(repoPath, { recursive: true, force: true });
   }
+});
+
+test('acp executor without resume falls back to transcript', async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-acp-turn-'));
+  const repo = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-acp-ws-'));
+  t.after(async () => {
+    await fs.rm(dir, { recursive: true, force: true });
+    await fs.rm(repo, { recursive: true, force: true });
+  });
+  const recordFile = path.join(dir, 'record.jsonl');
+  const scenarioPath = path.join(dir, 'scenario.json');
+  await fs.writeFile(
+    scenarioPath,
+    JSON.stringify({
+      recordFile,
+      steps: [{ type: 'message', text: 'fresh' }],
+    }),
+  );
+  const fake = path.join(
+    path.dirname(fileURLToPath(import.meta.url)),
+    '__fixtures__',
+    'fake-acp-agent.mjs',
+  );
+  const executor = new AcpExecutor({
+    type: 'acp',
+    command: process.execPath,
+    args: [fake, scenarioPath],
+    resumes: true,
+  });
+  const result = await runConversationTurn({
+    workstream: { id: 'ws-1', goal: 'g', agentSessionId: 'old-session' },
+    repoPath: repo,
+    content: 'hello',
+    prior: [{ direction: 'inbound', content: 'earlier' }],
+    executor,
+    runBuiltin: async () => 'nope',
+  });
+  assert.equal(result.text, 'fresh');
+  assert.equal(result.clearedSession, true);
+  const records = (await fs.readFile(recordFile, 'utf-8'))
+    .split('\n')
+    .filter(Boolean)
+    .map((l) => JSON.parse(l));
+  const prompts = records.filter((r) => r.method === 'session/prompt');
+  assert.equal(prompts.length, 1);
+  assert.ok(prompts[0].params.prompt[0].text.includes('[User]: earlier'));
 });

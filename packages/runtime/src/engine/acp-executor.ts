@@ -14,6 +14,7 @@ import {
   type AgentRequestResponsesByMethod,
   type AuthMethod,
   type ClientContext,
+  type SessionModeState,
   type StopReason,
   type ToolCallContent,
   type ToolKind,
@@ -176,6 +177,7 @@ export class AcpExecutor implements WorkerExecutor {
     context,
     workspaceDir,
     run,
+    sessionId: resumeId,
     signal,
     policy,
     onToolCall,
@@ -427,33 +429,62 @@ export class AcpExecutor implements WorkerExecutor {
         });
         const authMethods: AuthMethod[] = init.authMethods ?? [];
 
-        let created;
-        try {
-          created = await ctx.request(methods.agent.session.new, {
-            cwd: workspaceDir,
-            mcpServers: [
-              {
-                name: 'artificer-status',
-                command: process.execPath,
-                args: [this.mcpServerPath, statusFile],
-                env: [],
-              },
-            ],
-          });
-        } catch (err) {
-          if (
-            err instanceof RequestError &&
-            authMethods.length > 0 &&
-            (/auth/i.test(err.message) || err.code === -32000)
-          ) {
-            throw new AcpRunError(
-              `${name} is not signed in on this host: ${authMethods
-                .map((m) => m.name)
-                .join(', ')}`,
-            );
+        const mcpServers = [
+          {
+            name: 'artificer-status',
+            command: process.execPath,
+            args: [this.mcpServerPath, statusFile],
+            env: [],
+          },
+        ];
+        let created: { modes?: SessionModeState | null; sessionId: string };
+        if (resumeId) {
+          const caps = init.agentCapabilities;
+          const canResume = Boolean(caps?.sessionCapabilities?.resume);
+          const method = canResume
+            ? methods.agent.session.resume
+            : methods.agent.session.load;
+          const notFound = new AcpRunError(`session not found: ${resumeId}`);
+          if (!canResume && !caps?.loadSession) throw notFound;
+          try {
+            // activeSessionId stays unset until the response arrives, so any
+            // history replayed during session/load is discarded.
+            const params = {
+              sessionId: resumeId,
+              cwd: workspaceDir,
+              mcpServers,
+            };
+            const resumed = canResume
+              ? await ctx.request(methods.agent.session.resume, params)
+              : await ctx.request(methods.agent.session.load, params);
+            created = {
+              sessionId: resumeId,
+              modes: (resumed as { modes?: SessionModeState | null }).modes,
+            };
+          } catch (err) {
+            if (err instanceof RequestError) throw notFound;
+            throw this.wrap(method, err);
           }
-          throw this.wrap(methods.agent.session.new, err);
-        }
+        } else
+          try {
+            created = await ctx.request(methods.agent.session.new, {
+              cwd: workspaceDir,
+              mcpServers,
+            });
+          } catch (err) {
+            if (
+              err instanceof RequestError &&
+              authMethods.length > 0 &&
+              (/auth/i.test(err.message) || err.code === -32000)
+            ) {
+              throw new AcpRunError(
+                `${name} is not signed in on this host: ${authMethods
+                  .map((m) => m.name)
+                  .join(', ')}`,
+              );
+            }
+            throw this.wrap(methods.agent.session.new, err);
+          }
         const sessionId = created.sessionId;
         activeSessionId = sessionId;
 
