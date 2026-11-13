@@ -59,7 +59,7 @@ export type ExecutorConfig =
     }
   | AcpExecutorConfig;
 
-export type AcpPresetId = 'opencode';
+export type AcpPresetId = 'opencode' | 'codex';
 
 export interface AcpExecutorConfig {
   type: 'acp';

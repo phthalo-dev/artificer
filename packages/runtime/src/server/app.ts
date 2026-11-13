@@ -107,7 +107,7 @@ const executorSchema = z.union([
   z
     .object({
       type: z.literal('acp'),
-      agent: z.enum(['opencode']).optional(),
+      agent: z.enum(['opencode', 'codex']).optional(),
       command: z.string().min(1).optional(),
       args: z.array(z.string()).optional(),
       model: z.string().min(1).optional(),

@@ -188,7 +188,9 @@ export class Engine implements EngineApi {
     this.registry = registry ?? new RoleRegistry();
     this.serviceManager = new ServiceManager(store, config);
     this.customRegistry = customRegistry;
-    this.executor = buildExecutor(config.executor);
+    this.executor = buildExecutor(config.executor, {
+      stateDir: path.join(store.layout.root, 'acp'),
+    });
     this.reinitializeQuota();
     if (this.quotaLedger) {
       this.scheduleQuotaTick();
@@ -388,7 +390,10 @@ export class Engine implements EngineApi {
       this.quotaLedger,
       quotaConfig.routes ?? [],
       process.env,
-      buildExecutor,
+      (e) =>
+        buildExecutor(e, {
+          stateDir: path.join(this.store.layout.root, 'acp'),
+        }),
     );
   }
 
@@ -1379,7 +1384,9 @@ export class Engine implements EngineApi {
         repoPath,
         content: run.task,
         prior,
-        executor: buildExecutor(workstream.executor),
+        executor: buildExecutor(workstream.executor, {
+          stateDir: path.join(this.store.layout.root, 'acp'),
+        }),
         signal: controller.signal,
         run,
         policy,
@@ -2053,6 +2060,7 @@ export class Engine implements EngineApi {
 
 function buildExecutor(
   config: RuntimeConfig['executor'],
+  ctx?: { stateDir?: string },
 ): WorkerExecutor | undefined {
   if (!config || config === 'llm') return undefined;
   if (config === 'cursor-agent') return new CursorAgentExecutor();
@@ -2064,6 +2072,6 @@ function buildExecutor(
     return new ClaudeCodeExecutor(config.model);
   if (config.type === 'opencode') return new OpencodeExecutor(config.model);
   if (config.type === 'cli') return new CliExecutor(config);
-  if (config.type === 'acp') return new AcpExecutor(config);
+  if (config.type === 'acp') return new AcpExecutor(config, ctx);
   return undefined;
 }

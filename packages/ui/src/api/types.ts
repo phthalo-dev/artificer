@@ -72,7 +72,7 @@ export type ExecutorConfig =
     }
   | {
       type: 'acp';
-      agent?: 'opencode';
+      agent?: 'opencode' | 'codex';
       command?: string;
       args?: string[];
       model?: string;

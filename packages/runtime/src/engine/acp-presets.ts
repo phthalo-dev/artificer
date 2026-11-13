@@ -1,3 +1,4 @@
+import os from 'node:os';
 import path from 'node:path';
 import type { AcpExecutorConfig, AcpPresetId } from '../api/types.js';
 
@@ -22,6 +23,16 @@ export const ACP_PRESETS: Record<AcpPresetId, AcpPreset> = {
     permissionEnforcement: 'acp-requests',
     certified: true,
     verifiedVersion: '2.0.32',
+  },
+  codex: {
+    id: 'codex',
+    label: 'Codex',
+    command: 'npx',
+    args: ['-y', '@agentclientprotocol/codex-acp@2.6.0'],
+    resumes: true,
+    permissionEnforcement: 'acp-requests',
+    certified: true,
+    verifiedVersion: '2.6.0',
   },
 };
 
@@ -72,7 +83,33 @@ function opencodeEnv(
   };
 }
 
-export function resolveAcpLaunch(config: AcpExecutorConfig): AcpLaunch {
+function codexEnv(
+  userEnv: Record<string, string> | undefined,
+  stateDir: string,
+): Record<string, string> {
+  const has = (k: string): boolean => Boolean(userEnv?.[k] || process.env[k]);
+  if (!has('CODEX_API_KEY') && !has('OPENAI_API_KEY')) {
+    throw new Error(
+      'acp:codex: set CODEX_API_KEY or OPENAI_API_KEY (Codex runs with API-key auth only)',
+    );
+  }
+  // Forced after the user env. An Artificer-owned CODEX_HOME keeps the adapter
+  // off a human's ~/.codex ChatGPT login; read-only mode avoids its
+  // auto-approve default. The directory is created by AcpExecutor, not here,
+  // so validation paths stay free of filesystem side effects.
+  return {
+    ...userEnv,
+    NO_BROWSER: '1',
+    INITIAL_AGENT_MODE: 'read-only',
+    DEFAULT_AUTH_REQUEST: '{"methodId":"api-key"}',
+    CODEX_HOME: path.join(stateDir, 'codex-home'),
+  };
+}
+
+export function resolveAcpLaunch(
+  config: AcpExecutorConfig,
+  ctx?: { stateDir?: string },
+): AcpLaunch {
   if (config.agent && config.command) {
     throw new Error('acp executor: set either agent or command, not both');
   }
@@ -88,7 +125,13 @@ export function resolveAcpLaunch(config: AcpExecutorConfig): AcpLaunch {
       name: `acp:${preset.id}`,
       command: preset.command,
       args: preset.args,
-      env: opencodeEnv(config.env),
+      env:
+        preset.id === 'codex'
+          ? codexEnv(
+              config.env,
+              ctx?.stateDir ?? path.join(os.homedir(), '.artificer', 'acp'),
+            )
+          : opencodeEnv(config.env),
       resumes: config.resumes ?? preset.resumes,
       permissionEnforcement: preset.permissionEnforcement,
     };

@@ -216,9 +216,17 @@ export class AcpExecutor implements WorkerExecutor {
 
   constructor(
     private readonly config: AcpExecutorConfig,
-    opts: { mcpServerPath?: string; cancelGraceMs?: number } = {},
+    opts: {
+      mcpServerPath?: string;
+      cancelGraceMs?: number;
+      stateDir?: string;
+    } = {},
   ) {
-    this.launch = resolveAcpLaunch(config);
+    this.launch = resolveAcpLaunch(config, { stateDir: opts.stateDir });
+    const codexHome = this.launch.env.CODEX_HOME;
+    if (config.agent === 'codex' && codexHome) {
+      fs.mkdirSync(codexHome, { recursive: true, mode: 0o700 });
+    }
     this.name = this.launch.name;
     this.resumesSession = this.launch.resumes;
     this.mcpServerPath = opts.mcpServerPath ?? MCP_SERVER;

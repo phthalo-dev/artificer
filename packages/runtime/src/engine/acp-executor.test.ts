@@ -1049,3 +1049,17 @@ test('a resume or load JSON-RPC error gives a stale-session error', async (t) =>
   );
   await assert.rejects(promise, /^Error: session not found: s9$/);
 });
+
+test('codex executor creates its CODEX_HOME with mode 0700', async (t) => {
+  const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'acp-codex-home-'));
+  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  const stateDir = path.join(dir, 'acp');
+  const ex = new AcpExecutor(
+    { type: 'acp', agent: 'codex', env: { CODEX_API_KEY: 'k' } },
+    { stateDir },
+  );
+  assert.equal(ex.name, 'acp:codex');
+  const st = await fs.stat(path.join(stateDir, 'codex-home'));
+  assert.ok(st.isDirectory());
+  assert.equal(st.mode & 0o777, 0o700);
+});

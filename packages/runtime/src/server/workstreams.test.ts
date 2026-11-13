@@ -882,9 +882,51 @@ test('GET /api/executors lists built-ins then certified presets', async () => {
   };
   assert.deepEqual(
     body.executors.map((e) => e.id),
-    ['instance', 'llm', 'claude-code', 'cursor-agent', 'acp:opencode'],
+    [
+      'instance',
+      'llm',
+      'claude-code',
+      'cursor-agent',
+      'acp:opencode',
+      'acp:codex',
+    ],
   );
   const opencode = body.executors[4];
   assert.deepEqual(opencode.executor, { type: 'acp', agent: 'opencode' });
   assert.equal(opencode.permissionEnforcement, 'acp-requests');
+});
+
+test('conversation create validates the codex preset api key', async (t) => {
+  const saved = {
+    CODEX_API_KEY: process.env.CODEX_API_KEY,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  };
+  delete process.env.CODEX_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  t.after(() => {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+  const { app, restore } = await conversationFixture();
+  try {
+    const post = (executor: unknown) =>
+      app.request('/api/workstreams', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          driver: 'conversation',
+          title: 'Codex',
+          goal: 'Talk to codex',
+          repoId: 'app',
+          executor,
+        }),
+      });
+    assert.equal((await post({ type: 'acp', agent: 'codex' })).status, 400);
+    process.env.CODEX_API_KEY = 'test-key';
+    assert.equal((await post({ type: 'acp', agent: 'codex' })).status, 201);
+  } finally {
+    restore();
+  }
 });
