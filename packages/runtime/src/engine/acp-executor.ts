@@ -163,20 +163,23 @@ export class AcpExecutor implements WorkerExecutor {
   readonly name: string;
   readonly resumesSession: boolean;
   private readonly mcpServerPath: string;
+  private readonly cancelGraceMs: number;
 
   constructor(
     private readonly config: AcpExecutorConfig,
-    opts: { mcpServerPath?: string } = {},
+    opts: { mcpServerPath?: string; cancelGraceMs?: number } = {},
   ) {
     this.name = 'acp:' + path.basename(config.command);
     this.resumesSession = config.resumes ?? false;
     this.mcpServerPath = opts.mcpServerPath ?? MCP_SERVER;
+    this.cancelGraceMs = opts.cancelGraceMs ?? CANCEL_GRACE_MS;
   }
 
   async execute({
     context,
     workspaceDir,
     run,
+    role,
     sessionId: resumeId,
     signal,
     policy,
@@ -186,6 +189,7 @@ export class AcpExecutor implements WorkerExecutor {
     context: string;
     workspaceDir: string;
     run: RunRecord;
+    role?: string;
     sessionId?: string;
     signal?: AbortSignal;
     policy?: ToolPolicyFile;
@@ -283,7 +287,7 @@ export class AcpExecutor implements WorkerExecutor {
             () => {},
             () => {},
           ),
-          waitForExit(child, CANCEL_GRACE_MS),
+          waitForExit(child, this.cancelGraceMs),
         ]);
       }
       killProcessGroup(child, 'SIGKILL');
@@ -311,15 +315,17 @@ export class AcpExecutor implements WorkerExecutor {
       const input = (
         Readable.toWeb(child.stdout) as ReadableStream<Uint8Array>
       ).pipeThrough(
-        stdoutGuard((line) =>
+        stdoutGuard((line) => {
+          // Once stopping, the stop error is the outcome; ignore late noise.
+          if (cancelling) return;
           failTransport(
             new AcpRunError(
               withStderr(
                 `${name} wrote invalid JSON-RPC to stdout: ${JSON.stringify(line.slice(0, 200))}`,
               ),
             ),
-          ),
-        ),
+          );
+        }),
       );
       const stream = ndJsonStream(
         Writable.toWeb(child.stdin) as WritableStream<Uint8Array>,
@@ -380,7 +386,7 @@ export class AcpExecutor implements WorkerExecutor {
         })
         .onRequest(methods.client.session.requestPermission, ({ params }) => {
           const outcome = decidePermission(params, {
-            role: run.role,
+            role: role ?? run.role,
             workspaceDir,
             policy: policy ?? EMPTY_POLICY,
             cancelling,
@@ -403,20 +409,20 @@ export class AcpExecutor implements WorkerExecutor {
             outcome.decision +
             (outcome.ruleId ? ' ' + outcome.ruleId : '') +
             (outcome.reason ? ': ' + outcome.reason : '');
-          emit?.({
-            kind: 'tool',
-            at,
-            data: {
-              runId: run.id,
-              name: 'acp:permission',
-              input: {
-                tool: outcome.tool,
-                approvalKey: truncate(outcome.approvalKey),
-              },
-              output: detail,
-              at,
+          const record: ToolInvocation = {
+            name: 'acp:permission',
+            input: {
+              tool: outcome.tool,
+              approvalKey: truncate(outcome.approvalKey),
             },
-          });
+            output: detail,
+            at,
+          };
+          // Record it with the run's tool calls so the persisted trace shows
+          // each decision and its rule. onToolCall emits the live event
+          // itself; emit directly only when there is no recorder.
+          if (onToolCall) onToolCall(record);
+          else emit?.({ kind: 'tool', at, data: { runId: run.id, ...record } });
           return outcome.response;
         });
 
@@ -459,7 +465,13 @@ export class AcpExecutor implements WorkerExecutor {
               : await ctx.request(methods.agent.session.load, params);
             created = {
               sessionId: resumeId,
-              modes: (resumed as { modes?: SessionModeState | null }).modes,
+              // Some agents answer resume/load with a null result.
+              modes: (
+                resumed as
+                  | { modes?: SessionModeState | null }
+                  | null
+                  | undefined
+              )?.modes,
             };
           } catch (err) {
             if (err instanceof RequestError) throw notFound;

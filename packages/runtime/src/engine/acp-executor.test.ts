@@ -78,6 +78,9 @@ async function run(
     emit?: (event: RuntimeEvent) => void;
     signal?: AbortSignal;
     sessionId?: string;
+    /** Effective base role passed to execute (run.role stays as set by `role`). */
+    executeRole?: string;
+    cancelGraceMs?: number;
   } = {},
 ) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-acp-'));
@@ -100,12 +103,17 @@ async function run(
     await fs.rm(dir, { recursive: true, force: true });
     await fs.rm(workspaceDir, { recursive: true, force: true });
   });
-  const executor = new AcpExecutor({
-    type: 'acp',
-    command: process.execPath,
-    args: [FAKE, scenarioPath],
-    ...overrides,
-  });
+  const executor = new AcpExecutor(
+    {
+      type: 'acp',
+      command: process.execPath,
+      args: [FAKE, scenarioPath],
+      ...overrides,
+    },
+    extra.cancelGraceMs !== undefined
+      ? { cancelGraceMs: extra.cancelGraceMs }
+      : {},
+  );
   const promise: Promise<ExecutorResult> = executor.execute({
     context: 'do the thing',
     workspaceDir,
@@ -115,6 +123,7 @@ async function run(
     emit: extra.emit,
     signal: extra.signal,
     sessionId: extra.sessionId,
+    ...(extra.executeRole ? { role: extra.executeRole } : {}),
   });
   // Rejections are asserted by the tests; avoid unhandled-rejection noise.
   promise.catch(() => {});
@@ -366,6 +375,39 @@ test('completed tool calls are reported once each', async (t) => {
   );
 });
 
+test('permission decisions are recorded via onToolCall', async (t) => {
+  const { calls, events } = await runTools(t, [
+    {
+      type: 'tool',
+      id: 't1',
+      title: 'rm -rf build',
+      kind: 'execute',
+      rawInput: { command: 'rm -rf build' },
+      askPermission: true,
+      options: GATE_OPTIONS,
+      output: 'removed',
+    },
+  ]);
+  const perms = calls.filter((c) => c.name === 'acp:permission');
+  assert.equal(perms.length, 1);
+  assert.deepEqual(perms[0].input, {
+    tool: 'run_shell',
+    approvalKey: shellApprovalKey('rm -rf build'),
+  });
+  assert.equal(perms[0].output, 'deny');
+  // onToolCall owns the live event; the executor must not emit it twice.
+  assert.equal(
+    events.filter((e) => e.kind === 'tool' && e.data.name === 'acp:permission')
+      .length,
+    0,
+  );
+  // The agent's own tool call is still reported after the decision.
+  assert.deepEqual(
+    calls.map((c) => c.name),
+    ['acp:permission', 'acp:execute'],
+  );
+});
+
 test('tool output text is extracted', async (t) => {
   const { calls } = await runTools(t, [
     {
@@ -419,11 +461,38 @@ test('gated execute without rule is rejected and approval emitted', async (t) =>
   assert.ok(approval && approval.kind === 'approval');
   assert.equal(approval.data.proposedRule.tool, 'run_shell');
   assert.equal(approval.data.runId, 'run-1');
-  assert.equal(calls[0].error, 'failed');
+  assert.equal(calls.find((c) => c.name === 'acp:execute')?.error, 'failed');
+  assert.ok(calls.find((c) => c.name === 'acp:permission'));
+});
+
+test('without onToolCall the permission decision is emitted live', async (t) => {
+  const events: RuntimeEvent[] = [];
+  const { promise } = await run(
+    t,
+    {
+      steps: [
+        {
+          type: 'tool',
+          id: 't1',
+          title: 'ls',
+          kind: 'execute',
+          rawInput: { command: 'ls' },
+          askPermission: true,
+          options: GATE_OPTIONS,
+          output: 'x',
+        },
+      ],
+    },
+    {},
+    { emit: (e) => events.push(e) },
+  );
+  await promise;
   const perm = events.find(
     (e) => e.kind === 'tool' && e.data.name === 'acp:permission',
   );
-  assert.ok(perm);
+  assert.ok(perm && perm.kind === 'tool');
+  assert.equal(perm.data.runId, 'run-1');
+  assert.equal(perm.data.output, 'allow');
 });
 
 test('allow rule lets gated execute through', async (t) => {
@@ -458,7 +527,7 @@ test('allow rule lets gated execute through', async (t) => {
   );
   const res = permissionResponse(await records());
   assert.equal(res?.permissionResponse.outcome.optionId, 'a1');
-  assert.equal(calls[0].error, undefined);
+  assert.equal(calls.find((c) => c.name === 'acp:execute')?.error, undefined);
   assert.equal(events.filter((e) => e.kind === 'approval').length, 0);
 });
 
@@ -478,6 +547,27 @@ test('reviewer edits are rejected', async (t) => {
       },
     ],
     { role: 'reviewer' },
+  );
+  const res = permissionResponse(await records());
+  assert.equal(res?.permissionResponse.outcome.optionId, 'r1');
+});
+
+test('custom role with reviewer base role cannot edit', async (t) => {
+  const { records } = await runTools(
+    t,
+    [
+      {
+        type: 'tool',
+        id: 't1',
+        title: 'Edit a.txt',
+        kind: 'edit',
+        locations: ['a.txt'],
+        askPermission: true,
+        options: GATE_OPTIONS,
+        output: 'edited',
+      },
+    ],
+    { role: 'security-auditor', executeRole: 'reviewer' },
   );
   const res = permissionResponse(await records());
   assert.equal(res?.permissionResponse.outcome.optionId, 'r1');
@@ -545,15 +635,28 @@ test('agent ignoring cancel is killed within grace', async (t) => {
     t,
     { ignoreCancel: true, steps: [{ type: 'hang' }] },
     {},
-    { signal: controller.signal },
+    { signal: controller.signal, cancelGraceMs: 500 },
   );
   await abortDuringPrompt(records, controller);
   const started = Date.now();
   await assert.rejects(promise, (err: Error) => err.message === 'cancelled');
-  assert.ok(Date.now() - started < 7_000, 'rejected within the grace');
+  assert.ok(Date.now() - started < 3_000, 'rejected within the grace');
   const recs = await records();
   assert.equal(requests(recs, 'session/cancel').length, 1);
   assertGone(recs[0]?.pid);
+});
+
+test('invalid stdout after cancel does not replace the abort error', async (t) => {
+  const controller = new AbortController();
+  const { promise, records } = await run(
+    t,
+    { garbageOnCancel: true, steps: [{ type: 'hang' }] },
+    {},
+    { signal: controller.signal },
+  );
+  await abortDuringPrompt(records, controller);
+  await assert.rejects(promise, (err: Error) => err.message === 'cancelled');
+  assertGone((await records())[0]?.pid);
 });
 
 test('timeout rejects with timed out', async (t) => {
@@ -661,6 +764,28 @@ test('load used when only loadSession advertised; replayed updates ignored', asy
   assert.equal(requests(recs, 'session/load').length, 1);
   assert.equal(requests(recs, 'session/new').length, 0);
 });
+
+for (const [label, caps] of [
+  ['resume', { sessionCapabilities: { resume: {} } }],
+  ['load', { loadSession: true }],
+] as const) {
+  test(`null ${label} response still resumes the session`, async (t) => {
+    const { promise, records } = await run(
+      t,
+      {
+        agentCapabilities: caps,
+        nullResumeResponse: true,
+        steps: [{ type: 'message', text: 'hi' }],
+      },
+      {},
+      { sessionId: 's1' },
+    );
+    const result = await promise;
+    assert.equal(result.sessionId, 's1');
+    assert.equal(result.text, 'hi');
+    assert.equal(requests(await records(), `session/${label}`).length, 1);
+  });
+}
 
 test('no resume capability gives a stale-session error', async (t) => {
   const { promise } = await run(t, {}, {}, { sessionId: 's1' });
