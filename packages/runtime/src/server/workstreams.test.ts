@@ -226,6 +226,45 @@ test('a conversation stores the instance executor and an explicit base commit', 
   }
 });
 
+test('conversation create accepts, persists, and validates acp executors', async () => {
+  const { app, store, restore } = await conversationFixture();
+  try {
+    const post = (executor: unknown) =>
+      app.request('/api/workstreams', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          driver: 'conversation',
+          title: 'Acp',
+          goal: 'Talk to an acp agent',
+          repoId: 'app',
+          executor,
+        }),
+      });
+
+    const ok = await post({ type: 'acp', command: 'gemini', args: ['--acp'] });
+    assert.equal(ok.status, 201);
+    const body = (await ok.json()) as { workstream: { id: string } };
+    assert.deepEqual(
+      (await store.getWorkstream(body.workstream.id))?.executor,
+      {
+        type: 'acp',
+        command: 'gemini',
+        args: ['--acp'],
+      },
+    );
+
+    assert.equal((await post({ type: 'acp', command: 'gemini' })).status, 400);
+    assert.equal(
+      (await post({ type: 'acp', command: 'x', args: [], agent: 'codex' }))
+        .status,
+      400,
+    );
+  } finally {
+    restore();
+  }
+});
+
 test('stop posts no conversation reply', async () => {
   const { app, store, engine, restore } = await conversationFixture();
   try {

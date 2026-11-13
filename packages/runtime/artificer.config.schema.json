@@ -135,6 +135,34 @@
               "description": "Model to pass to the executor via --model (e.g. 'claude-sonnet-4-6')."
             }
           }
+        },
+        {
+          "type": "object",
+          "additionalProperties": false,
+          "required": ["type", "command", "args"],
+          "properties": {
+            "type": { "const": "acp" },
+            "command": {
+              "type": "string",
+              "minLength": 1,
+              "description": "Executable that speaks the Agent Client Protocol over stdio."
+            },
+            "args": { "type": "array", "items": { "type": "string" } },
+            "env": {
+              "type": "object",
+              "additionalProperties": { "type": "string" }
+            },
+            "mode": { "type": "string", "minLength": 1 },
+            "resumes": {
+              "type": "boolean",
+              "description": "Whether the agent can resume sessions (session/resume or session/load). Defaults to false."
+            },
+            "timeout": {
+              "type": "integer",
+              "exclusiveMinimum": 0,
+              "description": "Per-run timeout in milliseconds. Defaults to 600000."
+            }
+          }
         }
       ]
     },
