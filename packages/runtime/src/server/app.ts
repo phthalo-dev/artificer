@@ -38,6 +38,7 @@ import { serveUI } from './static.js';
 import { resolveUiDistDir } from './ui-dist.js';
 import { mountChannels } from '../channels/mount.js';
 import type { ArtificerChannel, ExecutorConfig } from '../api/types.js';
+import { redactExecutorConfig, redactWorkstream } from './redact.js';
 import type { IdentityStore } from '../storage/identity-store.js';
 import {
   loadEffectivePolicy,
@@ -625,7 +626,10 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     if (parsed.data.driver === 'conversation') {
       try {
         const result = await engine.createConversationWorkstream(parsed.data);
-        return c.json(result, 201);
+        return c.json(
+          { ...result, workstream: redactWorkstream(result.workstream) },
+          201,
+        );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const status =
@@ -719,7 +723,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
 
   api.get('/workstreams', async (c) => {
     const workstreams = await engine.store.listWorkstreams();
-    return c.json({ workstreams });
+    return c.json({ workstreams: workstreams.map(redactWorkstream) });
   });
 
   api.get('/traces', async (c) => {
@@ -1115,8 +1119,10 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
       },
     };
     return c.json({
-      workstream,
-      resolvedExecutor: workstream.executor ?? engine.config.executor ?? null,
+      workstream: redactWorkstream(workstream),
+      resolvedExecutor: redactExecutorConfig(
+        workstream.executor ?? engine.config.executor ?? null,
+      ),
       tasks,
       reviews,
       plan,

@@ -930,3 +930,37 @@ test('conversation create validates the codex preset api key', async (t) => {
     restore();
   }
 });
+
+test('workstream responses redact executor env values', async () => {
+  const { app, restore } = await conversationFixture();
+  try {
+    const res = await app.request('/api/workstreams', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        driver: 'conversation',
+        title: 'Redact',
+        goal: 'Check redaction',
+        repoId: 'app',
+        executor: {
+          type: 'acp',
+          agent: 'codex',
+          env: { CODEX_API_KEY: 'sk-test-secret' },
+        },
+      }),
+    });
+    assert.equal(res.status, 201);
+    const created = await res.text();
+    assert.ok(!created.includes('sk-test-secret'));
+    const id = (JSON.parse(created) as { workstream: { id: string } })
+      .workstream.id;
+    const detail = await (await app.request(`/api/workstreams/${id}`)).text();
+    const list = await (await app.request('/api/workstreams')).text();
+    for (const body of [created, detail, list]) {
+      assert.ok(!body.includes('sk-test-secret'));
+      assert.ok(body.includes('[redacted]'));
+    }
+  } finally {
+    restore();
+  }
+});

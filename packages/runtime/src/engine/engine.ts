@@ -188,9 +188,7 @@ export class Engine implements EngineApi {
     this.registry = registry ?? new RoleRegistry();
     this.serviceManager = new ServiceManager(store, config);
     this.customRegistry = customRegistry;
-    this.executor = buildExecutor(config.executor, {
-      stateDir: path.join(store.layout.root, 'acp'),
-    });
+    this.executor = buildExecutor(config.executor, this.acpCtx());
     this.reinitializeQuota();
     if (this.quotaLedger) {
       this.scheduleQuotaTick();
@@ -374,6 +372,10 @@ export class Engine implements EngineApi {
     return normalized;
   }
 
+  private acpCtx(): { stateDir: string } {
+    return { stateDir: path.join(this.store.layout.root, 'acp') };
+  }
+
   private reinitializeQuota(): void {
     const quotaConfig = buildQuotaConfig(this.config);
     if (!quotaConfig) {
@@ -390,10 +392,7 @@ export class Engine implements EngineApi {
       this.quotaLedger,
       quotaConfig.routes ?? [],
       process.env,
-      (e) =>
-        buildExecutor(e, {
-          stateDir: path.join(this.store.layout.root, 'acp'),
-        }),
+      (e) => buildExecutor(e, this.acpCtx()),
     );
   }
 
@@ -1322,7 +1321,11 @@ export class Engine implements EngineApi {
         store: this.store,
         engine: this,
         executor: route
-          ? executorForRoute(route, buildExecutor, this.executor)
+          ? executorForRoute(
+              route,
+              (e) => buildExecutor(e, this.acpCtx()),
+              this.executor,
+            )
           : this.executor,
         registry: this.registry,
         customRegistry: this.customRegistry,
@@ -1384,9 +1387,7 @@ export class Engine implements EngineApi {
         repoPath,
         content: run.task,
         prior,
-        executor: buildExecutor(workstream.executor, {
-          stateDir: path.join(this.store.layout.root, 'acp'),
-        }),
+        executor: buildExecutor(workstream.executor, this.acpCtx()),
         signal: controller.signal,
         run,
         policy,
