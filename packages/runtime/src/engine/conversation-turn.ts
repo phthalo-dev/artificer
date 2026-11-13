@@ -24,7 +24,7 @@ export interface RunConversationTurnInput {
   run?: RunRecord;
 }
 
-function isStaleSessionError(error: unknown): boolean {
+export function isStaleSessionError(error: unknown): boolean {
   const message = (
     error instanceof Error ? error.message : String(error)
   ).toLowerCase();

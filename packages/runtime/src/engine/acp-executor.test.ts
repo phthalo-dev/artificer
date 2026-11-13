@@ -15,6 +15,7 @@ import {
 } from '../storage/types.js';
 import { shellApprovalKey, type ToolPolicyFile } from '../tools/tool-policy.js';
 import { AcpExecutor } from './acp-executor.js';
+import { isStaleSessionError } from './conversation-turn.js';
 import type { ExecutorResult } from './executor.js';
 
 const exec = promisify(execFile);
@@ -76,6 +77,7 @@ async function run(
     onToolCall?: (invocation: ToolInvocation) => void;
     emit?: (event: RuntimeEvent) => void;
     signal?: AbortSignal;
+    sessionId?: string;
   } = {},
 ) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-acp-'));
@@ -112,6 +114,7 @@ async function run(
     onToolCall: extra.onToolCall,
     emit: extra.emit,
     signal: extra.signal,
+    sessionId: extra.sessionId,
   });
   // Rejections are asserted by the tests; avoid unhandled-rejection noise.
   promise.catch(() => {});
@@ -610,4 +613,73 @@ test('already-aborted signal rejects without spawning', async (t) => {
   await assert.rejects(promise, (err: Error) => err.message === 'cancelled');
   await new Promise((r) => setTimeout(r, 300));
   assert.deepEqual(await records(), []);
+});
+
+test('new session returns its id', async (t) => {
+  const { promise } = await run(t, {
+    steps: [{ type: 'message', text: 'hi' }],
+  });
+  assert.equal((await promise).sessionId, 'fake-session-1');
+});
+
+test('resume used when advertised', async (t) => {
+  const { promise, records } = await run(
+    t,
+    {
+      agentCapabilities: { sessionCapabilities: { resume: {} } },
+      steps: [{ type: 'message', text: 'hi' }],
+    },
+    {},
+    { sessionId: 's1' },
+  );
+  const result = await promise;
+  assert.equal(result.sessionId, 's1');
+  const recs = await records();
+  const resumes = requests(recs, 'session/resume');
+  assert.equal(resumes.length, 1);
+  assert.equal(resumes[0].params.sessionId, 's1');
+  assert.equal(resumes[0].params.mcpServers[0].name, 'artificer-status');
+  assert.equal(requests(recs, 'session/new').length, 0);
+  assert.equal(requests(recs, 'session/prompt')[0].params.sessionId, 's1');
+});
+
+test('load used when only loadSession advertised; replayed updates ignored', async (t) => {
+  const { promise, records } = await run(
+    t,
+    {
+      agentCapabilities: { loadSession: true },
+      loadReplay: 'old',
+      steps: [{ type: 'message', text: 'new' }],
+    },
+    {},
+    { sessionId: 's1' },
+  );
+  const result = await promise;
+  assert.equal(result.text, 'new');
+  assert.equal(result.sessionId, 's1');
+  const recs = await records();
+  assert.equal(requests(recs, 'session/load').length, 1);
+  assert.equal(requests(recs, 'session/new').length, 0);
+});
+
+test('no resume capability gives a stale-session error', async (t) => {
+  const { promise } = await run(t, {}, {}, { sessionId: 's1' });
+  await assert.rejects(promise, (err: Error) => {
+    assert.equal(err.message, 'session not found: s1');
+    assert.ok(isStaleSessionError(err));
+    return true;
+  });
+});
+
+test('a resume or load JSON-RPC error gives a stale-session error', async (t) => {
+  const { promise } = await run(
+    t,
+    {
+      agentCapabilities: { loadSession: true },
+      loadError: { code: -32002, message: 'nope' },
+    },
+    {},
+    { sessionId: 's9' },
+  );
+  await assert.rejects(promise, /^Error: session not found: s9$/);
 });

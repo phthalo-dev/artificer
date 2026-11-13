@@ -180,6 +180,11 @@ const app = agent({ name: 'fake' })
     }
     return scenario.modes ? { modes: scenario.modes } : {};
   })
+  .onRequest(methods.agent.session.resume, ({ params }) => {
+    if (scenario.resumeError) throw rpcError(scenario.resumeError);
+    sessions.set(params.sessionId, params.mcpServers ?? []);
+    return scenario.modes ? { modes: scenario.modes } : {};
+  })
   .onRequest(methods.agent.session.setMode, ({ params }) => {
     return {};
   })
