@@ -308,7 +308,8 @@ export class AcpExecutor implements WorkerExecutor {
           onToolCall?.({
             name: 'acp:' + (call.kind ?? 'other'),
             input: {
-              title: call.title,
+              title:
+                call.title === undefined ? undefined : truncate(call.title),
               rawInput: boundedInput(call.rawInput),
             },
             output: truncate(call.output),
@@ -364,7 +365,10 @@ export class AcpExecutor implements WorkerExecutor {
             data: {
               runId: run.id,
               name: 'acp:permission',
-              input: { tool: outcome.tool, approvalKey: outcome.approvalKey },
+              input: {
+                tool: outcome.tool,
+                approvalKey: truncate(outcome.approvalKey),
+              },
               output: detail,
               at,
             },
