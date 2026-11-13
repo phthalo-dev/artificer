@@ -426,6 +426,13 @@ export async function executeCall(
           context: execContext,
           workspaceDir,
           run,
+          role: effectiveBaseRole,
+          policy: loadEffectivePolicy({
+            execPath: store.layout.toolPolicyFile(),
+            identityPath: engine.identity?.layout.agentToolPolicyFile(),
+          }),
+          onToolCall,
+          emit: (event) => engine.emit(event),
         });
       } finally {
         if (run.workstreamId) {

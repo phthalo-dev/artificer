@@ -51,6 +51,7 @@ import { CursorAgentExecutor } from './cursor-executor.js';
 import { ClaudeCodeExecutor } from './claude-code-executor.js';
 import { OpencodeExecutor } from './opencode-executor.js';
 import { CliExecutor } from './cli-executor.js';
+import { AcpExecutor } from './acp-executor.js';
 import { findGitRepo } from './git-repo.js';
 import { hasUncommittedChanges } from './git-ops.js';
 import {
@@ -1359,6 +1360,20 @@ export class Engine implements EngineApi {
       await this.store.saveRun(run);
       this.emit({ kind: 'run', at: run.startedAt, data: { ...run } });
 
+      const onToolCall = (invocation: RunRecord['toolCalls'][number]) => {
+        run.toolCalls.push(invocation);
+        this.emit({
+          kind: 'tool',
+          at: invocation.at,
+          data: { ...invocation, runId: run.id },
+        });
+        void this.store.saveRun(run);
+      };
+      const policy = loadEffectivePolicy({
+        execPath: this.store.layout.toolPolicyFile(),
+        identityPath: this.identity?.layout.agentToolPolicyFile(),
+      });
+
       const result = await runConversationTurn({
         workstream,
         repoPath,
@@ -1367,21 +1382,15 @@ export class Engine implements EngineApi {
         executor: buildExecutor(workstream.executor),
         signal: controller.signal,
         run,
+        policy,
+        onToolCall,
+        emit: (event) => this.emit(event),
         publishArtifact: (input) =>
           this.artifacts.publish(workstream.id, {
             ...input,
             createdByRunId: run.id,
           }),
         runBuiltin: async (prompt, workspaceDir) => {
-          const onToolCall = (invocation: RunRecord['toolCalls'][number]) => {
-            run.toolCalls.push(invocation);
-            this.emit({
-              kind: 'tool',
-              at: invocation.at,
-              data: { ...invocation, runId: run.id },
-            });
-            void this.store.saveRun(run);
-          };
           const ctx: ToolContext = {
             engine: this,
             run,
@@ -1409,10 +1418,7 @@ export class Engine implements EngineApi {
             maxRunMs: this.config.maxRunMs,
             signal: controller.signal,
             maxTokens: 4096,
-            policy: loadEffectivePolicy({
-              execPath: this.store.layout.toolPolicyFile(),
-              identityPath: this.identity?.layout.agentToolPolicyFile(),
-            }),
+            policy,
             emit: (event) => this.emit(event),
             runId: run.id,
             workstreamId: workstream.id,
@@ -2058,5 +2064,6 @@ function buildExecutor(
     return new ClaudeCodeExecutor(config.model);
   if (config.type === 'opencode') return new OpencodeExecutor(config.model);
   if (config.type === 'cli') return new CliExecutor(config);
+  if (config.type === 'acp') return new AcpExecutor(config);
   return undefined;
 }
