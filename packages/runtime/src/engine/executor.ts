@@ -30,6 +30,11 @@ export interface WorkerExecutor {
     context: string;
     workspaceDir: string;
     run: RunRecord;
+    /**
+     * Base role whose permissions apply (custom roles map to their baseRole).
+     * Defaults to `run.role`.
+     */
+    role?: string;
     sessionId?: string;
     signal?: AbortSignal;
     /** Tool policy for executors that gate the agent's own permission requests. */

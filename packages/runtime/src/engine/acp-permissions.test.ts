@@ -188,6 +188,23 @@ describe('decidePermission', () => {
     assert.equal(o.proposedRule, undefined);
   });
 
+  it('reviewer shell write is hard-denied; worker same command is allowed', () => {
+    const cmd = { command: 'sed -i s/a/b/ f.txt' };
+    const reviewer = decidePermission(
+      req('execute', cmd),
+      ctx({ role: 'reviewer' }),
+    );
+    assert.equal(selected(reviewer), 'r1');
+    assert.equal(reviewer.decision, 'deny');
+    assert.equal(reviewer.tool, 'run_shell');
+    assert.match(reviewer.reason ?? '', /reviewer is read-only/);
+    assert.equal(reviewer.proposedRule, undefined);
+
+    const worker = decidePermission(req('execute', cmd), ctx());
+    assert.equal(selected(worker), 'a1');
+    assert.equal(worker.decision, 'allow');
+  });
+
   it('read/search/think are allowed', () => {
     for (const k of ['read', 'search', 'think'] as const) {
       const o = decidePermission(req(k), ctx());

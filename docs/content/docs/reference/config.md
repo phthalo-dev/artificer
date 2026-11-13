@@ -137,7 +137,7 @@ Selects the worker execution backend. Omitting this field uses the built-in LLM 
 
 **Object form — `acp`:**
 
-Runs any agent that speaks the [Agent Client Protocol](https://agentclientprotocol.com) over stdio. Unknown fields are rejected.
+Runs any agent that speaks the [Agent Client Protocol](https://agentclientprotocol.com) over stdio. Unknown fields are rejected by the HTTP API (when creating a conversation) and by the JSON schema; the instance config in `artificer.config.json` is not validated at load, the same as the other executors.
 
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|

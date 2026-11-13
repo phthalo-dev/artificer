@@ -10,6 +10,7 @@ import { decideApproval } from '../tools/approval.js';
 import {
   checkGitCloneInWorkspace,
   checkGitStash,
+  checkReviewerWrite,
 } from '../tools/shell-policy.js';
 import {
   fetchApprovalKey,
@@ -134,6 +135,10 @@ export function decidePermission(
     const command = commandOf(call.rawInput, call.title);
     const approvalKey = shellApprovalKey(command);
     const tool = 'run_shell';
+    const reviewerWrite = checkReviewerWrite(command, ctx.role as RoleName);
+    if (!reviewerWrite.allowed) {
+      return deny(req, { tool, approvalKey, reason: reviewerWrite.reason });
+    }
     const stash = checkGitStash(command, ctx.role as RoleName);
     if (!stash.allowed) {
       return deny(req, { tool, approvalKey, reason: stash.reason });

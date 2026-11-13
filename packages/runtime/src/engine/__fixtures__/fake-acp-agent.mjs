@@ -178,11 +178,13 @@ const app = agent({ name: 'fake' })
         content: { type: 'text', text: scenario.loadReplay },
       });
     }
+    if (scenario.nullResumeResponse) return null;
     return scenario.modes ? { modes: scenario.modes } : {};
   })
   .onRequest(methods.agent.session.resume, ({ params }) => {
     if (scenario.resumeError) throw rpcError(scenario.resumeError);
     sessions.set(params.sessionId, params.mcpServers ?? []);
+    if (scenario.nullResumeResponse) return null;
     return scenario.modes ? { modes: scenario.modes } : {};
   })
   .onRequest(methods.agent.session.setMode, ({ params }) => {
@@ -225,6 +227,7 @@ const app = agent({ name: 'fake' })
     return { stopReason: scenario.stopReason ?? 'end_turn' };
   })
   .onNotification(methods.agent.session.cancel, async ({ params }) => {
+    if (scenario.garbageOnCancel) process.stdout.write('not json-rpc\n');
     if (scenario.ignoreCancel) return;
     if (scenario.askPermissionAfterCancel && lastClient) {
       const toolCall = {
