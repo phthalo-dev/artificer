@@ -75,6 +75,7 @@ async function run(
     role?: string;
     onToolCall?: (invocation: ToolInvocation) => void;
     emit?: (event: RuntimeEvent) => void;
+    signal?: AbortSignal;
   } = {},
 ) {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-acp-'));
@@ -110,6 +111,7 @@ async function run(
     policy: extra.policy,
     onToolCall: extra.onToolCall,
     emit: extra.emit,
+    signal: extra.signal,
   });
   // Rejections are asserted by the tests; avoid unhandled-rejection noise.
   promise.catch(() => {});
@@ -495,4 +497,117 @@ test('large tool title and rawInput are bounded', async (t) => {
   assert.equal(typeof input, 'string');
   assert.ok((input as string).length <= 8192 + '…[truncated]'.length);
   assert.ok((input as string).endsWith('…[truncated]'));
+});
+
+/** Abort 200 ms after the prompt is in flight, so a session exists to cancel. */
+async function abortDuringPrompt(
+  records: () => Promise<Record[]>,
+  controller: AbortController,
+): Promise<void> {
+  const deadline = Date.now() + 10_000;
+  while (requests(await records(), 'session/prompt').length === 0) {
+    if (Date.now() > deadline) throw new Error('prompt never started');
+    await new Promise((r) => setTimeout(r, 20));
+  }
+  await new Promise((r) => setTimeout(r, 200));
+  controller.abort();
+}
+
+function assertGone(pid: number | undefined): void {
+  assert.ok(pid);
+  assert.throws(
+    () => process.kill(pid!, 0),
+    (err: NodeJS.ErrnoException) => err.code === 'ESRCH',
+  );
+}
+
+test('abort sends session/cancel and rejects cancelled', async (t) => {
+  const controller = new AbortController();
+  const { promise, records } = await run(
+    t,
+    { steps: [{ type: 'hang' }] },
+    {},
+    { signal: controller.signal },
+  );
+  await abortDuringPrompt(records, controller);
+  await assert.rejects(promise, (err: Error) => err.message === 'cancelled');
+  const recs = await records();
+  assert.equal(requests(recs, 'session/cancel').length, 1);
+  assertGone(recs[0]?.pid);
+});
+
+test('agent ignoring cancel is killed within grace', async (t) => {
+  const controller = new AbortController();
+  const { promise, records } = await run(
+    t,
+    { ignoreCancel: true, steps: [{ type: 'hang' }] },
+    {},
+    { signal: controller.signal },
+  );
+  await abortDuringPrompt(records, controller);
+  const started = Date.now();
+  await assert.rejects(promise, (err: Error) => err.message === 'cancelled');
+  assert.ok(Date.now() - started < 7_000, 'rejected within the grace');
+  const recs = await records();
+  assert.equal(requests(recs, 'session/cancel').length, 1);
+  assertGone(recs[0]?.pid);
+});
+
+test('timeout rejects with timed out', async (t) => {
+  const { promise, records } = await run(
+    t,
+    { steps: [{ type: 'hang' }] },
+    { timeout: 300 },
+  );
+  await assert.rejects(
+    promise,
+    (err: Error) => err.message === 'acp:node agent timed out',
+  );
+  assertGone((await records())[0]?.pid);
+});
+
+test('permission during cancel is cancelled', async (t) => {
+  const controller = new AbortController();
+  const { promise, records } = await run(
+    t,
+    { askPermissionAfterCancel: true, steps: [{ type: 'hang' }] },
+    {},
+    {
+      signal: controller.signal,
+      // Without cancellation this rule would allow the post-cancel request.
+      policy: {
+        version: 1,
+        rules: [
+          {
+            id: 'rule1',
+            tool: 'run_shell',
+            pattern: shellApprovalKey('after cancel'),
+            effect: 'allow',
+            scope: 'agent',
+            createdAt: '2026-01-01T00:00:00Z',
+          },
+        ],
+      },
+    },
+  );
+  await abortDuringPrompt(records, controller);
+  await assert.rejects(promise, (err: Error) => err.message === 'cancelled');
+  const response = permissionResponse(await records());
+  assert.ok(response, 'permission response recorded');
+  assert.equal(response.toolCallId, 'after-cancel');
+  assert.equal(response.permissionResponse.outcome.outcome, 'cancelled');
+});
+
+test('already-aborted signal rejects without spawning', async (t) => {
+  const controller = new AbortController();
+  controller.abort();
+  const { promise, records } = await run(
+    t,
+    { steps: [{ type: 'message', text: 'hi' }] },
+    {},
+    { signal: controller.signal },
+  );
+  await assert.rejects(promise, (err: Error) => err.message === 'cancelled');
+  await new Promise((r) => setTimeout(r, 300));
+  assert.deepEqual(await records(), []);
 });
