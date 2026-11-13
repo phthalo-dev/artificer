@@ -7,14 +7,13 @@ import {
 } from '../api/hooks';
 import {
   Button,
-  Group,
-  Modal,
+  Dialog,
   Select,
   Stack,
   Text,
-  Textarea,
-  TextInput,
-} from '../ds';
+  TextAreaField,
+  TextField,
+} from '@var-ui/react';
 
 type AgentChoice = 'instance' | 'llm' | 'claude-code' | 'cursor-agent';
 
@@ -61,94 +60,94 @@ export function NewWorkstreamModal({
   };
 
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
-      title={<Text fw={600}>New workstream</Text>}
-      size="lg"
+    <Dialog
+      open={opened}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
     >
-      <Stack gap="sm">
-        <TextInput
-          label="Title"
-          placeholder="Short label for this workstream"
-          value={title}
-          onChange={setTitle}
-        />
-        <Select
-          label="Repo"
-          placeholder="Choose a repository"
-          data={repoOptions}
-          value={repoId || undefined}
-          onChange={(value) => setRepoId(value ?? '')}
-          disabled={repoOptions.length === 0 || Boolean(repos.error)}
-        />
-        {repos.data?.length === 0 && (
-          <Text size="sm" c="dimmed">
-            Add a repos entry in artificer.config.json.
-          </Text>
-        )}
-        {repos.error && (
-          <Text size="sm" c="red">
-            {repos.error instanceof Error
-              ? repos.error.message
-              : String(repos.error)}
-          </Text>
-        )}
-        <Select
-          label="Agent"
-          data={[
-            { value: 'instance', label: 'Instance default' },
-            { value: 'llm', label: 'Built-in loop' },
-            { value: 'claude-code', label: 'Claude Code' },
-            { value: 'cursor-agent', label: 'Cursor' },
-          ]}
-          value={agent}
-          onChange={(value) => setAgent((value ?? 'instance') as AgentChoice)}
-        />
-        <Stack gap={4}>
-          <Text size="sm" fw={600}>
-            Goal
-          </Text>
-          <Textarea
+      <Dialog.Popup>
+        <Dialog.Header>
+          <Dialog.Title>New workstream</Dialog.Title>
+          <Dialog.Close />
+        </Dialog.Header>
+        <Stack gap="sm">
+          <TextField
+            label="Title"
+            placeholder="Short label for this workstream"
+            value={title}
+            onValueChange={setTitle}
+          />
+          <Select
+            label="Repo"
+            placeholder="Choose a repository"
+            options={repoOptions}
+            value={repoId || null}
+            onValueChange={(value) => setRepoId(value ?? '')}
+            disabled={repoOptions.length === 0 || Boolean(repos.error)}
+          />
+          {repos.data?.length === 0 && (
+            <Text size="sm" tone="secondary">
+              Add a repos entry in artificer.config.json.
+            </Text>
+          )}
+          {repos.error && (
+            <Text size="sm" tone="danger">
+              {repos.error instanceof Error
+                ? repos.error.message
+                : String(repos.error)}
+            </Text>
+          )}
+          <Select
+            label="Agent"
+            options={[
+              { value: 'instance', label: 'Instance default' },
+              { value: 'llm', label: 'Built-in loop' },
+              { value: 'claude-code', label: 'Claude Code' },
+              { value: 'cursor-agent', label: 'Cursor' },
+            ]}
+            value={agent}
+            onValueChange={(value) =>
+              setAgent((value ?? 'instance') as AgentChoice)
+            }
+          />
+          <TextAreaField
+            label="Goal"
             placeholder="What should this workstream accomplish?"
-            autosize
-            minRows={3}
+            rows={3}
             value={goal}
-            onChange={(event) => setGoal(event.currentTarget.value)}
+            onValueChange={setGoal}
           />
-        </Stack>
-        <Stack gap={4}>
-          <Text size="sm" fw={600}>
-            Opening message <Text c="dimmed">(optional)</Text>
-          </Text>
-          <Textarea
+          <TextAreaField
+            label="Opening message (optional)"
             placeholder="Start the conversation…"
-            autosize
-            minRows={3}
+            rows={3}
             value={message}
-            onChange={(event) => setMessage(event.currentTarget.value)}
+            onValueChange={setMessage}
           />
+          {create.error && (
+            <Text size="sm" tone="danger">
+              {create.error instanceof Error
+                ? create.error.message
+                : String(create.error)}
+            </Text>
+          )}
         </Stack>
-        {create.error && (
-          <Text size="sm" c="red">
-            {create.error instanceof Error
-              ? create.error.message
-              : String(create.error)}
-          </Text>
-        )}
-        <Group justify="flex-end" mt="xs">
-          <Button variant="default" onPress={onClose}>
+        <Dialog.Actions>
+          <Button appearance="subtle" onClick={onClose}>
             Cancel
           </Button>
           <Button
-            onPress={() => void submit()}
+            tone="accent"
+            appearance="filled"
+            onClick={() => void submit()}
             loading={create.isPending}
-            isDisabled={disabled}
+            disabled={disabled}
           >
             Create workstream
           </Button>
-        </Group>
-      </Stack>
-    </Modal>
+        </Dialog.Actions>
+      </Dialog.Popup>
+    </Dialog>
   );
 }

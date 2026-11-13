@@ -1,68 +1,70 @@
-import { Link } from 'react-router-dom';
-import { Anchor, Loader, Stack, Text, Title } from '../ds';
+import type { ReactNode } from 'react';
+import { Heading, Link, Spinner, Stack, Text } from '@var-ui/react';
 import { useUsage, useWorkstreams } from '../api/hooks';
 import { BreakdownTable } from '../components/BreakdownTable';
 import { QuotaAlert } from '../components/QuotaBanner';
 import { QuotaPanel } from '../components/QuotaPanel';
 import { UsageStats } from '../components/UsageStats';
 
+function UsageSection({
+  title,
+  children,
+}: {
+  title: string;
+  children: ReactNode;
+}) {
+  return (
+    <Stack gap="sm">
+      <Heading level={5} size="xs">
+        {title}
+      </Heading>
+      {children}
+    </Stack>
+  );
+}
+
 export function UsagePage() {
   const { data, isLoading } = useUsage();
   const { data: workstreams } = useWorkstreams();
 
-  if (isLoading || !data) return <Loader size="sm" />;
+  if (isLoading || !data) return <Spinner size="sm" label="Loading usage" />;
 
   const wsTitle = (id: string) =>
     workstreams?.find((w) => w.id === id)?.title ?? id;
 
   return (
     <Stack gap="lg">
-      <Title order={3}>Usage &amp; cost</Title>
+      <Heading level={3} size="md">
+        Usage &amp; cost
+      </Heading>
 
       <QuotaAlert />
 
       <QuotaPanel />
 
-      <Text size="sm" c="dimmed">
+      <Text size="sm" tone="secondary">
         Configure routes, failover, and model presets on the{' '}
-        <Anchor component={Link} to="/providers">
-          Providers
-        </Anchor>{' '}
-        page.
+        <Link href="/providers">Providers</Link> page.
       </Text>
 
-      <div>
-        <Text fw={600} mb={4}>
-          Grand total
-        </Text>
+      <Stack gap="xs">
+        <Text weight="semibold">Grand total</Text>
         <UsageStats usage={data.total} />
-      </div>
+      </Stack>
 
-      <div>
-        <Title order={5} mb="sm">
-          By route
-        </Title>
+      <UsageSection title="By route">
         <BreakdownTable label="Route" data={data.byRoute ?? {}} />
-      </div>
+      </UsageSection>
 
-      <div>
-        <Title order={5} mb="sm">
-          By model
-        </Title>
+      <UsageSection title="By model">
         <BreakdownTable label="Model" data={data.byModel} />
-      </div>
+      </UsageSection>
 
-      <div>
-        <Title order={5} mb="sm">
-          By role
-        </Title>
+      <UsageSection title="By role">
         <BreakdownTable label="Role" data={data.byRole} />
-      </div>
+      </UsageSection>
 
-      <div>
-        <Title order={5} mb="sm">
-          By workstream
-        </Title>
+      <UsageSection title="By workstream">
         <BreakdownTable
           label="Workstream"
           data={data.byWorkstream}
@@ -71,12 +73,9 @@ export function UsagePage() {
             to: `/workstreams/${id}`,
           })}
         />
-      </div>
+      </UsageSection>
 
-      <div>
-        <Title order={5} mb="sm">
-          By message
-        </Title>
+      <UsageSection title="By message">
         <BreakdownTable
           label="Message"
           data={Object.fromEntries(
@@ -90,7 +89,7 @@ export function UsagePage() {
             };
           }}
         />
-      </div>
+      </UsageSection>
     </Stack>
   );
 }

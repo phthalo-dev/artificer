@@ -1,25 +1,28 @@
 import {
-  Anchor,
   Badge,
   Button,
   Card,
   Code,
+  DescriptionList,
+  Dialog,
   Divider,
-  Group,
-  Loader,
-  Modal,
+  Heading,
+  HStack,
+  Link,
   ScrollArea,
+  SearchInput,
   Select,
+  Spinner,
   Stack,
   Tabs,
   Text,
-  Textarea,
-  TextInput,
-  Title,
-} from '../ds';
-import { useDebouncedValue, useDisclosure } from '../ds/hooks';
-import { IconPlus, IconSearch, IconTrash } from '@tabler/icons-react';
-import { useState } from 'react';
+  TextAreaField,
+  TextField,
+  useDebouncedValue,
+  useDisclosure,
+} from '@var-ui/react';
+import { IconPlus, IconTrash } from '@tabler/icons-react';
+import { useState, type ReactNode } from 'react';
 import {
   useMemories,
   useCreateMemory,
@@ -29,6 +32,7 @@ import {
 import type { Memory } from '../api/types';
 import { MarkdownContent } from '../components/MarkdownContent';
 import { formatTime, relativeTime } from '../format';
+import { memoryCard, preWrap, scrollPanel } from './MemoriesPage.styles';
 
 function isUrl(s: string | undefined): s is string {
   return Boolean(s && /^https?:\/\//i.test(s));
@@ -37,20 +41,21 @@ function isUrl(s: string | undefined): s is string {
 function SourceLink({ source }: { source?: string }) {
   if (isUrl(source)) {
     return (
-      <Anchor
-        href={source}
-        target="_blank"
-        rel="noopener noreferrer"
-        size="xs"
-        onClick={(e) => e.stopPropagation()}
-      >
-        source
-      </Anchor>
+      <Text as="span" size="xs">
+        <Link
+          href={source}
+          target="_blank"
+          rel="noopener noreferrer"
+          onClick={(e) => e.stopPropagation()}
+        >
+          source
+        </Link>
+      </Text>
     );
   }
   if (source) {
     return (
-      <Text size="xs" c="dimmed">
+      <Text as="span" size="xs" tone="secondary">
         source: {source}
       </Text>
     );
@@ -67,10 +72,9 @@ function MemoryCard({
 }) {
   return (
     <Card
-      padding="md"
+      className={memoryCard}
       role="button"
       tabIndex={0}
-      style={{ cursor: 'pointer' }}
       onClick={() => onSelect(memory)}
       onKeyDown={(e) => {
         if (e.key === 'Enter' || e.key === ' ') {
@@ -79,30 +83,35 @@ function MemoryCard({
         }
       }}
     >
-      <Group justify="space-between" style={{ marginBottom: 4 }} wrap="nowrap">
-        <Text fw={600} lineClamp={1}>
-          {memory.title ?? memory.content.slice(0, 60)}
+      <Stack gap="xs">
+        <HStack justify="between" gap="sm">
+          <Text weight="semibold" lineClamp={1}>
+            {memory.title ?? memory.content.slice(0, 60)}
+          </Text>
+          <Text
+            as="span"
+            size="xs"
+            tone="secondary"
+            style={{ whiteSpace: 'nowrap' }}
+          >
+            {relativeTime(memory.createdAt)}
+          </Text>
+        </HStack>
+        {memory.summary && (
+          <Text size="sm" tone="secondary">
+            {memory.summary}
+          </Text>
+        )}
+        <Text size="sm" lineClamp={3} className={preWrap}>
+          {memory.content}
         </Text>
-        <Text size="xs" c="dimmed" style={{ whiteSpace: 'nowrap' }}>
-          {relativeTime(memory.createdAt)}
-        </Text>
-      </Group>
-      {memory.summary && (
-        <Text size="sm" c="dimmed" mb={6}>
-          {memory.summary}
-        </Text>
-      )}
-      <Text size="sm" lineClamp={3} style={{ whiteSpace: 'pre-wrap' }}>
-        {memory.content}
-      </Text>
-      <Group gap="xs" style={{ marginTop: 8 }}>
-        {memory.tags.map((t) => (
-          <Badge key={t} variant="light" radius="sm">
-            {t}
-          </Badge>
-        ))}
-        <SourceLink source={memory.source} />
-      </Group>
+        <HStack gap="xs" wrap>
+          {memory.tags.map((t) => (
+            <Badge key={t}>{t}</Badge>
+          ))}
+          <SourceLink source={memory.source} />
+        </HStack>
+      </Stack>
     </Card>
   );
 }
@@ -116,136 +125,131 @@ function MemoryDetail({
   onDelete: () => void;
   deleting: boolean;
 }) {
+  const meta: { id: string; label: string; value: ReactNode }[] = [];
+  if (memory.source) {
+    meta.push({
+      id: 'source',
+      label: 'Source',
+      value: isUrl(memory.source) ? (
+        <Link href={memory.source} target="_blank" rel="noopener noreferrer">
+          {memory.source}
+        </Link>
+      ) : (
+        memory.source
+      ),
+    });
+  }
+  if (memory.kind) {
+    meta.push({ id: 'kind', label: 'Kind', value: memory.kind });
+  }
+  if (memory.related && memory.related.length > 0) {
+    meta.push({
+      id: 'related',
+      label: 'Related',
+      value: (
+        <Stack gap="xs">
+          {memory.related.map((r) => (
+            <Text key={`${r.id}:${r.type}`} as="span" size="xs">
+              {r.type} → <Code>{r.id}</Code>
+            </Text>
+          ))}
+        </Stack>
+      ),
+    });
+  }
+  if (memory.sourceHash) {
+    meta.push({
+      id: 'hash',
+      label: 'Hash',
+      value: <Code>{memory.sourceHash.slice(0, 16)}…</Code>,
+    });
+  }
+  if (memory.sourceCommit) {
+    meta.push({
+      id: 'commit',
+      label: 'Commit',
+      value: <Code>{memory.sourceCommit.slice(0, 12)}</Code>,
+    });
+  }
+  meta.push({
+    id: 'created',
+    label: 'Created',
+    value: formatTime(memory.createdAt),
+  });
+  if (memory.updatedAt && memory.updatedAt !== memory.createdAt) {
+    meta.push({
+      id: 'updated',
+      label: 'Updated',
+      value: formatTime(memory.updatedAt),
+    });
+  }
+  meta.push({ id: 'id', label: 'ID', value: <Code>{memory.id}</Code> });
+
   return (
     <Stack gap="sm">
       {memory.summary && (
-        <Text size="sm" c="dimmed">
+        <Text size="sm" tone="secondary">
           {memory.summary}
         </Text>
       )}
-      <Tabs defaultValue="rendered">
-        <Tabs.List>
-          <Tabs.Tab value="rendered">Rendered</Tabs.Tab>
-          <Tabs.Tab value="raw">Raw</Tabs.Tab>
-        </Tabs.List>
-        <Tabs.Panel value="rendered" pt="sm">
-          <ScrollArea.Autosize mah={420}>
-            <MarkdownContent content={memory.content} />
-          </ScrollArea.Autosize>
-        </Tabs.Panel>
-        <Tabs.Panel value="raw" pt="sm">
-          <ScrollArea.Autosize mah={420}>
-            <Text size="sm" style={{ whiteSpace: 'pre-wrap' }}>
-              {memory.content}
-            </Text>
-          </ScrollArea.Autosize>
-        </Tabs.Panel>
-      </Tabs>
+      <Tabs
+        defaultValue="rendered"
+        tabs={[
+          {
+            value: 'rendered',
+            label: 'Rendered',
+            content: (
+              <ScrollArea className={scrollPanel}>
+                <MarkdownContent content={memory.content} />
+              </ScrollArea>
+            ),
+          },
+          {
+            value: 'raw',
+            label: 'Raw',
+            content: (
+              <ScrollArea className={scrollPanel}>
+                <Text size="sm" className={preWrap}>
+                  {memory.content}
+                </Text>
+              </ScrollArea>
+            ),
+          },
+        ]}
+      />
       {memory.tags.length > 0 && (
-        <Group gap="xs">
+        <HStack gap="xs" wrap>
           {memory.tags.map((t) => (
-            <Badge key={t} variant="light" radius="sm">
-              {t}
-            </Badge>
+            <Badge key={t}>{t}</Badge>
           ))}
-        </Group>
+        </HStack>
       )}
       <Divider />
-      <Stack gap={4}>
-        {memory.source && (
-          <Group gap="xs">
-            <Text size="xs" c="dimmed" w={70}>
-              Source
-            </Text>
-            {isUrl(memory.source) ? (
-              <Anchor
-                href={memory.source}
-                target="_blank"
-                rel="noopener noreferrer"
-                size="xs"
-              >
-                {memory.source}
-              </Anchor>
-            ) : (
-              <Text size="xs">{memory.source}</Text>
-            )}
-          </Group>
-        )}
-        {memory.kind && (
-          <Group gap="xs">
-            <Text size="xs" c="dimmed" w={70}>
-              Kind
-            </Text>
-            <Text size="xs">{memory.kind}</Text>
-          </Group>
-        )}
-        {memory.related && memory.related.length > 0 && (
-          <Group gap="xs" align="flex-start">
-            <Text size="xs" c="dimmed" w={70}>
-              Related
-            </Text>
-            <Stack gap={2}>
-              {memory.related.map((r) => (
-                <Text key={`${r.id}:${r.type}`} size="xs">
-                  {r.type} → <Code>{r.id}</Code>
-                </Text>
-              ))}
-            </Stack>
-          </Group>
-        )}
-        {memory.sourceHash && (
-          <Group gap="xs">
-            <Text size="xs" c="dimmed" w={70}>
-              Hash
-            </Text>
-            <Code>{memory.sourceHash.slice(0, 16)}…</Code>
-          </Group>
-        )}
-        {memory.sourceCommit && (
-          <Group gap="xs">
-            <Text size="xs" c="dimmed" w={70}>
-              Commit
-            </Text>
-            <Code>{memory.sourceCommit.slice(0, 12)}</Code>
-          </Group>
-        )}
-        <Group gap="xs">
-          <Text size="xs" c="dimmed" w={70}>
-            Created
-          </Text>
-          <Text size="xs">{formatTime(memory.createdAt)}</Text>
-        </Group>
-        {memory.updatedAt && memory.updatedAt !== memory.createdAt && (
-          <Group gap="xs">
-            <Text size="xs" c="dimmed" w={70}>
-              Updated
-            </Text>
-            <Text size="xs">{formatTime(memory.updatedAt)}</Text>
-          </Group>
-        )}
-        <Group gap="xs">
-          <Text size="xs" c="dimmed" w={70}>
-            ID
-          </Text>
-          <Code>{memory.id}</Code>
-        </Group>
-      </Stack>
+      <DescriptionList columns="single" labelPosition="start" items={meta} />
       <Divider />
-      <Group justify="flex-end">
+      <HStack justify="end">
         <Button
-          variant="light"
-          leftSection={<IconTrash size={14} />}
-          size="xs"
+          tone="danger"
+          appearance="subtle"
+          size="sm"
           loading={deleting}
           onClick={onDelete}
-          style={{ color: 'var(--color-error, #c00)' }}
         >
+          <IconTrash size={14} />
           Delete
         </Button>
-      </Group>
+      </HStack>
     </Stack>
   );
 }
+
+const KIND_OPTIONS = [
+  { value: 'note', label: 'Note' },
+  { value: 'document', label: 'Document' },
+  { value: 'preference', label: 'Preference' },
+  { value: 'claim', label: 'Claim' },
+  { value: 'entity', label: 'Entity' },
+];
 
 function AddMemoryModal({
   opened,
@@ -301,122 +305,112 @@ function AddMemoryModal({
   };
 
   return (
-    <Modal
-      opened={opened}
-      onClose={onClose}
-      title={<Text fw={600}>Add Memory</Text>}
-      size="lg"
-    >
-      <Stack gap="sm">
-        <TextInput
-          label="Title"
-          placeholder="Short label for this memory"
-          value={form.title}
-          onChange={set('title')}
-        />
-        <Stack gap={4}>
-          <Text size="sm" fw={600}>
-            Content <Text c="dimmed">(required)</Text>
-          </Text>
-          <Textarea
+    <Dialog open={opened} onOpenChange={(open) => !open && onClose()}>
+      <Dialog.Popup>
+        <Dialog.Header>
+          <Dialog.Title>Add Memory</Dialog.Title>
+          <Dialog.Close />
+        </Dialog.Header>
+        <Stack gap="sm">
+          <TextField
+            label="Title"
+            placeholder="Short label for this memory"
+            value={form.title}
+            onValueChange={set('title')}
+          />
+          <TextAreaField
+            label="Content (required)"
+            required
             placeholder="The memory content…"
-            autosize
-            minRows={4}
+            rows={4}
             value={form.content}
-            onChange={(e) => set('content')(e.currentTarget.value)}
+            onValueChange={set('content')}
+          />
+          <TextField
+            label="Summary"
+            placeholder="One-line gist used for search ranking"
+            value={form.summary}
+            onValueChange={set('summary')}
+          />
+          <TextField
+            label="Tags"
+            placeholder="Comma-separated tags, e.g. style, payments"
+            value={form.tags}
+            onValueChange={set('tags')}
+          />
+          <Select
+            label="Kind"
+            options={KIND_OPTIONS}
+            value={form.kind}
+            onValueChange={(v) => set('kind')(v ?? 'note')}
+          />
+          <TextField
+            label="Source"
+            placeholder="URL or description, e.g. https://… or conversation"
+            value={form.source}
+            onValueChange={set('source')}
           />
         </Stack>
-        <TextInput
-          label="Summary"
-          placeholder="One-line gist used for search ranking"
-          value={form.summary}
-          onChange={set('summary')}
-        />
-        <TextInput
-          label="Tags"
-          placeholder="Comma-separated tags, e.g. style, payments"
-          value={form.tags}
-          onChange={set('tags')}
-        />
-        <Select
-          label="Kind"
-          data={[
-            { value: 'note', label: 'Note' },
-            { value: 'document', label: 'Document' },
-            { value: 'preference', label: 'Preference' },
-            { value: 'claim', label: 'Claim' },
-            { value: 'entity', label: 'Entity' },
-          ]}
-          value={form.kind}
-          onChange={(v) => set('kind')(v ?? 'note')}
-        />
-        <TextInput
-          label="Source"
-          placeholder="URL or description, e.g. https://… or conversation"
-          value={form.source}
-          onChange={set('source')}
-        />
-        <Group justify="flex-end" mt="xs">
-          <Button variant="default" onClick={onClose}>
+        <Dialog.Actions>
+          <Button appearance="subtle" onClick={onClose}>
             Cancel
           </Button>
           <Button
+            tone="accent"
+            appearance="filled"
             onClick={handleSubmit}
             loading={createMemory.isPending}
-            isDisabled={!form.content.trim()}
+            disabled={!form.content.trim()}
           >
             Save
           </Button>
-        </Group>
-      </Stack>
-    </Modal>
+        </Dialog.Actions>
+      </Dialog.Popup>
+    </Dialog>
   );
 }
 
 export function MemoriesPage() {
   const [query, setQuery] = useState('');
-  const [debounced] = useDebouncedValue(query, 300);
+  const debounced = useDebouncedValue(query, 300);
   const { data, isLoading } = useMemories(debounced.trim() || undefined);
   const [selected, setSelected] = useState<Memory | null>(null);
-  const [detailOpened, { open: openDetail, close: closeDetail }] =
-    useDisclosure(false);
-  const [addOpened, { open: openAdd, close: closeAdd }] = useDisclosure(false);
+  const detail = useDisclosure(false);
+  const add = useDisclosure(false);
   const deleteMemory = useDeleteMemory();
 
   const select = (m: Memory) => {
     setSelected(m);
-    openDetail();
+    detail.show();
   };
 
   const handleDelete = async () => {
     if (!selected) return;
     await deleteMemory.mutateAsync(selected.id);
-    closeDetail();
+    detail.hide();
     setSelected(null);
   };
 
   return (
     <Stack gap="lg">
-      <Group justify="space-between">
-        <Title order={3}>Memories</Title>
-        <Button
-          leftSection={<IconPlus size={14} />}
-          size="xs"
-          onClick={openAdd}
-        >
+      <HStack justify="between">
+        <Heading level={3} size="md">
+          Memories
+        </Heading>
+        <Button tone="accent" appearance="filled" size="sm" onClick={add.show}>
+          <IconPlus size={14} />
           Add Memory
         </Button>
-      </Group>
-      <TextInput
+      </HStack>
+      <SearchInput
         aria-label="Search memories"
-        leftSection={<IconSearch size={16} />}
         placeholder="Search memories…"
         value={query}
-        onChange={(value) => setQuery(value)}
+        onValueChange={setQuery}
       />
-      {isLoading && <Loader size="sm" />}
+      {isLoading && <Spinner size="sm" label="Loading memories…" />}
       {data?.length === 0 && (
-        <Text c="dimmed" size="sm">
+        <Text tone="secondary" size="sm">
           {debounced.trim()
             ? 'No memories match your search.'
             : 'No memories yet. Send the agent a link or some content to teach it something.'}
@@ -428,26 +422,25 @@ export function MemoriesPage() {
         ))}
       </Stack>
 
-      <Modal
-        opened={detailOpened}
-        onClose={closeDetail}
-        size="lg"
-        title={
-          <Text fw={600}>
-            {selected?.title ?? selected?.content.slice(0, 80) ?? 'Memory'}
-          </Text>
-        }
-      >
-        {selected && (
-          <MemoryDetail
-            memory={selected}
-            onDelete={handleDelete}
-            deleting={deleteMemory.isPending}
-          />
-        )}
-      </Modal>
+      <Dialog open={detail.open} onOpenChange={detail.setOpen}>
+        <Dialog.Popup>
+          <Dialog.Header>
+            <Dialog.Title>
+              {selected?.title ?? selected?.content.slice(0, 80) ?? 'Memory'}
+            </Dialog.Title>
+            <Dialog.Close />
+          </Dialog.Header>
+          {selected && (
+            <MemoryDetail
+              memory={selected}
+              onDelete={handleDelete}
+              deleting={deleteMemory.isPending}
+            />
+          )}
+        </Dialog.Popup>
+      </Dialog>
 
-      <AddMemoryModal opened={addOpened} onClose={closeAdd} />
+      <AddMemoryModal opened={add.open} onClose={add.hide} />
     </Stack>
   );
 }

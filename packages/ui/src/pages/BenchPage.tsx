@@ -1,25 +1,32 @@
 import {
   Alert,
-  Anchor,
   Badge,
   Card,
   Code,
-  Group,
-  Loader,
-  Paper,
-  Progress,
-  SimpleGrid,
+  Grid,
+  Heading,
+  HStack,
+  Link,
+  ProgressBar,
+  Spinner,
   Stack,
   Table,
   Text,
-  Title,
-} from '../ds';
+} from '@var-ui/react';
+import type { Tone } from '@var-ui/core';
 import { IconFlask } from '@tabler/icons-react';
-import { Link } from 'react-router-dom';
 import { useBenchRuns, useBenchSuites } from '../api/hooks';
 import type { BenchInstanceSummary } from '../api/types';
 import { BenchEfficiencyChart } from '../components/BenchEfficiencyChart';
 import { formatCost, formatDuration, formatTokensShort } from '../format';
+import {
+  chartGrid,
+  eyebrow,
+  heroValue,
+  runsTable,
+  statValue,
+  suiteCommand,
+} from './BenchPage.styles';
 
 function Stat({
   label,
@@ -31,83 +38,75 @@ function Stat({
   sub?: string;
 }) {
   return (
-    <Paper p="md">
-      <Text size="xs" c="dimmed" tt="uppercase" fw={600} mb={4}>
-        {label}
-      </Text>
-      <Text size="xl" fw={700} lh={1.1}>
-        {value}
-      </Text>
-      {sub && (
-        <Text size="xs" c="dimmed" mt={2}>
-          {sub}
+    <Card>
+      <Stack gap="xs">
+        <Text size="xs" tone="secondary" weight="semibold" className={eyebrow}>
+          {label}
         </Text>
-      )}
-    </Paper>
+        <p className={statValue}>{value}</p>
+        {sub && (
+          <Text size="xs" tone="secondary">
+            {sub}
+          </Text>
+        )}
+      </Stack>
+    </Card>
   );
 }
 
 function Verdict({ row }: { row: BenchInstanceSummary }) {
   if (row.resolved === true)
     return (
-      <Badge color="green" variant="filled">
+      <Badge tone="success" appearance="solid">
         PASS
       </Badge>
     );
-  if (row.resolved === false)
-    return (
-      <Badge color="red" variant="light">
-        FAIL
-      </Badge>
-    );
-  return (
-    <Badge color="gray" variant="light">
-      ungraded
-    </Badge>
-  );
+  if (row.resolved === false) return <Badge tone="danger">FAIL</Badge>;
+  return <Badge tone="neutral">ungraded</Badge>;
 }
+
+const SUITE_KIND: Record<string, { label: string; tone: Tone }> = {
+  deepswe: { label: 'DeepSWE', tone: 'accent' },
+  greenfield: { label: 'Greenfield', tone: 'accent' },
+};
 
 export function BenchPage() {
   const { data, isLoading, error } = useBenchRuns();
   const { data: suites } = useBenchSuites();
 
-  if (isLoading) return <Loader size="sm" />;
+  if (isLoading) return <Spinner size="sm" label="Loading benchmark" />;
 
   if (error || !data) {
     return (
       <Stack gap="md">
-        <Title order={3}>Benchmark</Title>
+        <Heading level={2} size="md">
+          Benchmark
+        </Heading>
         <Alert
-          color="gray"
+          tone="neutral"
           title="No eval results yet"
           icon={<IconFlask size={18} />}
         >
-          Run from your agent project root:
-          <Stack gap={6} mt={4}>
-            <Text ff="monospace" size="sm">
-              artificer eval run
-            </Text>
-            <Text ff="monospace" size="sm">
-              artificer eval run --suite smoke
-            </Text>
-            <Text ff="monospace" size="sm">
-              artificer eval list
-            </Text>
+          <Stack gap="sm">
+            <Text size="sm">Run from your agent project root:</Text>
+            <Stack gap="xs">
+              <Code>artificer eval run</Code>
+              <Code>artificer eval run --suite smoke</Code>
+              <Code>artificer eval list</Code>
+            </Stack>
+            {suites && suites.length > 0 && (
+              <>
+                <Text size="sm" weight="semibold">
+                  Available suites
+                </Text>
+                <Stack gap="xs">
+                  {suites.map((s) => (
+                    <Code key={s.id}>{s.runCommand}</Code>
+                  ))}
+                </Stack>
+              </>
+            )}
           </Stack>
-          {suites && suites.length > 0 && (
-            <>
-              <Text size="sm" mt="md" fw={600}>
-                Available suites
-              </Text>
-              <Stack gap={6} mt={4}>
-                {suites.map((s) => (
-                  <Text key={s.id} ff="monospace" size="sm">
-                    {s.runCommand}
-                  </Text>
-                ))}
-              </Stack>
-            </>
-          )}
         </Alert>
       </Stack>
     );
@@ -124,125 +123,101 @@ export function BenchPage() {
   } = data;
   const passPct =
     summary.resolveRate !== null ? Math.round(summary.resolveRate * 100) : null;
+  const kind = suiteKind
+    ? (SUITE_KIND[suiteKind] ?? { label: 'SWE-bench', tone: 'success' })
+    : null;
 
   return (
     <Stack gap="lg">
-      <div>
-        <Group gap="sm" align="center">
-          <Title order={3}>Benchmark</Title>
-          {suiteKind && (
-            <Badge
-              variant="light"
-              color={
-                suiteKind === 'deepswe'
-                  ? 'violet'
-                  : suiteKind === 'greenfield'
-                    ? 'grape'
-                    : 'teal'
-              }
-            >
-              {suiteKind === 'deepswe'
-                ? 'DeepSWE'
-                : suiteKind === 'greenfield'
-                  ? 'Greenfield'
-                  : 'SWE-bench'}
-            </Badge>
-          )}
-          {modelName && (
-            <Badge variant="light" color="blue">
-              {modelName}
-            </Badge>
-          )}
-        </Group>
+      <Stack gap="xs">
+        <HStack gap="sm">
+          <Heading level={2} size="md">
+            Benchmark
+          </Heading>
+          {kind && <Badge tone={kind.tone}>{kind.label}</Badge>}
+          {modelName && <Badge tone="info">{modelName}</Badge>}
+        </HStack>
         {suiteName && (
-          <Text size="sm" c="dimmed" mt={4}>
+          <Text size="sm" tone="secondary">
             {suiteName}
             {data.suiteDescription ? ` — ${data.suiteDescription}` : ''}
           </Text>
         )}
         {models && (
-          <Group gap="xs" mt={6}>
-            <Text size="xs" c="dimmed">
+          <HStack gap="xs" wrap>
+            <Text as="span" size="xs" tone="secondary">
               tiers:
             </Text>
-            <Badge size="sm" variant="outline" color="gray">
-              low · {models.low}
-            </Badge>
-            <Badge size="sm" variant="outline" color="gray">
-              medium · {models.medium}
-            </Badge>
-            <Badge size="sm" variant="outline" color="gray">
-              high · {models.high}
-            </Badge>
-          </Group>
+            <Badge appearance="outline">low · {models.low}</Badge>
+            <Badge appearance="outline">medium · {models.medium}</Badge>
+            <Badge appearance="outline">high · {models.high}</Badge>
+          </HStack>
         )}
-      </div>
+      </Stack>
 
       {suites && suites.length > 0 && (
-        <Card padding="md">
-          <Text fw={600} size="sm" mb="xs">
-            Available suites
-          </Text>
+        <Card title="Available suites" headingLevel={3}>
           <Stack gap="sm">
             {suites.map((s) => (
-              <Group
-                key={s.id}
-                justify="space-between"
-                align="flex-start"
-                wrap="wrap"
-              >
-                <div>
-                  <Group gap="xs">
-                    <Text size="sm" fw={600}>
+              <HStack key={s.id} justify="between" align="start" wrap>
+                <Stack gap="xs">
+                  <HStack gap="xs">
+                    <Text as="span" size="sm" weight="semibold">
                       {s.name}
                     </Text>
-                    <Badge size="xs" variant="outline">
-                      {s.kind}
-                    </Badge>
-                    <Text size="xs" c="dimmed">
+                    <Badge appearance="outline">{s.kind}</Badge>
+                    <Text as="span" size="xs" tone="secondary">
                       {s.taskCount} tasks
                     </Text>
-                  </Group>
+                  </HStack>
                   {s.description && (
-                    <Text size="xs" c="dimmed" mt={2}>
+                    <Text size="xs" tone="secondary">
                       {s.description}
                     </Text>
                   )}
-                </div>
-                <Stack gap={2} align="flex-end">
-                  <Code style={{ fontSize: 11 }}>{s.runCommand}</Code>
-                  <Code style={{ fontSize: 11 }}>{s.evalCommand}</Code>
                 </Stack>
-              </Group>
+                <Stack gap="xs" align="end">
+                  <Code className={suiteCommand}>{s.runCommand}</Code>
+                  <Code className={suiteCommand}>{s.evalCommand}</Code>
+                </Stack>
+              </HStack>
             ))}
           </Stack>
         </Card>
       )}
 
-      <Card padding="lg">
-        <Group justify="space-between" align="flex-end" mb="sm">
-          <div>
-            <Text size="xs" c="dimmed" tt="uppercase" fw={600}>
-              Pass@1
+      <Card>
+        <Stack gap="sm">
+          <HStack justify="between" align="end">
+            <div>
+              <Text
+                size="xs"
+                tone="secondary"
+                weight="semibold"
+                className={eyebrow}
+              >
+                Pass@1
+              </Text>
+              <p className={heroValue}>
+                {passPct !== null ? `${passPct}%` : '—'}
+              </p>
+            </div>
+            <Text size="sm" tone="secondary">
+              {graded
+                ? `${summary.resolved}/${summary.instances} resolved`
+                : 'not yet graded'}
             </Text>
-            <Text fz={40} fw={800} lh={1}>
-              {passPct !== null ? `${passPct}%` : '—'}
-            </Text>
-          </div>
-          <Text size="sm" c="dimmed">
-            {graded
-              ? `${summary.resolved}/${summary.instances} resolved`
-              : 'not yet graded'}
-          </Text>
-        </Group>
-        <Progress
-          value={passPct ?? 0}
-          color={passPct && passPct >= 50 ? 'green' : 'blue'}
-          size="lg"
-        />
+          </HStack>
+          <ProgressBar
+            aria-label="Pass@1"
+            value={passPct ?? 0}
+            showValueText={false}
+            tone={passPct && passPct >= 50 ? 'success' : 'info'}
+          />
+        </Stack>
       </Card>
 
-      <SimpleGrid cols={{ base: 1, lg: 2 }}>
+      <div className={chartGrid}>
         <BenchEfficiencyChart
           title="Score vs. cost per run"
           subtitle="Archived benchmark runs (avg cost per instance vs pass rate)"
@@ -257,9 +232,9 @@ export function BenchPage() {
           xLabel="Instance cost"
           yLabel="Pass / fail"
         />
-      </SimpleGrid>
+      </div>
 
-      <SimpleGrid cols={{ base: 2, sm: 3, lg: 5 }}>
+      <Grid columns="auto">
         <Stat label="Instances" value={String(summary.instances)} />
         <Stat label="Total cost" value={formatCost(summary.totalCostUsd)} />
         <Stat label="Avg cost" value={formatCost(summary.avgCostUsd)} />
@@ -277,61 +252,57 @@ export function BenchPage() {
           value={formatTokensShort(summary.inputTokens)}
           sub={`${formatTokensShort(summary.outputTokens)} out`}
         />
-      </SimpleGrid>
+      </Grid>
 
-      <Table.ScrollContainer minWidth={760}>
-        <Table striped highlightOnHover withTableBorder>
-          <Table.Thead>
-            <Table.Tr>
-              <Table.Th>Verdict</Table.Th>
-              <Table.Th>Instance</Table.Th>
-              <Table.Th>Repo</Table.Th>
-              <Table.Th>Outcome</Table.Th>
-              <Table.Th ta="right">Time</Table.Th>
-              <Table.Th ta="right">Cost</Table.Th>
-              <Table.Th ta="right">Calls</Table.Th>
-              <Table.Th ta="right">Out tok</Table.Th>
-            </Table.Tr>
-          </Table.Thead>
-          <Table.Tbody>
-            {instances.map((row) => (
-              <Table.Tr key={row.instanceId}>
-                <Table.Td>
-                  <Verdict row={row} />
-                </Table.Td>
-                <Table.Td>
-                  <Anchor
-                    component={Link}
-                    to={`/bench/${encodeURIComponent(row.instanceId)}`}
-                    size="sm"
-                  >
+      <Table striped hasHover className={runsTable}>
+        <Table.Header>
+          <Table.Row>
+            <Table.Column>Verdict</Table.Column>
+            <Table.Column rowHeader>Instance</Table.Column>
+            <Table.Column>Repo</Table.Column>
+            <Table.Column>Outcome</Table.Column>
+            <Table.Column align="end">Time</Table.Column>
+            <Table.Column align="end">Cost</Table.Column>
+            <Table.Column align="end">Calls</Table.Column>
+            <Table.Column align="end">Out tok</Table.Column>
+          </Table.Row>
+        </Table.Header>
+        <Table.Body>
+          {instances.map((row) => (
+            <Table.Row key={row.instanceId}>
+              <Table.Cell>
+                <Verdict row={row} />
+              </Table.Cell>
+              <Table.Cell rowHeader>
+                <HStack gap="xs">
+                  <Link href={`/bench/${encodeURIComponent(row.instanceId)}`}>
                     {row.instanceId}
-                  </Anchor>
+                  </Link>
                   {row.hasTrajectory && (
-                    <Badge size="xs" variant="dot" color="cyan" ml={6}>
+                    <Badge tone="accent" appearance="outline">
                       trajectory
                     </Badge>
                   )}
-                </Table.Td>
-                <Table.Td>
-                  <Text size="sm" c="dimmed">
-                    {row.repo}
-                  </Text>
-                </Table.Td>
-                <Table.Td>
-                  <Text size="sm">{row.outcome.replace(/_/g, ' ')}</Text>
-                </Table.Td>
-                <Table.Td ta="right">{formatDuration(row.durationMs)}</Table.Td>
-                <Table.Td ta="right">{formatCost(row.costUsd)}</Table.Td>
-                <Table.Td ta="right">{row.runs}</Table.Td>
-                <Table.Td ta="right">
-                  {formatTokensShort(row.outputTokens)}
-                </Table.Td>
-              </Table.Tr>
-            ))}
-          </Table.Tbody>
-        </Table>
-      </Table.ScrollContainer>
+                </HStack>
+              </Table.Cell>
+              <Table.Cell>
+                <Text as="span" size="sm" tone="secondary">
+                  {row.repo}
+                </Text>
+              </Table.Cell>
+              <Table.Cell>{row.outcome.replace(/_/g, ' ')}</Table.Cell>
+              <Table.Cell align="end">
+                {formatDuration(row.durationMs)}
+              </Table.Cell>
+              <Table.Cell align="end">{formatCost(row.costUsd)}</Table.Cell>
+              <Table.Cell align="end">{row.runs}</Table.Cell>
+              <Table.Cell align="end">
+                {formatTokensShort(row.outputTokens)}
+              </Table.Cell>
+            </Table.Row>
+          ))}
+        </Table.Body>
+      </Table>
     </Stack>
   );
 }

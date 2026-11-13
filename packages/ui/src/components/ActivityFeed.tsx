@@ -1,6 +1,6 @@
 import { useEffect, useRef } from 'react';
-import { Text } from '../ds';
-import { color } from '../ds/tokens';
+import { Text } from '@var-ui/react';
+import { hue } from '../styles/palette';
 import { relativeTime } from '../format';
 import { useSSEEvents, type ActivityEntry } from '../api/hooks';
 import {
@@ -16,12 +16,12 @@ import {
 } from './ActivityFeed.styles';
 
 const DOT_COLOR: Record<ActivityEntry['kind'], string> = {
-  message: color.blue,
-  workstream: color.violet,
-  run: color.orange,
-  tool: color.gray,
-  quota: color.yellow,
-  approval: color.red,
+  message: hue.blue,
+  workstream: hue.violet,
+  run: hue.orange,
+  tool: hue.gray,
+  quota: hue.yellow,
+  approval: hue.red,
 };
 
 function FeedRow({ entry }: { entry: ActivityEntry }) {
@@ -49,10 +49,12 @@ export function ActivityFeed() {
 
   return (
     <div className={feedRoot}>
-      <div className={feedHeader}>Activity</div>
+      <Text as="div" size="sm" weight="semibold" className={feedHeader}>
+        Activity
+      </Text>
       <div className={feedScroll}>
         {entries.length === 0 ? (
-          <Text size="xs" c="dimmed" className={feedEmpty}>
+          <Text size="xs" tone="secondary" className={feedEmpty}>
             No activity yet.
           </Text>
         ) : (

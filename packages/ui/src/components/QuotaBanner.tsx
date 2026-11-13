@@ -1,6 +1,22 @@
-import { Alert, Badge, Group } from '../ds';
+import { Alert, Badge } from '@var-ui/react';
+import type { Tone } from '@var-ui/core';
 import { useUsage } from '../api/hooks';
-import { accountStatusColor, quotaHeadline } from '../quota';
+import type { QuotaAccountState } from '../api/types';
+import { quotaHeadline } from '../quota';
+
+/** Semantic tone for a quota account status. */
+export function accountStatusTone(status: QuotaAccountState['status']): Tone {
+  switch (status) {
+    case 'ok':
+      return 'success';
+    case 'warning':
+      return 'warning';
+    case 'exhausted':
+      return 'danger';
+    default:
+      return 'neutral';
+  }
+}
 
 /** Compact quota status for the app header. */
 export function QuotaBanner() {
@@ -17,10 +33,8 @@ export function QuotaBanner() {
     return acc;
   }, 'ok');
 
-  const color = accountStatusColor(worst);
-
   return (
-    <Badge color={color} variant="light" title={headline}>
+    <Badge tone={accountStatusTone(worst)} title={headline}>
       {headline.length > 48 ? `${headline.slice(0, 45)}…` : headline}
     </Badge>
   );
@@ -42,7 +56,7 @@ export function QuotaAlert() {
 
   return (
     <Alert
-      color={exhausted ? 'orange' : failover ? 'blue' : 'orange'}
+      tone={exhausted ? 'warning' : failover ? 'info' : 'warning'}
       title={
         exhausted
           ? 'Usage quota reached'
@@ -51,7 +65,7 @@ export function QuotaAlert() {
             : 'Quota warning'
       }
     >
-      <Group gap="xs">{headline}</Group>
+      {headline}
     </Alert>
   );
 }
