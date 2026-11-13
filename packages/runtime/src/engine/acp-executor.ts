@@ -25,6 +25,7 @@ import type { RuntimeEvent } from '../context.js';
 import type { RunRecord, ToolInvocation } from '../storage/types.js';
 import type { ToolPolicyFile } from '../tools/tool-policy.js';
 import { decidePermission } from './acp-permissions.js';
+import { resolveAcpLaunch, type AcpLaunch } from './acp-presets.js';
 import type { ExecutorResult, WorkerExecutor } from './executor.js';
 import {
   executorStateDir,
@@ -181,6 +182,7 @@ function waitForExit(child: ChildProcess, ms: number): Promise<boolean> {
 export class AcpExecutor implements WorkerExecutor {
   readonly name: string;
   readonly resumesSession: boolean;
+  private readonly launch: AcpLaunch;
   private readonly mcpServerPath: string;
   private readonly cancelGraceMs: number;
 
@@ -188,8 +190,9 @@ export class AcpExecutor implements WorkerExecutor {
     private readonly config: AcpExecutorConfig,
     opts: { mcpServerPath?: string; cancelGraceMs?: number } = {},
   ) {
-    this.name = 'acp:' + path.basename(config.command);
-    this.resumesSession = config.resumes ?? false;
+    this.launch = resolveAcpLaunch(config);
+    this.name = this.launch.name;
+    this.resumesSession = this.launch.resumes;
     this.mcpServerPath = opts.mcpServerPath ?? MCP_SERVER;
     this.cancelGraceMs = opts.cancelGraceMs ?? CANCEL_GRACE_MS;
   }
@@ -215,7 +218,7 @@ export class AcpExecutor implements WorkerExecutor {
     onToolCall?: (invocation: ToolInvocation) => void;
     emit?: (event: RuntimeEvent) => void;
   }): Promise<ExecutorResult> {
-    const { config, name } = this;
+    const { config, name, launch } = this;
     if (signal?.aborted) throw new Error('cancelled');
     const statusFile = path.join(
       executorStateDir(workspaceDir),
@@ -223,11 +226,11 @@ export class AcpExecutor implements WorkerExecutor {
     );
     fs.rmSync(statusFile, { force: true });
 
-    const child = spawn(config.command, config.args, {
+    const child = spawn(launch.command, launch.args, {
       cwd: workspaceDir,
       detached: true,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, ...config.env },
+      env: { ...process.env, ...launch.env },
     });
 
     let stderrTail = '';
@@ -256,7 +259,7 @@ export class AcpExecutor implements WorkerExecutor {
     child.on('error', (err) => {
       failTransport(
         new AcpRunError(
-          `${name} failed to start ${config.command}: ${err.message}`,
+          `${name} failed to start ${launch.command}: ${err.message}`,
         ),
       );
     });

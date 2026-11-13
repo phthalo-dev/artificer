@@ -106,14 +106,25 @@ const executorSchema = z.union([
   z
     .object({
       type: z.literal('acp'),
-      command: z.string().min(1),
-      args: z.array(z.string()),
+      agent: z.enum(['opencode']).optional(),
+      command: z.string().min(1).optional(),
+      args: z.array(z.string()).optional(),
+      model: z.string().min(1).optional(),
       env: z.record(z.string()).optional(),
       mode: z.string().min(1).optional(),
       resumes: z.boolean().optional(),
       timeout: z.number().int().positive().optional(),
     })
-    .strict(),
+    .strict()
+    .refine(
+      (v) =>
+        (v.agent !== undefined) !== (v.command !== undefined) &&
+        (v.command === undefined || v.args !== undefined),
+      {
+        message:
+          'acp executor needs exactly one of agent or command (command requires args)',
+      },
+    ),
 ]);
 
 const machineWorkstreamSchema = z.object({

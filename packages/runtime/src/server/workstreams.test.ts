@@ -260,6 +260,28 @@ test('conversation create accepts, persists, and validates acp executors', async
         .status,
       400,
     );
+    assert.equal(
+      (
+        await post({
+          type: 'acp',
+          agent: 'opencode',
+          model: 'opencode/x',
+        })
+      ).status,
+      201,
+    );
+    assert.equal(
+      (
+        await post({
+          type: 'acp',
+          agent: 'opencode',
+          command: 'x',
+          args: [],
+        })
+      ).status,
+      400,
+    );
+    assert.equal((await post({ type: 'acp', agent: 'codex' })).status, 400);
   } finally {
     restore();
   }
