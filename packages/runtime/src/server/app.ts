@@ -103,6 +103,17 @@ const executorSchema = z.union([
     timeout: z.number().optional(),
     mcpConfigPath: z.string().optional(),
   }),
+  z
+    .object({
+      type: z.literal('acp'),
+      command: z.string().min(1),
+      args: z.array(z.string()),
+      env: z.record(z.string()).optional(),
+      mode: z.string().min(1).optional(),
+      resumes: z.boolean().optional(),
+      timeout: z.number().int().positive().optional(),
+    })
+    .strict(),
 ]);
 
 const machineWorkstreamSchema = z.object({

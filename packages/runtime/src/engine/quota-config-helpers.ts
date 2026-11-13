@@ -1,3 +1,4 @@
+import path from 'node:path';
 import type { ExecutorConfig } from '../api/types.js';
 import type { QuotaAccountConfig, QuotaWindowConfig } from './quota-types.js';
 
@@ -52,6 +53,7 @@ export function executorAccountId(
   if (executor.type === 'cursor-agent') return 'cursor-agent';
   if (executor.type === 'claude-code') return 'claude-code';
   if (executor.type === 'opencode') return 'opencode';
+  if (executor.type === 'acp') return `acp:${path.basename(executor.command)}`;
   return undefined;
 }
 

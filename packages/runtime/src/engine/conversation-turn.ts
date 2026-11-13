@@ -1,8 +1,11 @@
+import type { RuntimeEvent } from '../context.js';
 import {
   emptyUsage,
   type RunRecord,
+  type ToolInvocation,
   type Workstream,
 } from '../storage/types.js';
+import type { ToolPolicyFile } from '../tools/tool-policy.js';
 import {
   conversationPreamble,
   conversationPrompt,
@@ -22,6 +25,9 @@ export interface RunConversationTurnInput {
   runBuiltin: (prompt: string, repoPath: string) => Promise<string>;
   signal?: AbortSignal;
   run?: RunRecord;
+  policy?: ToolPolicyFile;
+  onToolCall?: (invocation: ToolInvocation) => void;
+  emit?: (event: RuntimeEvent) => void;
 }
 
 export function isStaleSessionError(error: unknown): boolean {
@@ -78,6 +84,9 @@ export async function runConversationTurn(
       run,
       sessionId,
       signal: input.signal,
+      policy: input.policy,
+      onToolCall: input.onToolCall,
+      emit: input.emit,
       ...(input.executor?.name === 'claude-code'
         ? { outputFormat: 'json' as const }
         : {}),
