@@ -39,6 +39,45 @@ function isGated(
   return flag === true;
 }
 
+export type ApprovalDecision =
+  | { allow: true; rule?: PolicyRule }
+  | {
+      allow: false;
+      kind: 'approval_denied';
+      rule: PolicyRule;
+      proposedRule: Omit<PolicyRule, 'id' | 'createdAt'>;
+    }
+  | {
+      allow: false;
+      kind: 'approval_required';
+      proposedRule: Omit<PolicyRule, 'id' | 'createdAt'>;
+    };
+
+/** Pure policy decision for a call already known to be gated. */
+export function decideApproval(args: {
+  tool: string;
+  approvalKey: string;
+  policy: ToolPolicyFile;
+}): ApprovalDecision {
+  const matched = matchRule(args.policy, args.tool, args.approvalKey);
+  const proposedRule: Omit<PolicyRule, 'id' | 'createdAt'> = {
+    tool: args.tool,
+    pattern: args.approvalKey,
+    effect: 'allow',
+    scope: 'agent',
+  };
+  if (matched?.effect === 'allow') return { allow: true, rule: matched };
+  if (matched?.effect === 'deny') {
+    return {
+      allow: false,
+      kind: 'approval_denied',
+      rule: matched,
+      proposedRule,
+    };
+  }
+  return { allow: false, kind: 'approval_required', proposedRule };
+}
+
 export function enforceApproval(args: {
   tool: Pick<ToolDef, 'name' | 'needsApproval'>;
   input: Record<string, unknown>;
@@ -52,19 +91,19 @@ export function enforceApproval(args: {
   }
 
   const approvalKey = approvalKeyFor(args.tool.name, args.input);
-  const matched = matchRule(args.policy, args.tool.name, approvalKey);
-  const proposedRule: Omit<PolicyRule, 'id' | 'createdAt'> = {
+  const decision = decideApproval({
     tool: args.tool.name,
-    pattern: approvalKey,
-    effect: 'allow',
-    scope: 'agent',
-  };
+    approvalKey,
+    policy: args.policy,
+  });
 
-  if (matched?.effect === 'allow') {
+  if (decision.allow) {
     return { allow: true };
   }
 
-  if (matched?.effect === 'deny') {
+  const { proposedRule } = decision;
+
+  if (decision.kind === 'approval_denied') {
     const payload: ApprovalDeniedPayload = {
       ok: false,
       kind: 'approval_denied',
