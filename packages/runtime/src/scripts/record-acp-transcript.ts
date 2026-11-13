@@ -7,13 +7,16 @@
  * Every JSON-RPC line, both directions, is written as JSONL
  * `{ t, dir: 'in'|'out', msg }` (in = agent to us, out = us to agent).
  * Permission requests are answered `reject_once` when the toolCall JSON
- * matches --reject (default `rm -rf`), otherwise `allow_once`. The cwd and its
- * parent are replaced with {{WS}} / {{PARENT}} in the output.
+ * matches --reject (default `rm -rf`), otherwise `allow_once`. The cwd, its
+ * parent, and the home directory are replaced with {{WS}} / {{PARENT}} /
+ * {{HOME}} in the output.
  */
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import readline from 'node:readline';
+import { sanitizeTranscriptPaths } from './acp-transcript-sanitize.js';
 
 interface Args {
   out: string;
@@ -55,9 +58,10 @@ const args = parseArgs(process.argv.slice(2));
 const parent = path.dirname(args.cwd);
 const lines: string[] = [];
 
+const home = os.homedir();
+
 function sanitize(text: string): string {
-  // Replace the longer path first so the workspace is not half-rewritten.
-  return text.split(args.cwd).join('{{WS}}').split(parent).join('{{PARENT}}');
+  return sanitizeTranscriptPaths(text, { cwd: args.cwd, parent, home });
 }
 
 function log(dir: 'in' | 'out', raw: string): void {
