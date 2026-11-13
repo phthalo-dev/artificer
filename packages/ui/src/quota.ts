@@ -57,21 +57,6 @@ export function windowLabel(window: QuotaWindowState): string {
     : `${id} (${periodLabel})`;
 }
 
-export function accountStatusColor(
-  status: QuotaAccountState['status'],
-): 'green' | 'yellow' | 'red' | 'gray' {
-  switch (status) {
-    case 'ok':
-      return 'green';
-    case 'warning':
-      return 'yellow';
-    case 'exhausted':
-      return 'red';
-    default:
-      return 'gray';
-  }
-}
-
 export function quotaHeadline(
   snapshot: QuotaSnapshot | null | undefined,
 ): string | null {
