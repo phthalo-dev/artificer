@@ -221,6 +221,118 @@ test('mode is not set when the agent does not advertise it', async (t) => {
   assert.equal(requests(await records(), 'session/set_mode').length, 0);
 });
 
+const MODEL_OPTIONS = [
+  {
+    id: 'model',
+    name: 'Model',
+    category: 'model',
+    type: 'select',
+    currentValue: 'opencode/a',
+    options: [
+      { value: 'opencode/a', name: 'A' },
+      { value: 'opencode/b', name: 'B' },
+    ],
+  },
+];
+
+test('model is set via set_config_option', async (t) => {
+  const { promise, records } = await run(
+    t,
+    {
+      configOptions: MODEL_OPTIONS,
+      steps: [{ type: 'message', text: 'hi' }],
+    },
+    { model: 'opencode/b' },
+  );
+  await promise;
+  const recs = await records();
+  const set = requests(recs, 'session/set_config_option');
+  assert.equal(set.length, 1);
+  assert.equal(set[0]?.params.configId, 'model');
+  assert.equal(set[0]?.params.value, 'opencode/b');
+  const methodsSeen = recs.map((r: { method?: string }) => r.method);
+  assert.ok(
+    methodsSeen.indexOf('session/set_config_option') <
+      methodsSeen.indexOf('session/prompt'),
+  );
+});
+
+test('model equal to current is not re-set', async (t) => {
+  const { promise, records } = await run(
+    t,
+    {
+      configOptions: MODEL_OPTIONS,
+      steps: [{ type: 'message', text: 'hi' }],
+    },
+    { model: 'opencode/a' },
+  );
+  await promise;
+  assert.equal(
+    requests(await records(), 'session/set_config_option').length,
+    0,
+  );
+});
+
+test('unknown model rejects before prompt', async (t) => {
+  const { promise, records } = await run(
+    t,
+    {
+      configOptions: MODEL_OPTIONS,
+      steps: [{ type: 'message', text: 'hi' }],
+    },
+    { model: 'opencode/zzz' },
+  );
+  await assert.rejects(
+    promise,
+    (err: Error) =>
+      err.message ===
+      'acp:node does not offer model opencode/zzz; available: opencode/a, opencode/b',
+  );
+  assert.equal(requests(await records(), 'session/prompt').length, 0);
+});
+
+test('model without model option rejects', async (t) => {
+  const { promise } = await run(
+    t,
+    { configOptions: [], steps: [{ type: 'message', text: 'hi' }] },
+    { model: 'opencode/a' },
+  );
+  await assert.rejects(
+    promise,
+    (err: Error) => err.message === 'acp:node does not support model selection',
+  );
+});
+
+test('model on resume without configOptions rejects', async (t) => {
+  const { promise } = await run(
+    t,
+    {
+      agentCapabilities: { sessionCapabilities: { resume: {} } },
+      configOptions: MODEL_OPTIONS,
+      resumeConfigOptions: null,
+      steps: [{ type: 'message', text: 'hi' }],
+    },
+    { model: 'opencode/b', resumes: true },
+    { sessionId: 's1' },
+  );
+  await assert.rejects(
+    promise,
+    (err: Error) => err.message === 'acp:node does not support model selection',
+  );
+});
+
+test('no model configured sends no set_config_option', async (t) => {
+  const { promise, records } = await run(t, {
+    configOptions: MODEL_OPTIONS,
+    steps: [{ type: 'message', text: 'hi' }],
+  });
+  await promise;
+  assert.equal(
+    requests(await records(), 'session/set_config_option').length,
+    0,
+  );
+});
+
 test('max_tokens stop reason appends marker', async (t) => {
   const { promise } = await run(t, {
     steps: [{ type: 'message', text: 'partial' }],

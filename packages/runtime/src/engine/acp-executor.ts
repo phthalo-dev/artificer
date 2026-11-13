@@ -179,6 +179,31 @@ function waitForExit(child: ChildProcess, ms: number): Promise<boolean> {
   });
 }
 
+/** Find the `category: 'model'` select option, reading defensively. */
+function findModelOption(
+  raw: unknown,
+): { id: string; currentValue: unknown; values: string[] } | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  for (const o of raw) {
+    if (!o || typeof o !== 'object') continue;
+    const opt = o as Record<string, unknown>;
+    if (opt.category !== 'model' || typeof opt.id !== 'string') continue;
+    const values: string[] = [];
+    const walk = (items: unknown) => {
+      if (!Array.isArray(items)) return;
+      for (const it of items) {
+        if (!it || typeof it !== 'object') continue;
+        const r = it as Record<string, unknown>;
+        if (typeof r.value === 'string') values.push(r.value);
+        else if (Array.isArray(r.options)) walk(r.options);
+      }
+    };
+    walk(opt.options);
+    return { id: opt.id, currentValue: opt.currentValue, values };
+  }
+  return undefined;
+}
+
 export class AcpExecutor implements WorkerExecutor {
   readonly name: string;
   readonly resumesSession: boolean;
@@ -469,7 +494,11 @@ export class AcpExecutor implements WorkerExecutor {
             env: [],
           },
         ];
-        let created: { modes?: SessionModeState | null; sessionId: string };
+        let created: {
+          modes?: SessionModeState | null;
+          configOptions?: unknown;
+          sessionId: string;
+        };
         if (resumeId) {
           const caps = init.agentCapabilities;
           const canResume = Boolean(caps?.sessionCapabilities?.resume);
@@ -498,6 +527,9 @@ export class AcpExecutor implements WorkerExecutor {
                   | null
                   | undefined
               )?.modes,
+              configOptions: (
+                resumed as { configOptions?: unknown } | null | undefined
+              )?.configOptions,
             };
           } catch (err) {
             if (err instanceof RequestError) throw notFound;
@@ -525,6 +557,25 @@ export class AcpExecutor implements WorkerExecutor {
           }
         const sessionId = created.sessionId;
         activeSessionId = sessionId;
+
+        if (config.model) {
+          const option = findModelOption(created.configOptions);
+          if (!option) {
+            throw new AcpRunError(`${name} does not support model selection`);
+          }
+          if (!option.values.includes(config.model)) {
+            throw new AcpRunError(
+              `${name} does not offer model ${config.model}; available: ${option.values.slice(0, 10).join(', ')}`,
+            );
+          }
+          if (config.model !== option.currentValue) {
+            await this.call(ctx, methods.agent.session.setConfigOption, {
+              sessionId,
+              configId: option.id,
+              value: config.model,
+            });
+          }
+        }
 
         if (
           config.mode &&

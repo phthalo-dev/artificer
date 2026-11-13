@@ -152,6 +152,18 @@ function crash(code) {
   );
 }
 
+/** Result for session/load and session/resume. */
+function resumeResult() {
+  const configOptions =
+    'resumeConfigOptions' in scenario
+      ? scenario.resumeConfigOptions
+      : scenario.configOptions;
+  return {
+    ...(scenario.modes ? { modes: scenario.modes } : {}),
+    ...(configOptions ? { configOptions } : {}),
+  };
+}
+
 const app = agent({ name: 'fake' })
   .onRequest(methods.agent.initialize, ({ params }) => {
     return {
@@ -167,6 +179,9 @@ const app = agent({ name: 'fake' })
     return {
       sessionId,
       ...(scenario.modes ? { modes: scenario.modes } : {}),
+      ...(scenario.configOptions
+        ? { configOptions: scenario.configOptions }
+        : {}),
     };
   })
   .onRequest(methods.agent.session.load, async ({ params, client }) => {
@@ -179,16 +194,22 @@ const app = agent({ name: 'fake' })
       });
     }
     if (scenario.nullResumeResponse) return null;
-    return scenario.modes ? { modes: scenario.modes } : {};
+    return resumeResult();
   })
   .onRequest(methods.agent.session.resume, ({ params }) => {
     if (scenario.resumeError) throw rpcError(scenario.resumeError);
     sessions.set(params.sessionId, params.mcpServers ?? []);
     if (scenario.nullResumeResponse) return null;
-    return scenario.modes ? { modes: scenario.modes } : {};
+    return resumeResult();
   })
   .onRequest(methods.agent.session.setMode, ({ params }) => {
     return {};
+  })
+  .onRequest(methods.agent.session.setConfigOption, ({ params }) => {
+    const options = (scenario.configOptions ?? []).map((o) =>
+      o.id === params.configId ? { ...o, currentValue: params.value } : o,
+    );
+    return { configOptions: options };
   })
   .onRequest(methods.agent.session.prompt, async ({ params, client }) => {
     lastClient = client;
