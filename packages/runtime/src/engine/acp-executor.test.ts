@@ -660,16 +660,21 @@ test('invalid stdout after cancel does not replace the abort error', async (t) =
 });
 
 test('timeout rejects with timed out', async (t) => {
+  // Long enough that the agent is mid-prompt when the timeout fires, even on a
+  // loaded machine: a shorter timeout could fire before the fake agent started
+  // (no pid recorded, no session to cancel).
   const { promise, records } = await run(
     t,
     { steps: [{ type: 'hang' }] },
-    { timeout: 300 },
+    { timeout: 2_000 },
   );
   await assert.rejects(
     promise,
     (err: Error) => err.message === 'acp:node agent timed out',
   );
-  assertGone((await records())[0]?.pid);
+  const recorded = await records();
+  assert.ok(recorded.some((r) => r.method === 'session/cancel'));
+  assertGone(recorded[0]?.pid);
 });
 
 test('permission during cancel is cancelled', async (t) => {
