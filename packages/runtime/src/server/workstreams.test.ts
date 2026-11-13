@@ -282,6 +282,20 @@ test('conversation create accepts, persists, and validates acp executors', async
       400,
     );
     assert.equal((await post({ type: 'acp', agent: 'codex' })).status, 400);
+    assert.equal(
+      (await post({ type: 'acp', agent: 'opencode', args: [] })).status,
+      400,
+    );
+    const badConfig = await post({
+      type: 'acp',
+      agent: 'opencode',
+      env: { OPENCODE_CONFIG_CONTENT: '{bad' },
+    });
+    assert.equal(badConfig.status, 400);
+    assert.match(
+      await badConfig.text(),
+      /OPENCODE_CONFIG_CONTENT is not valid JSON/,
+    );
   } finally {
     restore();
   }

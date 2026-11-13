@@ -144,9 +144,8 @@
             "type": { "const": "acp" },
             "agent": {
               "enum": ["opencode"],
-              "description": "Certified agent preset."
+              "description": "Certified agent preset. Its launch command and args are fixed."
             },
-            "args": { "type": "array", "items": { "type": "string" } },
             "env": {
               "type": "object",
               "additionalProperties": { "type": "string" }

@@ -19,7 +19,7 @@ import {
 import { runGithubWatchOnce as defaultRunGithubWatchOnce } from '../engine/github-watch-runner.js';
 import type { GithubWatchState } from '../engine/github-watch.js';
 import { loadRepos } from '../engine/repos.js';
-import { ACP_PRESETS } from '../engine/acp-presets.js';
+import { ACP_PRESETS, resolveAcpLaunch } from '../engine/acp-presets.js';
 import { type LlmSdkPackage, MODEL_CATALOG } from '../llm/catalog.js';
 import { listPresets } from '../engine/presets.js';
 import { primaryAccountIdFor } from '../engine/quota-config.js';
@@ -125,7 +125,20 @@ const executorSchema = z.union([
         message:
           'acp executor needs exactly one of agent or command (command requires args)',
       },
-    ),
+    )
+    .refine((v) => v.agent === undefined || v.args === undefined, {
+      message: 'acp executor: args cannot be overridden for a preset',
+    })
+    .superRefine((v, ctx) => {
+      try {
+        resolveAcpLaunch(v);
+      } catch (err) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }),
 ]);
 
 const machineWorkstreamSchema = z.object({
