@@ -624,6 +624,6 @@ export function init(name: string, targetDir?: string): void {
   console.log('  artificer dev');
   console.log('');
   console.log(
-    'To deploy to Fly.io, see https://github.com/dbanksdesign/artificer/blob/main/docs/content/docs/guides/deploying-to-fly.md',
+    'To deploy to Fly.io, see https://github.com/phthalo-dev/artificer/blob/main/docs/content/docs/guides/deploying-to-fly.md',
   );
 }

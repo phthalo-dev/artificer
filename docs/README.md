@@ -1,6 +1,6 @@
 # Artificer docs site
 
-This folder is the Astro app for https://github.com/dbanksdesign/artificer end-user documentation.
+This folder is the Astro app for https://github.com/phthalo-dev/artificer end-user documentation.
 
 - Published pages: `content/docs/`
 - Dev: `pnpm --filter docs dev` (from the repo root)
