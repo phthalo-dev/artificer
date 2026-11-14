@@ -23,6 +23,7 @@
     "prepare": "husky"
   },
   "devDependencies": {
+    "@changesets/changelog-github": "1.0.1",
     "@changesets/cli": "2.31.0",
     "@types/node": "20.19.35",
     "husky": "9.1.7",
