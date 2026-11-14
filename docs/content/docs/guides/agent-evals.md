@@ -314,7 +314,7 @@ Use **`artificer eval`** for the day-to-day loop:
 edit identity → artificer eval run → review Benchmark UI → commit or revert
 ```
 
-Use **`pnpm bench`** only if you are developing Artificer itself and need SWE-bench/DeepSWE correctness signals. The harness implementation lives in `@artificer-ai/eval` (`packages/eval/src/bench/`); task fixtures and results stay under `packages/runtime/bench/`. See [Runtime benchmarking harness](https://github.com/dbanksdesign/artificer/blob/main/packages/runtime/bench/README.md) for maintainer usage.
+Use **`pnpm bench`** only if you are developing Artificer itself and need SWE-bench/DeepSWE correctness signals. The harness implementation lives in `@artificer-ai/eval` (`packages/eval/src/bench/`); task fixtures and results stay under `packages/runtime/bench/`. See [Runtime benchmarking harness](https://github.com/phthalo-dev/artificer/blob/main/packages/runtime/bench/README.md) for maintainer usage.
 
 ### Maintainer Pack B
 
@@ -325,7 +325,7 @@ cp -R evals/examples/runtime-dev/* path/to/identity/agent/evals/
 artificer eval run --suite smoke
 ```
 
-Tasks are small offline fixtures (`repo.url: "fixture"`), not a full monorepo pin. See [`evals/examples/README.md`](https://github.com/dbanksdesign/artificer/blob/main/evals/examples/README.md) for task list, identity seeding for message tasks, and how to refresh `introduce-bug.patch`.
+Tasks are small offline fixtures (`repo.url: "fixture"`), not a full monorepo pin. See [`evals/examples/README.md`](https://github.com/phthalo-dev/artificer/blob/main/evals/examples/README.md) for task list, identity seeding for message tasks, and how to refresh `introduce-bug.patch`.
 
 The underlying driver lives in `@artificer-ai/eval` — both paths share HTTP polling, cost collection, and report shapes. Consumer evals add identity loading and eval-mode guards; maintainer bench adds Docker-based SWE-bench grading and external-agent comparison.
 
@@ -381,7 +381,7 @@ Maintainer equivalent: `pnpm bench --suite tasks/swebench-lite-curated-30.json` 
 
 ## CI on identity PRs
 
-Copy [`evals/examples/github-eval.yml`](https://github.com/dbanksdesign/artificer/blob/main/evals/examples/github-eval.yml) to `.github/workflows/eval.yml` in the agent repo. It runs the smoke suite when `agent/` or `artificer.config.json` change. Store `LLM_API_KEY` as a GitHub Actions secret.
+Copy [`evals/examples/github-eval.yml`](https://github.com/phthalo-dev/artificer/blob/main/evals/examples/github-eval.yml) to `.github/workflows/eval.yml` in the agent repo. It runs the smoke suite when `agent/` or `artificer.config.json` change. Store `LLM_API_KEY` as a GitHub Actions secret.
 
 ---
 
@@ -389,4 +389,4 @@ Copy [`evals/examples/github-eval.yml`](https://github.com/dbanksdesign/artifice
 
 - [Setting Up an Agent Identity Repo](/docs/guides/agent-identity-setup) — scaffold and configure your agent
 - [Managing Memories](/docs/guides/managing-memories) — how memories work (read-only during evals)
-- [Runtime benchmarking harness](https://github.com/dbanksdesign/artificer/blob/main/packages/runtime/bench/README.md) — maintainer SWE-bench / DeepSWE bench (monorepo only)
+- [Runtime benchmarking harness](https://github.com/phthalo-dev/artificer/blob/main/packages/runtime/bench/README.md) — maintainer SWE-bench / DeepSWE bench (monorepo only)

@@ -235,4 +235,4 @@ The agent UI is available at `http://localhost:4100`.
 
 - [Agent identity setup](/docs/guides/agent-identity-setup) — setting up the identity repo
 - [Environment variables reference](/docs/reference/env-vars) — complete env var list
-- [infrastructure/README.md](https://github.com/dbanksdesign/artificer/blob/main/infrastructure/README.md) — an alternative AWS path with hibernate-on-idle EC2, if you don't want an always-on Fly.io/Docker host
+- [infrastructure/README.md](https://github.com/phthalo-dev/artificer/blob/main/infrastructure/README.md) — an alternative AWS path with hibernate-on-idle EC2, if you don't want an always-on Fly.io/Docker host
