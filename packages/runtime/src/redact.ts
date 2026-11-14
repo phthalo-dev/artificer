@@ -35,3 +35,25 @@ export function redactRuntimeEvent<T extends { kind: string; data?: unknown }>(
     data: redactWorkstream(data as { executor?: ExecutorConfig }),
   };
 }
+
+const EXECUTOR_KEYS = new Set(['executor', 'execution']);
+
+/**
+ * Deep copy of `value` with every `executor` / `execution` field passed
+ * through `redactExecutorConfig`. For quota configs and snapshots, whose
+ * routes and failover targets embed executor configs at several depths.
+ */
+export function redactExecutorsDeep<T>(value: T): T {
+  if (Array.isArray(value)) {
+    return value.map((v) => redactExecutorsDeep(v)) as unknown as T;
+  }
+  if (!value || typeof value !== 'object') return value;
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+    out[k] =
+      EXECUTOR_KEYS.has(k) && v && typeof v === 'object' && !Array.isArray(v)
+        ? redactExecutorConfig(redactExecutorsDeep(v) as ExecutorConfig)
+        : redactExecutorsDeep(v);
+  }
+  return out as T;
+}

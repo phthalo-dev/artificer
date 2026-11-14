@@ -40,6 +40,7 @@ import { mountChannels } from '../channels/mount.js';
 import type { ArtificerChannel, ExecutorConfig } from '../api/types.js';
 import {
   redactExecutorConfig,
+  redactExecutorsDeep,
   redactRuntimeEvent,
   redactWorkstream,
 } from '../redact.js';
@@ -528,8 +529,10 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
   });
 
   api.get('/config/quota', (c) => {
-    const configured = engine.getConfiguredQuota() ?? null;
-    const effective = engine.getEffectiveQuotaConfig() ?? null;
+    const configured = redactExecutorsDeep(engine.getConfiguredQuota() ?? null);
+    const effective = redactExecutorsDeep(
+      engine.getEffectiveQuotaConfig() ?? null,
+    );
     const catalog = Object.values(MODEL_CATALOG).map((entry) => ({
       id: entry.id,
       provider: PROVIDER_LABEL[entry.npm],
@@ -564,10 +567,10 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     }
     void engine.persistProviderConfig();
     return c.json({
-      configured: engine.getConfiguredQuota() ?? null,
-      effective: engine.getEffectiveQuotaConfig() ?? null,
+      configured: redactExecutorsDeep(engine.getConfiguredQuota() ?? null),
+      effective: redactExecutorsDeep(engine.getEffectiveQuotaConfig() ?? null),
       primaryAccountId: primaryAccountIdFor(engine.config),
-      quota: engine.getQuotaSnapshot() ?? null,
+      quota: redactExecutorsDeep(engine.getQuotaSnapshot() ?? null),
     });
   });
 
@@ -1214,7 +1217,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
       byRoute: groupBy(runs, (r) => r.routeProfileId),
       byWorkstream: groupBy(runs, (r) => r.workstreamId),
       byMessage,
-      quota: engine.getQuotaSnapshot() ?? null,
+      quota: redactExecutorsDeep(engine.getQuotaSnapshot() ?? null),
     });
   });
 
@@ -1231,7 +1234,10 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     }
     const ok = engine.resetQuotaWindow(accountId, windowId, workstreamId);
     if (!ok) return c.json({ error: 'window not found' }, 404);
-    return c.json({ ok: true, quota: engine.getQuotaSnapshot() ?? null });
+    return c.json({
+      ok: true,
+      quota: redactExecutorsDeep(engine.getQuotaSnapshot() ?? null),
+    });
   });
 
   api.get('/messages/:id/cost', async (c) => {

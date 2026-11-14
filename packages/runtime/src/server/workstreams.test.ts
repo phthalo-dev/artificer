@@ -1027,3 +1027,67 @@ test('SSE stream and trace redact executor env values', async () => {
     restore();
   }
 });
+
+test('quota config responses redact executor env values', async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-quota-'));
+  const config = loadConfig({
+    ARTIFICER_EXEC_DIR: dataDir,
+    LLM_API_KEY: 'test-key-not-used',
+    PORT: '0',
+  });
+  const secretExecutor = {
+    type: 'acp' as const,
+    agent: 'codex' as const,
+    env: { CODEX_API_KEY: 'sk-test-secret' },
+  };
+  config.executor = secretExecutor;
+  config.quota = {
+    accounts: [
+      {
+        id: 'primary',
+        mode: 'metered',
+        windows: [{ id: 'd', unit: 'dollars', period: 'daily', limit: 5 }],
+        failover: [{ id: 'fo', accountId: 'backup', executor: secretExecutor }],
+      },
+      {
+        id: 'backup',
+        mode: 'metered',
+        windows: [{ id: 'd', unit: 'dollars', period: 'daily', limit: 5 }],
+      },
+    ],
+  };
+  const store = new Store(config.execDir);
+  await store.init();
+  const engine = new Engine(config, store);
+  const app = createApp(engine);
+  try {
+    const get = await (await app.request('/api/config/quota')).text();
+    assert.ok(!get.includes('sk-test-secret'), get.slice(0, 2000));
+    assert.ok(get.includes('[redacted]'));
+    const usage = await (await app.request('/api/usage')).text();
+    assert.ok(!usage.includes('sk-test-secret'));
+
+    const put = await app.request('/api/config/quota', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        reservePercent: 10,
+        accounts: config.quota.accounts.map((a) => ({
+          ...a,
+          failover: undefined,
+        })),
+      }),
+    });
+    const putBody = await put.text();
+    assert.equal(put.status, 200, putBody);
+    assert.ok(!putBody.includes('sk-test-secret'), putBody.slice(0, 2000));
+    assert.ok(putBody.includes('[redacted]'));
+    // The live config keeps the real value.
+    assert.equal(
+      (engine.config.executor as typeof secretExecutor).env.CODEX_API_KEY,
+      'sk-test-secret',
+    );
+  } finally {
+    await fs.rm(dataDir, { recursive: true, force: true });
+  }
+});
