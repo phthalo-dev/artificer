@@ -4,7 +4,8 @@
  *
  * Usage: node fake-acp-agent.mjs <scenario.json>
  *
- * The first line of `scenario.recordFile` is `{ pid }`. Every received
+ * The first line of `scenario.recordFile` is `{ pid, cwd, env }` (`env` holds
+ * the few variables the tests assert on). Every received
  * request and notification is appended as `{ method, params }` exactly as it
  * arrived on the wire, and
  * every permission response as `{ permissionResponse, toolCallId }`.
@@ -32,7 +33,15 @@ const steps = scenario.steps ?? [];
 
 fs.writeFileSync(
   scenario.recordFile,
-  JSON.stringify({ pid: process.pid }) + '\n',
+  JSON.stringify({
+    pid: process.pid,
+    cwd: process.cwd(),
+    env: {
+      CODEX_HOME: process.env.CODEX_HOME,
+      npm_config_userconfig: process.env.npm_config_userconfig,
+      npm_config_registry: process.env.npm_config_registry,
+    },
+  }) + '\n',
 );
 
 function record(entry) {

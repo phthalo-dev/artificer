@@ -1,3 +1,4 @@
+import os from 'node:os';
 import path from 'node:path';
 import type {
   PermissionOption,
@@ -26,6 +27,16 @@ export interface PermissionContext {
   workspaceDir: string;
   policy: ToolPolicyFile;
   cancelling: boolean;
+  /**
+   * True when the request's own `toolCall.title` was empty, so any title is
+   * filled in from tracking. Such a title is then never used as the command.
+   */
+  titleFromTracking?: boolean;
+  /**
+   * Directories holding Artificer agent state (the executor passes its state
+   * dir). Commands that mention them and writes inside them are denied.
+   */
+  protectedPaths?: string[];
 }
 
 export interface PermissionOutcome {
@@ -172,6 +183,47 @@ function commandOf(rawInput: unknown, title: string | null | undefined) {
   return title ?? '';
 }
 
+function isInside(root: string, target: string): boolean {
+  const rel = path.relative(path.resolve(root), path.resolve(target));
+  return (
+    rel === '' ||
+    !(rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel))
+  );
+}
+
+/** Spellings of a protected dir a shell command may use. */
+function protectedSpellings(dir: string): string[] {
+  const abs = path.resolve(dir);
+  const out = [abs];
+  const home = os.homedir();
+  if (home && isInside(home, abs) && abs !== home) {
+    const rel = path.relative(home, abs);
+    out.push(`~/${rel}`, `$HOME/${rel}`, `\${HOME}/${rel}`);
+  }
+  return out;
+}
+
+const STATE_REASON = 'touches Artificer agent state';
+
+function commandTouchesState(
+  command: string,
+  rawInput: unknown,
+  workspaceDir: string,
+  dirs: string[],
+): boolean {
+  const cwd = asRecord(rawInput).cwd;
+  if (
+    typeof cwd === 'string' &&
+    cwd.length > 0 &&
+    dirs.some((d) => isInside(d, path.resolve(workspaceDir, cwd)))
+  ) {
+    return true;
+  }
+  return dirs.some((d) =>
+    protectedSpellings(d).some((s) => command.includes(s)),
+  );
+}
+
 function deny(
   req: RequestPermissionRequest,
   base: Pick<PermissionOutcome, 'tool' | 'approvalKey'> &
@@ -241,11 +293,25 @@ export function decidePermission(
   if (isMcpApproval(req, kind)) return decideMcp(req, ctx, input);
 
   if (kind === 'execute') {
-    const command = commandOf(call.rawInput, call.title);
+    // A title filled in from tracking is a display label, never a command.
+    const command = commandOf(
+      call.rawInput,
+      ctx.titleFromTracking ? '' : call.title,
+    );
     const approvalKey = shellApprovalKey(command);
     const tool = 'run_shell';
     if (command.trim().length === 0) {
       return deny(req, { tool, approvalKey, reason: 'no command to evaluate' });
+    }
+    if (
+      commandTouchesState(
+        command,
+        call.rawInput,
+        ctx.workspaceDir,
+        ctx.protectedPaths ?? [],
+      )
+    ) {
+      return deny(req, { tool, approvalKey, reason: STATE_REASON });
     }
     const reviewerWrite = checkReviewerWrite(command, ctx.role as RoleName);
     if (!reviewerWrite.allowed) {
@@ -287,6 +353,17 @@ export function decidePermission(
         approvalKey,
         reason: 'reviewer role is read-only',
       });
+    }
+    if (paths.length === 0) {
+      return deny(req, { tool, approvalKey, reason: 'no path to evaluate' });
+    }
+    const stateWrite = paths.some((p) =>
+      (ctx.protectedPaths ?? []).some((d) =>
+        isInside(d, path.resolve(ctx.workspaceDir, p)),
+      ),
+    );
+    if (stateWrite) {
+      return deny(req, { tool, approvalKey, reason: STATE_REASON });
     }
     const root = path.resolve(ctx.workspaceDir);
     const outside = paths.find((p) => {

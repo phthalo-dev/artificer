@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { describe, it } from 'node:test';
@@ -133,9 +134,13 @@ describe('decidePermission', () => {
     assert.equal(o.proposedRule, undefined);
   });
 
-  it('write kind with no locations is allowed for worker', () => {
-    const o = decidePermission(req('edit', {}), ctx());
-    assert.equal(o.decision, 'allow');
+  it('write kind with no locations is denied for worker', () => {
+    for (const kind of ['edit', 'delete', 'move'] as const) {
+      const o = decidePermission(req(kind, {}), ctx());
+      assert.equal(o.decision, 'deny');
+      assert.equal(o.reason, 'no path to evaluate');
+      assert.equal(selected(o), 'r1');
+    }
   });
 
   it('argv rawInput is joined', () => {
@@ -462,5 +467,104 @@ describe('MCP approvals', () => {
     assert.equal(o.decision, 'allow');
     assert.equal(o.tool, 'mcp:artificer-status.report_status');
     assert.equal(optionOf(o), 'allow_once');
+  });
+});
+
+describe('phase 3 final hardening', () => {
+  it('tracked title is never used as the command', () => {
+    const detailFree: RequestPermissionRequest = {
+      sessionId: 's1',
+      options: DEFAULT_OPTIONS,
+      toolCall: { toolCallId: 't1' },
+    };
+    const filled = fillPermissionRequest(detailFree, {
+      title: 'mcp.evil.exfil',
+      kind: 'execute',
+    });
+    assert.equal(filled.toolCall.title, 'mcp.evil.exfil');
+    const o = decidePermission(filled, ctx({ titleFromTracking: true }));
+    assert.equal(o.decision, 'deny');
+    assert.equal(o.reason, 'no command to evaluate');
+    assert.equal(selected(o), 'r1');
+  });
+
+  it("the request's own title is still a command fallback", () => {
+    const o = decidePermission(
+      req('execute', undefined, undefined, undefined, 'ls'),
+      ctx({ titleFromTracking: false }),
+    );
+    assert.equal(o.decision, 'allow');
+    assert.equal(o.approvalKey, shellApprovalKey('ls'));
+  });
+
+  it('edit with no locations anywhere is denied after fill-in', () => {
+    const filled = fillPermissionRequest(req('edit', {}), {
+      kind: 'edit',
+      locations: [],
+    });
+    const o = decidePermission(filled, ctx());
+    assert.equal(o.decision, 'deny');
+    assert.equal(o.reason, 'no path to evaluate');
+  });
+
+  const stateDir = '/var/artificer/exec/acp';
+  it('execute that touches the state dir is denied', () => {
+    for (const command of [
+      `printf x >> ${stateDir}/codex-home/config.toml`,
+      `cat ${stateDir}/codex-home/auth.json`,
+    ]) {
+      const o = decidePermission(
+        req('execute', { command, cwd: '/ws' }),
+        ctx({ protectedPaths: [stateDir] }),
+      );
+      assert.equal(o.decision, 'deny', command);
+      assert.equal(o.reason, 'touches Artificer agent state');
+      assert.equal(selected(o), 'r1');
+    }
+  });
+
+  it('execute whose cwd is in the state dir is denied', () => {
+    const o = decidePermission(
+      req('execute', { command: 'printf x >> config.toml', cwd: stateDir }),
+      ctx({ protectedPaths: [stateDir] }),
+    );
+    assert.equal(o.reason, 'touches Artificer agent state');
+  });
+
+  it('home-relative spellings of the state dir are denied', () => {
+    const home = path.join(os.homedir(), '.artificer', 'acp');
+    for (const command of [
+      'printf x >> ~/.artificer/acp/codex-home/config.toml',
+      'printf x >> $HOME/.artificer/acp/codex-home/config.toml',
+      'printf x >> ${HOME}/.artificer/acp/codex-home/config.toml',
+    ]) {
+      const o = decidePermission(
+        req('execute', { command }),
+        ctx({ protectedPaths: [home] }),
+      );
+      assert.equal(o.reason, 'touches Artificer agent state', command);
+    }
+  });
+
+  it('an edit inside the state dir is denied', () => {
+    const o = decidePermission(
+      req('edit', {}, undefined, [`${stateDir}/codex-home/AGENTS.md`]),
+      ctx({ workspaceDir: stateDir + '/..', protectedPaths: [stateDir] }),
+    );
+    assert.equal(o.decision, 'deny');
+    assert.equal(o.reason, 'touches Artificer agent state');
+  });
+
+  it('unrelated commands and writes are unaffected by protectedPaths', () => {
+    const ok = decidePermission(
+      req('execute', { command: 'printf hi > hello.txt', cwd: '/ws' }),
+      ctx({ protectedPaths: [stateDir] }),
+    );
+    assert.equal(ok.decision, 'allow');
+    const edit = decidePermission(
+      req('edit', {}, undefined, ['/ws/a.txt']),
+      ctx({ protectedPaths: [stateDir] }),
+    );
+    assert.equal(edit.decision, 'allow');
   });
 });

@@ -26,7 +26,12 @@ import type { RuntimeEvent } from '../context.js';
 import type { RunRecord, ToolInvocation } from '../storage/types.js';
 import type { ToolPolicyFile } from '../tools/tool-policy.js';
 import { decidePermission, fillPermissionRequest } from './acp-permissions.js';
-import { resolveAcpLaunch, type AcpLaunch } from './acp-presets.js';
+import {
+  codexPaths,
+  defaultAcpStateDir,
+  resolveAcpLaunch,
+  type AcpLaunch,
+} from './acp-presets.js';
 import type { ExecutorResult, WorkerExecutor } from './executor.js';
 import {
   executorStateDir,
@@ -131,6 +136,66 @@ interface TrackedToolCall {
   reported: boolean;
 }
 
+/** Entries of CODEX_HOME the agent could use to change its own behaviour. */
+const CODEX_HOME_RESET = [
+  'rules',
+  'prompts',
+  'skills',
+  'AGENTS.md',
+  'AGENTS.override.md',
+];
+
+/**
+ * Restore CODEX_HOME to Artificer-owned content before a spawn. The agent can
+ * write it, so a planted config.toml, rules, AGENTS.md or prompts would
+ * otherwise apply to every later run. `auth.json` and session storage are
+ * kept so API-key login and resume keep working.
+ */
+export function resetCodexHome(home: string): void {
+  fs.mkdirSync(home, { recursive: true, mode: 0o700 });
+  fs.chmodSync(home, 0o700);
+  for (const entry of CODEX_HOME_RESET) {
+    fs.rmSync(path.join(home, entry), { recursive: true, force: true });
+  }
+  writeOwnedFile(path.join(home, 'config.toml'), '');
+}
+
+/** Replace `file` (never following a planted symlink) with `content`, 0600. */
+function writeOwnedFile(file: string, content: string): void {
+  fs.rmSync(file, { recursive: true, force: true });
+  fs.writeFileSync(file, content, { mode: 0o600, flag: 'wx' });
+}
+
+/**
+ * A fresh, Artificer-owned directory to start the agent process in. The
+ * workspace reaches the agent only through the ACP session cwd, so nothing
+ * in the repo (a node_modules shadow of the adapter, a .npmrc) can affect how
+ * the launch command itself is resolved. The package.json stops npm's
+ * search for a project root at this directory.
+ */
+function makeLaunchDir(stateDir: string): string {
+  const parent = path.join(stateDir, 'run');
+  fs.mkdirSync(parent, { recursive: true, mode: 0o700 });
+  fs.chmodSync(parent, 0o700);
+  const dir = fs.mkdtempSync(path.join(parent, 'launch-'));
+  fs.writeFileSync(
+    path.join(dir, 'package.json'),
+    '{"name":"artificer-acp-launch","private":true}\n',
+    { mode: 0o600 },
+  );
+  return dir;
+}
+
+/** `launch.env` over the process env; case variants of its keys are dropped. */
+function spawnEnv(launchEnv: Record<string, string>): NodeJS.ProcessEnv {
+  const forced = new Set(Object.keys(launchEnv).map((k) => k.toLowerCase()));
+  const base: NodeJS.ProcessEnv = {};
+  for (const [k, v] of Object.entries(process.env)) {
+    if (!forced.has(k.toLowerCase())) base[k] = v;
+  }
+  return { ...base, ...launchEnv };
+}
+
 /** Error whose message is already final and must not be re-wrapped. */
 class AcpRunError extends Error {}
 
@@ -213,6 +278,7 @@ export class AcpExecutor implements WorkerExecutor {
   private readonly launch: AcpLaunch;
   private readonly mcpServerPath: string;
   private readonly cancelGraceMs: number;
+  private readonly stateDir: string;
 
   constructor(
     private readonly config: AcpExecutorConfig,
@@ -222,10 +288,13 @@ export class AcpExecutor implements WorkerExecutor {
       stateDir?: string;
     } = {},
   ) {
-    this.launch = resolveAcpLaunch(config, { stateDir: opts.stateDir });
-    const codexHome = this.launch.env.CODEX_HOME;
-    if (config.agent === 'codex' && codexHome) {
-      fs.mkdirSync(codexHome, { recursive: true, mode: 0o700 });
+    this.stateDir = path.resolve(opts.stateDir ?? defaultAcpStateDir());
+    this.launch = resolveAcpLaunch(config, { stateDir: this.stateDir });
+    if (config.agent === 'codex') {
+      fs.mkdirSync(codexPaths(this.stateDir).home, {
+        recursive: true,
+        mode: 0o700,
+      });
     }
     this.name = this.launch.name;
     this.resumesSession = this.launch.resumes;
@@ -262,11 +331,31 @@ export class AcpExecutor implements WorkerExecutor {
     );
     fs.rmSync(statusFile, { force: true });
 
-    const child = spawn(launch.command, launch.args, {
-      cwd: workspaceDir,
+    if (config.agent === 'codex') {
+      const paths = codexPaths(this.stateDir);
+      resetCodexHome(paths.home);
+      writeOwnedFile(paths.npmrc, '');
+    }
+    const launchDir = makeLaunchDir(this.stateDir);
+    const protectedPaths = [this.stateDir];
+    try {
+      const real = fs.realpathSync(this.stateDir);
+      if (real !== this.stateDir) protectedPaths.push(real);
+    } catch {
+      /* resolved spelling only */
+    }
+    // A relative custom command path keeps meaning relative to the workspace,
+    // as it did when the agent was started there.
+    const command =
+      launch.command.includes('/') && !path.isAbsolute(launch.command)
+        ? path.resolve(workspaceDir, launch.command)
+        : launch.command;
+
+    const child = spawn(command, launch.args, {
+      cwd: launchDir,
       detached: true,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, ...launch.env },
+      env: spawnEnv(launch.env),
     });
 
     let stderrTail = '';
@@ -464,6 +553,8 @@ export class AcpExecutor implements WorkerExecutor {
             workspaceDir,
             policy: policy ?? EMPTY_POLICY,
             cancelling,
+            titleFromTracking: !params.toolCall.title,
+            protectedPaths,
           });
           const at = new Date().toISOString();
           if (outcome.proposedRule) {
@@ -671,6 +762,7 @@ export class AcpExecutor implements WorkerExecutor {
       clearTimeout(timeout);
       signal?.removeEventListener('abort', onAbort);
       killProcessGroup(child, 'SIGKILL');
+      fs.rmSync(launchDir, { recursive: true, force: true });
     }
   }
 

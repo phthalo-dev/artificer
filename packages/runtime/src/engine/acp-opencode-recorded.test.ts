@@ -116,11 +116,10 @@ test('rejected permission ending the turn still resolves', async (t) => {
     usage: emptyUsage(),
     createdAt: new Date().toISOString(),
   };
-  const executor = new AcpExecutor({
-    type: 'acp',
-    command: process.execPath,
-    args: [FAKE, scenarioPath],
-  });
+  const executor = new AcpExecutor(
+    { type: 'acp', command: process.execPath, args: [FAKE, scenarioPath] },
+    { stateDir: path.join(path.dirname(scenarioPath), 'acp') },
+  );
   const result = await executor.execute({
     context: 'do the thing',
     workspaceDir: ws,

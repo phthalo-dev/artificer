@@ -223,3 +223,52 @@ test('codex preset rejects args and custom codex command is namespaced', (t) => 
     'acp:custom:codex',
   );
 });
+
+test('codex key check trims and blank user keys do not shadow the process key', (t) => {
+  withoutCodexKeys(t);
+  assert.throws(
+    () =>
+      resolveAcpLaunch({
+        type: 'acp',
+        agent: 'codex',
+        env: { CODEX_API_KEY: '   ', OPENAI_API_KEY: '\t' },
+      }),
+    /set CODEX_API_KEY or OPENAI_API_KEY/,
+  );
+  process.env.CODEX_API_KEY = '  ';
+  assert.throws(
+    () => resolveAcpLaunch({ type: 'acp', agent: 'codex' }),
+    /set CODEX_API_KEY or OPENAI_API_KEY/,
+  );
+  process.env.CODEX_API_KEY = 'process-key';
+  const l = resolveAcpLaunch({
+    type: 'acp',
+    agent: 'codex',
+    env: { CODEX_API_KEY: '', OPENAI_API_KEY: ' ' },
+  });
+  // Dropped, so the spawn env ({...process.env, ...launch.env}) keeps the
+  // process key.
+  assert.ok(!('CODEX_API_KEY' in l.env));
+  assert.ok(!('OPENAI_API_KEY' in l.env));
+  assert.equal({ ...process.env, ...l.env }.CODEX_API_KEY, 'process-key');
+});
+
+test('codex preset pins npm config after the user env', (t) => {
+  withoutCodexKeys(t);
+  const l = resolveAcpLaunch(
+    {
+      type: 'acp',
+      agent: 'codex',
+      env: {
+        CODEX_API_KEY: 'k',
+        npm_config_registry: 'https://evil.test/',
+        NPM_CONFIG_REGISTRY: 'https://evil.test/',
+        npm_config_userconfig: '/tmp/evil-npmrc',
+      },
+    },
+    { stateDir: '/state/acp' },
+  );
+  assert.equal(l.env.npm_config_registry, 'https://registry.npmjs.org/');
+  assert.equal(l.env.npm_config_userconfig, '/state/acp/npmrc');
+  assert.ok(!('NPM_CONFIG_REGISTRY' in l.env));
+});
