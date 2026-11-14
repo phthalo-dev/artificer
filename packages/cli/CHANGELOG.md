@@ -1,5 +1,15 @@
 # @artificer-ai/cli
 
+## 0.11.1
+
+### Patch Changes
+
+- [#38](https://github.com/phthalo-dev/artificer/pull/38) [`2cc5a9c`](https://github.com/phthalo-dev/artificer/commit/2cc5a9ce2d9aa562bfd71d33dd5572613d7d0668) Thanks [@dbanksdesign](https://github.com/dbanksdesign)! - Point documentation links in `artificer init` output at the `phthalo-dev/artificer` repository.
+
+- Updated dependencies []:
+  - @artificer-ai/runtime@0.11.1
+  - @artificer-ai/eval@0.1.2
+
 ## 0.11.0
 
 ### Minor Changes
