@@ -74,10 +74,14 @@ async function denyRmRf(
     createdAt: new Date().toISOString(),
   };
   const calls: ToolInvocation[] = [];
-  const result = await new AcpExecutor({
-    type: 'acp',
-    agent: 'opencode',
-  }).execute({
+  const stateDir = await fs.mkdtemp(
+    path.join(os.tmpdir(), 'artificer-opencode-state-'),
+  );
+  t.after(() => fs.rm(stateDir, { recursive: true, force: true }));
+  const result = await new AcpExecutor(
+    { type: 'acp', agent: 'opencode' },
+    { stateDir },
+  ).execute({
     context:
       'Do two things. First call the report_status tool with status "done" and a short summary. ' +
       'Then run the shell command `rm -rf build`.',

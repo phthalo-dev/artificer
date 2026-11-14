@@ -16,6 +16,7 @@ import {
   type RunRecord,
   type ToolInvocation,
 } from '../storage/types.js';
+import { shellApprovalKey } from '../tools/tool-policy.js';
 import { AcpExecutor } from './acp-executor.js';
 
 const exec = promisify(execFile);
@@ -94,9 +95,14 @@ async function denyRmRf(
 
   assert.equal(result.workerStatus, 'done');
   const permissions = calls.filter((c) => c.name === 'acp:permission');
+  const key = shellApprovalKey('rm -rf build');
   assert.ok(
-    permissions.some((c) => String(c.output).startsWith('deny')),
-    `expected a denied acp:permission, got: ${JSON.stringify(permissions.map((c) => c.output))}`,
+    permissions.some(
+      (c) =>
+        String(c.output).startsWith('deny') &&
+        (c.input as { approvalKey?: unknown }).approvalKey === key,
+    ),
+    `expected a denied acp:permission for ${key}, got: ${JSON.stringify(permissions.map((c) => [c.input, c.output]))}`,
   );
   await fs.access(outFile);
 }
