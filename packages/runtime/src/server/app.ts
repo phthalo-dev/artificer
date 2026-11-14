@@ -38,7 +38,11 @@ import { serveUI } from './static.js';
 import { resolveUiDistDir } from './ui-dist.js';
 import { mountChannels } from '../channels/mount.js';
 import type { ArtificerChannel, ExecutorConfig } from '../api/types.js';
-import { redactExecutorConfig, redactWorkstream } from './redact.js';
+import {
+  redactExecutorConfig,
+  redactRuntimeEvent,
+  redactWorkstream,
+} from '../redact.js';
 import type { IdentityStore } from '../storage/identity-store.js';
 import {
   loadEffectivePolicy,
@@ -380,7 +384,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
       const unsubscribe = engine.subscribe((event) => {
         void stream.writeSSE({
           event: event.kind,
-          data: JSON.stringify(event),
+          data: JSON.stringify(redactRuntimeEvent(event)),
         });
       });
       stream.onAbort(() => {

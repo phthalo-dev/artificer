@@ -964,3 +964,66 @@ test('workstream responses redact executor env values', async () => {
     restore();
   }
 });
+
+test('SSE stream and trace redact executor env values', async () => {
+  const { app, store, engine, restore } = await conversationFixture();
+  try {
+    const ac = new AbortController();
+    const sse = await app.request('/events', { signal: ac.signal });
+    assert.equal(sse.status, 200);
+    const reader = sse.body!.getReader();
+    const decoder = new TextDecoder();
+    let text = '';
+    const pump = (async () => {
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          text += decoder.decode(value);
+        }
+      } catch {
+        // aborted
+      }
+    })();
+    const res = await app.request('/api/workstreams', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        driver: 'conversation',
+        title: 'Sse',
+        goal: 'Check sse redaction',
+        repoId: 'app',
+        executor: {
+          type: 'acp',
+          agent: 'codex',
+          env: { CODEX_API_KEY: 'sk-test-secret' },
+        },
+      }),
+    });
+    assert.equal(res.status, 201);
+    const id = ((await res.json()) as { workstream: { id: string } }).workstream
+      .id;
+    // The engine emits the full workstream on state changes; trigger one.
+    await (
+      engine as unknown as { emitWorkstream(id: string): Promise<void> }
+    ).emitWorkstream(id);
+    const deadline = Date.now() + 2000;
+    while (!text.includes('event: workstream') && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    await new Promise((r) => setTimeout(r, 100));
+    ac.abort();
+    await reader.cancel().catch(() => undefined);
+    await pump;
+    assert.ok(text.includes('event: workstream'), text.slice(0, 500));
+    assert.ok(text.includes('[redacted]'));
+    assert.ok(!text.includes('sk-test-secret'));
+    const ws = await store.getWorkstream(id);
+    const trace = await (
+      await app.request(`/api/traces/${ws!.traceId ?? `trace_${id}`}/events`)
+    ).text();
+    assert.ok(!trace.includes('sk-test-secret'));
+  } finally {
+    restore();
+  }
+});

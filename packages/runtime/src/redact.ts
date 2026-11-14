@@ -1,4 +1,4 @@
-import type { ExecutorConfig } from '../api/types.js';
+import type { ExecutorConfig } from './api/types.js';
 
 export const REDACTED = '[redacted]';
 
@@ -21,4 +21,17 @@ export function redactWorkstream<T extends { executor?: ExecutorConfig }>(
 ): T {
   if (!workstream.executor) return workstream;
   return { ...workstream, executor: redactExecutorConfig(workstream.executor) };
+}
+
+/** Redacts executor env on `workstream` events before they leave the process. */
+export function redactRuntimeEvent<T extends { kind: string; data?: unknown }>(
+  event: T,
+): T {
+  if (event.kind !== 'workstream') return event;
+  const data = event.data;
+  if (!data || typeof data !== 'object') return event;
+  return {
+    ...event,
+    data: redactWorkstream(data as { executor?: ExecutorConfig }),
+  };
 }
