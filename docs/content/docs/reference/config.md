@@ -142,7 +142,7 @@ Runs any agent that speaks the [Agent Client Protocol](https://agentclientprotoc
 | Field | Type | Required | Default | Description |
 |---|---|---|---|---|
 | `executor.type` | `"acp"` | Yes | — | Must be `"acp"` to enable the ACP executor |
-| `executor.agent` | `"opencode"` | One of `agent` / `command` | — | Certified preset. Mutually exclusive with `command`. Quota account is `acp:opencode` |
+| `executor.agent` | `"opencode"` \| `"codex"` | One of `agent` / `command` | — | Certified preset. Mutually exclusive with `command`. Quota account is `acp:opencode` or `acp:codex`. `codex` requires `CODEX_API_KEY` or `OPENAI_API_KEY` (in `env` or the process environment) |
 | `executor.command` | string | One of `agent` / `command` | — | Custom agent binary to spawn. Quota accounts are named `acp:<basename(command)>`, or `acp:custom:<basename>` when the basename equals a preset id (e.g. `opencode`) so a custom command is never mistaken for the certified preset |
 | `executor.args` | string[] | With `command` | — | Arguments passed to the command (put the agent's ACP flag here). Not allowed with `agent`: a certified preset keeps its verified launch line, and setting `args` is rejected |
 | `executor.model` | string | No | agent default | Model id to select via the agent's `model` config option. Run fails before the prompt if the agent doesn't offer it |
@@ -169,6 +169,17 @@ With `agent: "opencode"`:
     "type": "acp",
     "agent": "opencode",
     "model": "opencode/claude-sonnet-5-5"
+  }
+}
+```
+
+With `agent: "codex"` (set the API key in the runtime's environment rather than `executor.env`, which is stored on disk with the workstream):
+
+```json
+{
+  "executor": {
+    "type": "acp",
+    "agent": "codex"
   }
 }
 ```
