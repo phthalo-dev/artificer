@@ -1040,6 +1040,8 @@ test('quota config responses redact executor env values', async () => {
     agent: 'codex' as const,
     env: { CODEX_API_KEY: 'sk-test-secret' },
   };
+  // PUT persists artificer.config.json under identityDir; keep it in the temp dir.
+  config.identityDir = dataDir;
   config.executor = secretExecutor;
   config.quota = {
     accounts: [
