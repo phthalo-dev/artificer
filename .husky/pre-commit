@@ -4,3 +4,13 @@ if git diff --cached --name-only | grep -q '^pnpm-lock.yaml$'; then
     exit 1
   fi
 fi
+
+# Block commits that contain secrets (install: brew install gitleaks)
+if command -v gitleaks >/dev/null 2>&1; then
+  gitleaks git --pre-commit --staged --redact --no-banner || {
+    echo "gitleaks found a possible secret in staged changes. Remove it, or add a false positive to .gitleaksignore."
+    exit 1
+  }
+else
+  echo "warning: gitleaks not installed; skipping secret scan (brew install gitleaks)"
+fi
