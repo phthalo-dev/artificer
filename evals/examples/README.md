@@ -16,13 +16,13 @@ These trees live under `evals/examples/` in the Artificer monorepo. They are **n
 
 `evals/examples/runtime-dev/` is a five-task suite aimed at Artificer maintainers. Repo-patch tasks use the same offline pattern as Pack A (`repo.url: "fixture"` + vendored mini fixtures). They do **not** require cloning this monorepo. You can later replace a fixture with a real Artificer `repo.url` + `baseCommit` pin when dogfooding against mainline code.
 
-| Task id | Kind | Intent |
-|---------|------|--------|
-| `workstream-status-api` | `repo-patch` | Restore `paused` on a tiny `/api/state` stand-in |
-| `quota-window-pause` | `repo-patch` | Inclusive pause-at-limit in quota window logic |
-| `bench-report-regression` | `repo-patch` | Fix off-by-one in resolve-rate math |
-| `role-override-loaded` | `message` | Worker role override reflected in reply (`eval-dogfood`) |
-| `memory-recall-query` | `message` | Recall a pre-seeded memory (`pack-b-token`) |
+| Task id                   | Kind         | Intent                                                   |
+| ------------------------- | ------------ | -------------------------------------------------------- |
+| `workstream-status-api`   | `repo-patch` | Restore `paused` on a tiny `/api/state` stand-in         |
+| `quota-window-pause`      | `repo-patch` | Inclusive pause-at-limit in quota window logic           |
+| `bench-report-regression` | `repo-patch` | Fix off-by-one in resolve-rate math                      |
+| `role-override-loaded`    | `message`    | Worker role override reflected in reply (`eval-dogfood`) |
+| `memory-recall-query`     | `message`    | Recall a pre-seeded memory (`pack-b-token`)              |
 
 ### Copy into a dev identity
 

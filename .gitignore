@@ -34,7 +34,6 @@ yarn-error.log*
 .vercel
 
 # Turbo
-.turbo
 
 # IDE
 .idea

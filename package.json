@@ -2,39 +2,40 @@
   "name": "artificer",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "description": "Platform for managing remote AI coding agents on EC2 instances",
   "scripts": {
-    "dev": "turbo run dev",
-    "build": "turbo run build",
-    "lint": "turbo run lint",
-    "clean": "turbo run clean && rm -rf node_modules",
-    "type-check": "turbo run type-check",
-    "test": "turbo run test",
+    "dev": "vp run -r dev",
+    "build": "vp run -r build",
+    "lint": "vp lint",
+    "clean": "vp run -r clean && rm -rf node_modules",
+    "type-check": "vp run -r type-check",
+    "test": "vp run -r test",
     "infra:deploy": "pnpm --filter artificer-infrastructure deploy:personal",
     "infra:sync-env": "pnpm --filter artificer-infrastructure sync:runtime-env",
     "link": "cd packages/runtime && npm link && cd ../cli && npm link",
     "unlink": "cd packages/cli && npm unlink -g && cd ../runtime && npm unlink -g",
-    "changeset": "changeset",
-    "version-packages": "changeset version",
-    "publish-packages": "pnpm --filter @artificer-ai/runtime build && pnpm --filter @artificer-ai/runtime build:ui && pnpm --filter @artificer-ai/cli build && changeset publish",
-    "ci": "node scripts/check-pinned-deps.mjs && turbo run lint type-check test build",
-    "ci:packages": "pnpm run ci",
+    "changeset": "vp exec changeset",
+    "version-packages": "vp exec changeset version",
+    "publish-packages": "vp run -F @artificer-ai/runtime build && vp run -F @artificer-ai/runtime build:ui && vp run -F @artificer-ai/cli build && vp exec changeset publish",
     "release": "node scripts/publish.mjs",
-    "prepare": "husky"
+    "prepare": "if git rev-parse --git-dir >/dev/null 2>&1; then vp config; fi",
+    "check": "vp check",
+    "fmt": "vp fmt",
+    "lint:fix": "vp lint --fix",
+    "verify": "vp run ci"
   },
   "devDependencies": {
     "@changesets/changelog-github": "1.0.1",
     "@changesets/cli": "2.31.0",
     "@types/node": "20.19.35",
-    "husky": "9.1.7",
-    "prettier": "3.8.1",
-    "turbo": "1.13.4",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vite-plus": "catalog:"
   },
-  "packageManager": "pnpm@12.4.2",
+  "packageManager": "pnpm@12.18.0",
   "engines": {
-    "node": ">=20.0.0",
-    "pnpm": ">=12.4.2"
+    "node": ">=24.0.0",
+    "pnpm": ">=12.18.0"
   },
   "dependencies": {
     "bcryptjs": "2.4.3"

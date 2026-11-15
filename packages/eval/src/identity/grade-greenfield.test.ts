@@ -27,6 +27,14 @@ test('nodeTestCount reads spec and TAP summaries', () => {
   assert.equal(nodeTestCount('no reporter summary here\n'), 0);
 });
 
+test('nodeTestCount ignores ANSI colors from forced-color runs', () => {
+  // `vp run` sets FORCE_COLOR=1 when CI is set, so node --test colors its summary.
+  assert.equal(
+    nodeTestCount('\u001b[34mℹ \u001b[39mtests \u001b[34m3\u001b[39m\n'),
+    3,
+  );
+});
+
 test('shell grader applies a patch and runs hidden ESM node tests', async () => {
   const root = await fs.mkdtemp(path.join(os.tmpdir(), 'greenfield-grade-'));
   const fixtureDir = path.join(root, 'fixture');

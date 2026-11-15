@@ -72,7 +72,11 @@ function resolveGradeDir(repoDir: string, relativeCwd?: string): string {
  * TAP (the default when stdout is not a TTY, e.g. GitHub Actions) prints
  * `# tests N`.
  */
-export function nodeTestCount(output: string): number {
+export function nodeTestCount(rawOutput: string): number {
+  // Forced-color runs (FORCE_COLOR=1, e.g. under `vp run` in CI) wrap the
+  // summary in ANSI escapes, which would break the line-anchored patterns.
+  // eslint-disable-next-line no-control-regex
+  const output = rawOutput.replace(/\u001b\[[0-9;]*m/g, '');
   const spec = /^ℹ tests (\d+)\s*$/m.exec(output);
   if (spec) return Number(spec[1]);
   const tap = /^# tests (\d+)\s*$/m.exec(output);

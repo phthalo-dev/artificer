@@ -8,15 +8,15 @@ Deploy the **runtime** + **UI console** to AWS. Send messages from your phone or
 
 ## What gets deployed
 
-| Resource | Purpose |
-|----------|---------|
-| EC2 t3.small + Elastic IP | Runs runtime Docker + bridge sidecar |
-| EBS 30GB | Persistent `/data` (workstreams, messages) |
-| ECR | Runtime and bridge container images |
-| SQS | Work queue while host is hibernating |
-| API Gateway | `POST /work` wakes agent + enqueues messages |
-| CloudFront + S3 | **Runtime UI** — dashboard, workstreams, composer |
-| Secrets Manager | API auth token, runtime env (`ANTHROPIC_API_KEY`) |
+| Resource                  | Purpose                                           |
+| ------------------------- | ------------------------------------------------- |
+| EC2 t3.small + Elastic IP | Runs runtime Docker + bridge sidecar              |
+| EBS 30GB                  | Persistent `/data` (workstreams, messages)        |
+| ECR                       | Runtime and bridge container images               |
+| SQS                       | Work queue while host is hibernating              |
+| API Gateway               | `POST /work` wakes agent + enqueues messages      |
+| CloudFront + S3           | **Runtime UI** — dashboard, workstreams, composer |
+| Secrets Manager           | API auth token, runtime env (`ANTHROPIC_API_KEY`) |
 
 ```
 Browser → CloudFront ─┬─► S3 (UI SPA)

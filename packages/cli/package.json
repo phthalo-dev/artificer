@@ -26,8 +26,7 @@
     "dev": "tsx src/index.ts",
     "link:global": "pnpm link --global",
     "type-check": "tsc --noEmit",
-    "test": "node --import tsx --test \"src/**/*.test.ts\"",
-    "lint": "prettier --check \"src/**/*.ts\" \"bin/**/*.js\""
+    "test": "node --import tsx --test \"src/**/*.test.ts\""
   },
   "publishConfig": {
     "access": "public",

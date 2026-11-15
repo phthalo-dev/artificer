@@ -5,12 +5,12 @@ services:
       dockerfile: Dockerfile
     image: artificer-runtime:dev
     ports:
-      - "4100:4100"
+      - '4100:4100'
     env_file:
       - .env
     environment:
       ARTIFICER_DATA_DIR: /data
-      PORT: "4100"
+      PORT: '4100'
     volumes:
       - runtime-data:/data
 

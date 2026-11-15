@@ -13,8 +13,7 @@
     "cdk:synth": "cdk synth --all",
     "deploy:personal": "bash scripts/deploy-personal.sh",
     "sync:runtime-env": "bash scripts/sync-runtime-env.sh",
-    "type-check": "tsc --noEmit",
-    "lint": "prettier --check \"bin/**/*.ts\" \"lib/**/*.ts\""
+    "type-check": "tsc --noEmit"
   },
   "devDependencies": {
     "@types/node": "20.19.35",
