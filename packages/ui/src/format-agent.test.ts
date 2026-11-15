@@ -25,7 +25,9 @@ describe('agentLabel', () => {
   });
 
   it('names ACP presets and custom commands', () => {
-    expect(agentLabel({ type: 'acp', agent: 'opencode' })).toBe('OpenCode (ACP)');
+    expect(agentLabel({ type: 'acp', agent: 'opencode' })).toBe(
+      'OpenCode (ACP)',
+    );
     expect(agentLabel({ type: 'acp', command: '/x/gemini', args: [] })).toBe(
       'gemini (ACP)',
     );
