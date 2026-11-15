@@ -5,6 +5,7 @@ import {
   useRepos,
   type CreateWorkstreamInput,
 } from '../api/hooks';
+import { EXECUTOR_LABELS } from '../format-agent';
 import {
   Button,
   Dialog,
@@ -102,9 +103,10 @@ export function NewWorkstreamModal({
             label="Agent"
             options={[
               { value: 'instance', label: 'Instance default' },
-              { value: 'llm', label: 'Built-in loop' },
-              { value: 'claude-code', label: 'Claude Code' },
-              { value: 'cursor-agent', label: 'Cursor' },
+              // 'opencode' is excluded: not offered for conversation workstreams yet.
+              ...Object.entries(EXECUTOR_LABELS)
+                .filter(([value]) => value !== 'opencode')
+                .map(([value, label]) => ({ value, label })),
             ]}
             value={agent}
             onValueChange={(value) =>

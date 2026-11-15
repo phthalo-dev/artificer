@@ -44,15 +44,6 @@ export const minWidthZero = style('bench-min-width-zero', {
   minWidth: 0,
 });
 
-export const preWrap = style('bench-pre-wrap', {
-  whiteSpace: 'pre-wrap',
-});
-
-export const eyebrow = style('bench-trajectory-eyebrow', {
-  textTransform: 'uppercase',
-  letterSpacing: t.letterSpacing.caps.var,
-});
-
 export const roleDot = style('bench-role-dot', {
   display: 'inline-block',
   width: '0.5rem',

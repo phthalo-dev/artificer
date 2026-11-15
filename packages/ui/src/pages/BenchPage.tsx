@@ -16,54 +16,17 @@ import {
 import type { Tone } from '@var-ui/core';
 import { IconFlask } from '@tabler/icons-react';
 import { useBenchRuns, useBenchSuites } from '../api/hooks';
-import type { BenchInstanceSummary } from '../api/types';
 import { BenchEfficiencyChart } from '../components/BenchEfficiencyChart';
+import { StatCard } from '../components/StatCard';
+import { VerdictBadge } from '../components/VerdictBadge';
 import { formatCost, formatDuration, formatTokensShort } from '../format';
+import { eyebrow } from '../styles/shared';
 import {
   chartGrid,
-  eyebrow,
   heroValue,
   runsTable,
-  statValue,
   suiteCommand,
 } from './BenchPage.styles';
-
-function Stat({
-  label,
-  value,
-  sub,
-}: {
-  label: string;
-  value: string;
-  sub?: string;
-}) {
-  return (
-    <Card>
-      <Stack gap="xs">
-        <Text size="xs" tone="secondary" weight="semibold" className={eyebrow}>
-          {label}
-        </Text>
-        <p className={statValue}>{value}</p>
-        {sub && (
-          <Text size="xs" tone="secondary">
-            {sub}
-          </Text>
-        )}
-      </Stack>
-    </Card>
-  );
-}
-
-function Verdict({ row }: { row: BenchInstanceSummary }) {
-  if (row.resolved === true)
-    return (
-      <Badge tone="success" appearance="solid">
-        PASS
-      </Badge>
-    );
-  if (row.resolved === false) return <Badge tone="danger">FAIL</Badge>;
-  return <Badge tone="neutral">ungraded</Badge>;
-}
 
 const SUITE_KIND: Record<string, { label: string; tone: Tone }> = {
   deepswe: { label: 'DeepSWE', tone: 'accent' },
@@ -235,10 +198,10 @@ export function BenchPage() {
       </div>
 
       <Grid columns="auto">
-        <Stat label="Instances" value={String(summary.instances)} />
-        <Stat label="Total cost" value={formatCost(summary.totalCostUsd)} />
-        <Stat label="Avg cost" value={formatCost(summary.avgCostUsd)} />
-        <Stat
+        <StatCard label="Instances" value={String(summary.instances)} />
+        <StatCard label="Total cost" value={formatCost(summary.totalCostUsd)} />
+        <StatCard label="Avg cost" value={formatCost(summary.avgCostUsd)} />
+        <StatCard
           label="Cost / solved"
           value={
             summary.costPerSolvedUsd !== null
@@ -246,8 +209,8 @@ export function BenchPage() {
               : 'n/a'
           }
         />
-        <Stat label="LLM calls" value={String(summary.totalRuns)} />
-        <Stat
+        <StatCard label="LLM calls" value={String(summary.totalRuns)} />
+        <StatCard
           label="Tokens"
           value={formatTokensShort(summary.inputTokens)}
           sub={`${formatTokensShort(summary.outputTokens)} out`}
@@ -271,7 +234,7 @@ export function BenchPage() {
           {instances.map((row) => (
             <Table.Row key={row.instanceId}>
               <Table.Cell>
-                <Verdict row={row} />
+                <VerdictBadge resolved={row.resolved} />
               </Table.Cell>
               <Table.Cell rowHeader>
                 <HStack gap="xs">

@@ -32,7 +32,8 @@ import {
 import type { Memory } from '../api/types';
 import { MarkdownContent } from '../components/MarkdownContent';
 import { formatTime, relativeTime } from '../format';
-import { memoryCard, preWrap, scrollPanel } from './MemoriesPage.styles';
+import { preWrap } from '../styles/shared';
+import { memoryCard, scrollPanel } from './MemoriesPage.styles';
 
 function isUrl(s: string | undefined): s is string {
   return Boolean(s && /^https?:\/\//i.test(s));

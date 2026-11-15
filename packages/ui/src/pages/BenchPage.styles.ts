@@ -1,25 +1,5 @@
 import { style, t } from '../styles/system';
 
-/** Small uppercase label above a stat value. */
-export const eyebrow = style('bench-eyebrow', {
-  textTransform: 'uppercase',
-  letterSpacing: t.letterSpacing.caps.var,
-});
-
-export const statValue = style('bench-stat-value', {
-  fontSize: t.fontSize.xxl.var,
-  fontWeight: t.fontWeight.bold.var,
-  lineHeight: t.lineHeight.tight.var,
-  margin: 0,
-});
-
-export const metricValue = style('bench-metric-value', {
-  fontSize: t.fontSize.xl.var,
-  fontWeight: t.fontWeight.bold.var,
-  lineHeight: t.lineHeight.tight.var,
-  margin: 0,
-});
-
 export const heroValue = style('bench-hero-value', {
   fontSize: '2.5rem',
   fontWeight: t.fontWeight.bold.var,

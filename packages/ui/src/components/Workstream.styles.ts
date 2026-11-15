@@ -1,15 +1,5 @@
 import { style, t } from '../styles/system';
 
-/** Small uppercase section label ("Summary", "Steps", …). */
-export const eyebrow = style('workstream-eyebrow', {
-  textTransform: 'uppercase',
-  letterSpacing: '0.02em',
-});
-
-export const preWrap = style('workstream-pre-wrap', {
-  whiteSpace: 'pre-wrap',
-});
-
 /** Raw text / JSON preview block. */
 export const preBlock = style('workstream-pre-block', {
   margin: 0,

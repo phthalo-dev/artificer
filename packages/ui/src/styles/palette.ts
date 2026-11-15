@@ -31,6 +31,11 @@ export const roleColor: Record<string, string> = {
   librarian: hue.orange,
 };
 
+/** Role color for charts/dots, falling back to a neutral gray. */
+export function colorForRole(role: string): string {
+  return roleColor[role] ?? hue.gray;
+}
+
 /** Token layer colors for stacked bar charts. */
 export const tokenLayerColor = {
   blue: hue.blue,

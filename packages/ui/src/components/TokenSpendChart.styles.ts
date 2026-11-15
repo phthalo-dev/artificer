@@ -1,10 +1,5 @@
 import { style, t } from '../styles/system';
 
-export const eyebrow = style('chart-eyebrow', {
-  textTransform: 'uppercase',
-  letterSpacing: t.letterSpacing.caps.var,
-});
-
 export const legendSwatchSm = style('chart-legend-swatch-sm', {
   display: 'inline-block',
   borderRadius: t.radius.sm.var,
