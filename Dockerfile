@@ -48,7 +48,10 @@ WORKDIR /app
 COPY --from=builder /workspace/packages/runtime/package.json ./
 COPY --from=builder /workspace/packages/runtime/dist ./dist
 COPY --from=builder /workspace/packages/runtime/ui-dist ./ui-dist
-RUN npm install --omit=dev
+# devDependencies may use pnpm-only protocols (catalog:) that npm cannot parse,
+# and are not installed anyway, so drop them from the manifest first.
+RUN node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));delete p.devDependencies;fs.writeFileSync('package.json',JSON.stringify(p,null,2))" \
+    && npm install --omit=dev
 
 RUN mkdir -p /data
 VOLUME ["/data"]
