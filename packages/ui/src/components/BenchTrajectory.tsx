@@ -11,7 +11,7 @@ import { useState } from 'react';
 import type { RunNode, RunRecord, ToolInvocation } from '../api/types';
 import { hue, roleColor } from '../styles/palette';
 import { cx } from '../styles/system';
-import { TokenSpendTimeline } from './TokenSpendChart';
+import { TokenSpendTimeline } from './TokenSpendTimeline';
 import {
   eyebrow,
   minWidthZero,
