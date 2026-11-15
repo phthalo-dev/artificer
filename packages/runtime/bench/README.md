@@ -135,14 +135,14 @@ All flags also have env equivalents (`BENCH_*`, `LLM_MODEL*`); see
 
 Context borrowing env vars (see `packages/runtime/.env.example`):
 
-| Variable | Default | Purpose |
-| --- | --- | --- |
-| `RUNTIME_TOOL_RESULT_MAX_CHARS` | 12000 | Spill threshold per tool invocation |
-| `RUNTIME_TOOL_RESULT_MAX_PER_RUN_CHARS` | 80000 | Aggregate tool-result budget per run |
-| `RUNTIME_MICROCOMPACT_ENABLED` | true | Compact prior-run tool outputs in context |
-| `RUNTIME_COMPACTION_PROFILE` | auto | Force digest size (`aggressive`/`default`/`generous`) or leave model-family auto |
-| `RUNTIME_FILE_CACHE_MAX_ENTRIES` | 64 | Recently-read file hints per workstream |
-| `RUNTIME_REQUIRE_RG` | true | Require ripgrep for grep/glob tools |
+| Variable                                | Default | Purpose                                                                          |
+| --------------------------------------- | ------- | -------------------------------------------------------------------------------- |
+| `RUNTIME_TOOL_RESULT_MAX_CHARS`         | 12000   | Spill threshold per tool invocation                                              |
+| `RUNTIME_TOOL_RESULT_MAX_PER_RUN_CHARS` | 80000   | Aggregate tool-result budget per run                                             |
+| `RUNTIME_MICROCOMPACT_ENABLED`          | true    | Compact prior-run tool outputs in context                                        |
+| `RUNTIME_COMPACTION_PROFILE`            | auto    | Force digest size (`aggressive`/`default`/`generous`) or leave model-family auto |
+| `RUNTIME_FILE_CACHE_MAX_ENTRIES`        | 64      | Recently-read file hints per workstream                                          |
+| `RUNTIME_REQUIRE_RG`                    | true    | Require ripgrep for grep/glob tools                                              |
 
 ### Live progress
 
@@ -169,14 +169,14 @@ lines but drop the noisier per-tool-call lines.
 
 Two curated suites ship under `tasks/`:
 
-| File | Kind | Eval command |
-| --- | --- | --- |
-| `mini-suite.json` | SWE-bench Lite (6 instances) | `pnpm bench:eval` |
-| `swebench-lite-curated-30.json` | SWE-bench Lite curated (30 instances) | `pnpm bench:eval` |
-| `deepswe-mini-suite.json` | [DeepSWE](https://deepswe.datacurve.ai/) Harbor tasks (6 instances) | `pnpm bench:eval:deepswe` |
-| `deepswe-typescript-mini.json` | DeepSWE TS/JS subset (4 instances) for local debugging | `pnpm bench:eval:deepswe` |
-| `greenfield-mini.json` | Greenfield build tasks (6 instances), graded Docker-free against hidden acceptance tests | `pnpm bench:eval:greenfield` |
-| `greenfield-hard.json` | Larger, multi-file greenfield tasks (5 instances) — see "Greenfield difficulty tiers" below | `pnpm bench:eval:greenfield` (with `BENCH_RESULTS_DIR` set to the hard-tier results dir) |
+| File                            | Kind                                                                                        | Eval command                                                                             |
+| ------------------------------- | ------------------------------------------------------------------------------------------- | ---------------------------------------------------------------------------------------- |
+| `mini-suite.json`               | SWE-bench Lite (6 instances)                                                                | `pnpm bench:eval`                                                                        |
+| `swebench-lite-curated-30.json` | SWE-bench Lite curated (30 instances)                                                       | `pnpm bench:eval`                                                                        |
+| `deepswe-mini-suite.json`       | [DeepSWE](https://deepswe.datacurve.ai/) Harbor tasks (6 instances)                         | `pnpm bench:eval:deepswe`                                                                |
+| `deepswe-typescript-mini.json`  | DeepSWE TS/JS subset (4 instances) for local debugging                                      | `pnpm bench:eval:deepswe`                                                                |
+| `greenfield-mini.json`          | Greenfield build tasks (6 instances), graded Docker-free against hidden acceptance tests    | `pnpm bench:eval:greenfield`                                                             |
+| `greenfield-hard.json`          | Larger, multi-file greenfield tasks (5 instances) — see "Greenfield difficulty tiers" below | `pnpm bench:eval:greenfield` (with `BENCH_RESULTS_DIR` set to the hard-tier results dir) |
 
 Run a specific suite:
 
@@ -192,7 +192,7 @@ Edit the `instanceIds` array in a suite file to curate a different subset.
 ## Greenfield build tasks
 
 Unlike the SWE-bench and DeepSWE suites (fix a bug in an existing repo), greenfield
-tasks measure sustained *build-from-scratch* work: the agent gets a stub scaffold
+tasks measure sustained _build-from-scratch_ work: the agent gets a stub scaffold
 and a spec, and must implement multiple files across however many plan/implement/
 review cycles it takes. Grading tests are never shown to the agent — they're
 overlaid onto its patch only at eval time, the same hide-until-grading approach
@@ -228,11 +228,11 @@ result.
 cache, rate limiter, text template) are each 2-3 files, independently
 implementable, and every frontier agent tested so far (Artificer, Claude Code,
 opencode, Cursor) solved all six in a single LLM turn each. That's a sign the
-*mini* tier is too easy/too textbook-familiar to be a meaningful difficulty
+_mini_ tier is too easy/too textbook-familiar to be a meaningful difficulty
 signal at frontier-model level — solving an LRU cache in one shot doesn't
 exercise "sustained build-from-scratch work," it's pattern recall.
 
-`greenfield-hard.json` targets that gap with *scope* first: 3 fixtures (router,
+`greenfield-hard.json` targets that gap with _scope_ first: 3 fixtures (router,
 task-cli, query-engine), 5-6 files each, with real cross-file contracts an
 agent has to get right end-to-end (e.g. `greenfield-http-router`'s hidden
 tests exercise `App#handle()`, which only produces correct responses if the
@@ -244,7 +244,7 @@ First real run (3 fixtures): Artificer's own orchestration missed one (2/3, a
 genuine 19/20-hidden-tests bug in the POST+middleware integration path) — but
 Claude Code, opencode, and Cursor all still one-shot all 3, same as the mini
 tier. Scope/file-count alone wasn't enough to stop a frontier CLI agent's
-*internal* iteration (a single headless invocation can still read/write/test
+_internal_ iteration (a single headless invocation can still read/write/test
 many files across many of its own tool calls before exiting — "one LLM call"
 in our usage accounting is not "one forward pass"). `greenfield-vm` tried a
 different lever instead of just more files: a stack-based VM (tokenizer →
@@ -258,7 +258,7 @@ algorithmic depth at ~250 LOC didn't move the needle either.
 just a different flavor — a tree-walking interpreter for a small language
 (lexer → recursive-descent parser → scope-chain environment → evaluator),
 13 files, ~620 reference LOC, with real lexical scoping (closures capture
-their *defining* environment, not the caller's — the single most common bug
+their _defining_ environment, not the caller's — the single most common bug
 in a hand-written interpreter), short-circuit evaluation, and a deliberately
 non-JS truthiness rule (`0`/`""` are truthy) that a careless implementation
 gets wrong by reflex. Same four-file-per-fixture template and Docker-free
@@ -271,7 +271,7 @@ same way.
 headlessly (full-auto flags — `--dangerously-skip-permissions` /
 `--force --trust`) against a freshly cloned greenfield scaffold, extracts the
 resulting patch with the same `extractPatch()` Artificer's own driver uses,
-and feeds it through the *same, unmodified* `eval-greenfield.ts`/`report.ts` —
+and feeds it through the _same, unmodified_ `eval-greenfield.ts`/`report.ts` —
 so results are directly comparable to Artificer's own greenfield reports.
 
 ```bash
@@ -290,16 +290,16 @@ them one at a time.
 
 ## Outputs (`results/`)
 
-| File | Produced by | Contents |
-| --- | --- | --- |
-| `predictions.jsonl` | `bench` | One `{instance_id, model_name_or_path, model_patch}` per instance |
-| `attempts.json` | `bench` | Per-instance outcome, duration, patch size, tokens/USD/runs |
-| `runs/<id>.json` | `bench` | Per-instance call tree (trajectory) for the runtime UI's benchmark run page |
-| `instances.json` | `bench` | The resolved instances that were run |
-| `run-config.json` | `bench` | The exact config used |
-| `eval-report.json` | `bench:eval` or `bench:eval:deepswe` | Resolved/unresolved verdicts |
-| `history/<timestamp>.json` | `bench` | Archived run summaries for cross-run efficiency charts |
-| `report.md` / `report.json` | `bench:report` | Merged correctness + cost report |
+| File                        | Produced by                          | Contents                                                                    |
+| --------------------------- | ------------------------------------ | --------------------------------------------------------------------------- |
+| `predictions.jsonl`         | `bench`                              | One `{instance_id, model_name_or_path, model_patch}` per instance           |
+| `attempts.json`             | `bench`                              | Per-instance outcome, duration, patch size, tokens/USD/runs                 |
+| `runs/<id>.json`            | `bench`                              | Per-instance call tree (trajectory) for the runtime UI's benchmark run page |
+| `instances.json`            | `bench`                              | The resolved instances that were run                                        |
+| `run-config.json`           | `bench`                              | The exact config used                                                       |
+| `eval-report.json`          | `bench:eval` or `bench:eval:deepswe` | Resolved/unresolved verdicts                                                |
+| `history/<timestamp>.json`  | `bench`                              | Archived run summaries for cross-run efficiency charts                      |
+| `report.md` / `report.json` | `bench:report`                       | Merged correctness + cost report                                            |
 
 ## Caveats
 
