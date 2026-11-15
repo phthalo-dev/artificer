@@ -22,9 +22,7 @@ const RUN_TONES: Record<RunStatus, Tone> = {
 };
 
 /** Semantic tone for a workstream or run status (`neutral` when unknown). */
-export function statusTone(
-  status: WorkstreamStatus | RunStatus | string,
-): Tone {
+function statusTone(status: WorkstreamStatus | RunStatus | string): Tone {
   return (
     WORKSTREAM_TONES[status as WorkstreamStatus] ??
     RUN_TONES[status as RunStatus] ??

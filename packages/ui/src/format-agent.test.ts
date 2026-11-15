@@ -1,20 +1,26 @@
-import assert from 'node:assert/strict';
-import { test } from 'vitest';
-import { agentLabel } from './format-agent.js';
+import { describe, expect, it } from 'vitest';
+import { agentLabel } from './format-agent';
 
-test('agentLabel names the shortcuts', () => {
-  assert.equal(agentLabel(undefined), 'Built-in loop');
-  assert.equal(agentLabel('llm'), 'Built-in loop');
-  assert.equal(agentLabel('claude-code'), 'Claude Code');
-  assert.equal(agentLabel('cursor-agent'), 'Cursor');
-  assert.equal(agentLabel('opencode'), 'OpenCode');
-  assert.equal(
-    agentLabel({
-      type: 'cli',
-      command: 'qwen',
-      args: [],
-      promptMode: 'stdin',
-    }),
-    'qwen',
-  );
+describe('agentLabel', () => {
+  it('falls back to the built-in loop for string executors', () => {
+    expect(agentLabel(undefined)).toBe('Built-in loop');
+    expect(agentLabel('llm')).toBe('Built-in loop');
+  });
+
+  it('names the known agents', () => {
+    expect(agentLabel('claude-code')).toBe('Claude Code');
+    expect(agentLabel('cursor-agent')).toBe('Cursor');
+    expect(agentLabel('opencode')).toBe('OpenCode');
+  });
+
+  it('uses the CLI command as the label for cli executors', () => {
+    expect(
+      agentLabel({
+        type: 'cli',
+        command: 'qwen',
+        args: [],
+        promptMode: 'stdin',
+      }),
+    ).toBe('qwen');
+  });
 });

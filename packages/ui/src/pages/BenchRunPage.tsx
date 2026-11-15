@@ -23,7 +23,7 @@ import {
   peakContext,
 } from '../components/BenchTrajectory';
 import { BreakdownTable } from '../components/BreakdownTable';
-import { TokenSpendByRole } from '../components/TokenSpendChart';
+import { TokenSpendByRole } from '../components/TokenSpendByRole';
 import { ViewRawLink } from '../components/ViewRawLink';
 import { cx } from '../styles/system';
 import { formatCost, formatDuration } from '../format';

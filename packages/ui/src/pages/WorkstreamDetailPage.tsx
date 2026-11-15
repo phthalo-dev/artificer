@@ -40,7 +40,7 @@ import { summarizeByRoute } from '../usage-breakdown';
 import { MarkdownContent } from '../components/MarkdownContent';
 import { StatusBadge } from '../components/StatusBadge';
 import { QuotaAlert } from '../components/QuotaBanner';
-import { TokenSpendByRole } from '../components/TokenSpendChart';
+import { TokenSpendByRole } from '../components/TokenSpendByRole';
 import { ViewRawLink } from '../components/ViewRawLink';
 import { WorkstreamProgress } from '../components/WorkstreamProgress';
 import { WorkstreamArtifactsPanel } from '../components/WorkstreamArtifactsPanel';

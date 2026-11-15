@@ -8,6 +8,5 @@ export default defineConfig({
     // Must match the workspace-wide maxWorkers in the root vite.config.ts.
     maxWorkers: 4,
     include: ['src/**/*.test.ts', 'src/**/*.test.tsx'],
-    exclude: ['src/format-agent.test.ts'],
   },
 });
