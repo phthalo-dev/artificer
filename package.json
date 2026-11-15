@@ -19,7 +19,7 @@
     "version-packages": "vp exec changeset version",
     "publish-packages": "vp run -F @artificer-ai/runtime build && vp run -F @artificer-ai/runtime build:ui && vp run -F @artificer-ai/cli build && vp exec changeset publish",
     "release": "node scripts/publish.mjs",
-    "prepare": "vp config",
+    "prepare": "if git rev-parse --git-dir >/dev/null 2>&1; then vp config; fi",
     "check": "vp check",
     "fmt": "vp fmt",
     "lint:fix": "vp lint --fix",
