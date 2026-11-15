@@ -1,3 +1,16 @@
+# Release commits version bumps and changelogs; hooks are for local work.
+if [ -n "$CI" ]; then
+  exit 0
+fi
+
+branch=$(git symbolic-ref --short HEAD 2>/dev/null)
+
+if [ "$branch" = "main" ]; then
+  echo "Direct commits to the 'main' branch are not allowed."
+  echo "Please create a feature branch and open a pull request."
+  exit 1
+fi
+
 if git diff --cached --name-only | grep -q '^pnpm-lock.yaml$'; then
   if [ -z "$ARTIFICER_ALLOW_LOCKFILE_CHANGE" ]; then
     echo "pnpm-lock.yaml is staged. Set ARTIFICER_ALLOW_LOCKFILE_CHANGE=1 to commit a deliberate lockfile change."
@@ -14,3 +27,5 @@ if command -v gitleaks >/dev/null 2>&1; then
 else
   echo "warning: gitleaks not installed; skipping secret scan (brew install gitleaks)"
 fi
+
+vp staged
