@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import type { SweBenchInstance } from '../bench/types.js';
 import { getEvalPack, listEvalPacks } from './registry.js';
 import { loadEvalPack, sweBenchInstanceToEvalTask } from './load-pack.js';

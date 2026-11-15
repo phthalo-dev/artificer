@@ -70,7 +70,6 @@
     "bench:deepswe:typescript:go-economy": "tsx ../eval/src/bench/main.ts --suite tasks/deepswe-typescript-mini.json --preset go-economy --gateway go",
     "bench:deepswe:typescript:go-quality": "tsx ../eval/src/bench/main.ts --suite tasks/deepswe-typescript-mini.json --preset go-quality --gateway go",
     "type-check": "tsc --noEmit",
-    "test": "node --import tsx --test \"src/**/*.test.ts\"",
     "clean": "rm -rf dist ui-dist",
     "docker:build": "docker build -t artificer-runtime:dev .",
     "docker:run": "docker compose up"
@@ -104,6 +103,7 @@
   "devDependencies": {
     "@types/node": "20.19.35",
     "tsx": "4.21.0",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "catalog:"
   }
 }

@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { materializeGreenfieldFixture } from './greenfield-fixture.js';
 import { gradeGreenfieldPatch, nodeTestCount } from './grade-greenfield.js';
 

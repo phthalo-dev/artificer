@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import {
   loadConfig,
   loadConfigWithIdentityDefinition,
@@ -183,7 +183,9 @@ test('loadConfigWithIdentityDefinition reads executor and quota from artificer.c
   const identityDir = fs.mkdtempSync(
     path.join(os.tmpdir(), 'artificer-config-identity-'),
   );
-  t.after(() => fs.rmSync(identityDir, { recursive: true, force: true }));
+  t.onTestFinished(() =>
+    fs.rmSync(identityDir, { recursive: true, force: true }),
+  );
   fs.writeFileSync(
     path.join(identityDir, 'artificer.config.json'),
     JSON.stringify({

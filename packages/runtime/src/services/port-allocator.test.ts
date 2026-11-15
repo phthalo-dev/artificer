@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import net from 'node:net';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { PortAllocator } from './port-allocator.js';
 
 test('allocate returns the first free port in range', async () => {

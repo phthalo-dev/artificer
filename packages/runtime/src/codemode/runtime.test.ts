@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { DEFAULT_CODEMODE_LIMITS } from '../config.js';
 import { runCodemode, type CodemodeTool } from './runtime.js';
 

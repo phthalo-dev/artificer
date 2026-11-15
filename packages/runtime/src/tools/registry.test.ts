@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { defineTool } from '../api/define-tool.js';
 import { ToolRegistry } from '../api/tool-registry.js';
 import type { ToolContext } from '../context.js';

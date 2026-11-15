@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { loadConfig } from '../config.js';
 import { Store } from '../storage/store.js';
 import { Engine, turnErrorReply } from './engine.js';

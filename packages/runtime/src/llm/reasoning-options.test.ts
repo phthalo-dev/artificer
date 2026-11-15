@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { reasoningProviderOptions } from './reasoning-options.js';
 
 test('kimi-k3 gets reasoning options', () => {
