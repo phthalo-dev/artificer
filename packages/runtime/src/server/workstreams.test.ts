@@ -882,9 +882,214 @@ test('GET /api/executors lists built-ins then certified presets', async () => {
   };
   assert.deepEqual(
     body.executors.map((e) => e.id),
-    ['instance', 'llm', 'claude-code', 'cursor-agent', 'acp:opencode'],
+    [
+      'instance',
+      'llm',
+      'claude-code',
+      'cursor-agent',
+      'acp:opencode',
+      'acp:codex',
+    ],
   );
   const opencode = body.executors[4];
   assert.deepEqual(opencode.executor, { type: 'acp', agent: 'opencode' });
   assert.equal(opencode.permissionEnforcement, 'acp-requests');
+});
+
+test('conversation create validates the codex preset api key', async (t) => {
+  const saved = {
+    CODEX_API_KEY: process.env.CODEX_API_KEY,
+    OPENAI_API_KEY: process.env.OPENAI_API_KEY,
+  };
+  delete process.env.CODEX_API_KEY;
+  delete process.env.OPENAI_API_KEY;
+  t.after(() => {
+    for (const [k, v] of Object.entries(saved)) {
+      if (v === undefined) delete process.env[k];
+      else process.env[k] = v;
+    }
+  });
+  const { app, restore } = await conversationFixture();
+  try {
+    const post = (executor: unknown) =>
+      app.request('/api/workstreams', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({
+          driver: 'conversation',
+          title: 'Codex',
+          goal: 'Talk to codex',
+          repoId: 'app',
+          executor,
+        }),
+      });
+    assert.equal((await post({ type: 'acp', agent: 'codex' })).status, 400);
+    process.env.CODEX_API_KEY = 'test-key';
+    assert.equal((await post({ type: 'acp', agent: 'codex' })).status, 201);
+  } finally {
+    restore();
+  }
+});
+
+test('workstream responses redact executor env values', async () => {
+  const { app, restore } = await conversationFixture();
+  try {
+    const res = await app.request('/api/workstreams', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        driver: 'conversation',
+        title: 'Redact',
+        goal: 'Check redaction',
+        repoId: 'app',
+        executor: {
+          type: 'acp',
+          agent: 'codex',
+          env: { CODEX_API_KEY: 'sk-test-secret' },
+        },
+      }),
+    });
+    assert.equal(res.status, 201);
+    const created = await res.text();
+    assert.ok(!created.includes('sk-test-secret'));
+    const id = (JSON.parse(created) as { workstream: { id: string } })
+      .workstream.id;
+    const detail = await (await app.request(`/api/workstreams/${id}`)).text();
+    const list = await (await app.request('/api/workstreams')).text();
+    for (const body of [created, detail, list]) {
+      assert.ok(!body.includes('sk-test-secret'));
+      assert.ok(body.includes('[redacted]'));
+    }
+  } finally {
+    restore();
+  }
+});
+
+test('SSE stream and trace redact executor env values', async () => {
+  const { app, store, engine, restore } = await conversationFixture();
+  try {
+    const ac = new AbortController();
+    const sse = await app.request('/events', { signal: ac.signal });
+    assert.equal(sse.status, 200);
+    const reader = sse.body!.getReader();
+    const decoder = new TextDecoder();
+    let text = '';
+    const pump = (async () => {
+      try {
+        for (;;) {
+          const { done, value } = await reader.read();
+          if (done) break;
+          text += decoder.decode(value);
+        }
+      } catch {
+        // aborted
+      }
+    })();
+    const res = await app.request('/api/workstreams', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        driver: 'conversation',
+        title: 'Sse',
+        goal: 'Check sse redaction',
+        repoId: 'app',
+        executor: {
+          type: 'acp',
+          agent: 'codex',
+          env: { CODEX_API_KEY: 'sk-test-secret' },
+        },
+      }),
+    });
+    assert.equal(res.status, 201);
+    const id = ((await res.json()) as { workstream: { id: string } }).workstream
+      .id;
+    // The engine emits the full workstream on state changes; trigger one.
+    await (
+      engine as unknown as { emitWorkstream(id: string): Promise<void> }
+    ).emitWorkstream(id);
+    const deadline = Date.now() + 2000;
+    while (!text.includes('event: workstream') && Date.now() < deadline) {
+      await new Promise((r) => setTimeout(r, 20));
+    }
+    await new Promise((r) => setTimeout(r, 100));
+    ac.abort();
+    await reader.cancel().catch(() => undefined);
+    await pump;
+    assert.ok(text.includes('event: workstream'), text.slice(0, 500));
+    assert.ok(text.includes('[redacted]'));
+    assert.ok(!text.includes('sk-test-secret'));
+    const ws = await store.getWorkstream(id);
+    const trace = await (
+      await app.request(`/api/traces/${ws!.traceId ?? `trace_${id}`}/events`)
+    ).text();
+    assert.ok(!trace.includes('sk-test-secret'));
+  } finally {
+    restore();
+  }
+});
+
+test('quota config responses redact executor env values', async () => {
+  const dataDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-quota-'));
+  const config = loadConfig({
+    ARTIFICER_EXEC_DIR: dataDir,
+    LLM_API_KEY: 'test-key-not-used',
+    PORT: '0',
+  });
+  const secretExecutor = {
+    type: 'acp' as const,
+    agent: 'codex' as const,
+    env: { CODEX_API_KEY: 'sk-test-secret' },
+  };
+  // PUT persists artificer.config.json under identityDir; keep it in the temp dir.
+  config.identityDir = dataDir;
+  config.executor = secretExecutor;
+  config.quota = {
+    accounts: [
+      {
+        id: 'primary',
+        mode: 'metered',
+        windows: [{ id: 'd', unit: 'dollars', period: 'daily', limit: 5 }],
+        failover: [{ id: 'fo', accountId: 'backup', executor: secretExecutor }],
+      },
+      {
+        id: 'backup',
+        mode: 'metered',
+        windows: [{ id: 'd', unit: 'dollars', period: 'daily', limit: 5 }],
+      },
+    ],
+  };
+  const store = new Store(config.execDir);
+  await store.init();
+  const engine = new Engine(config, store);
+  const app = createApp(engine);
+  try {
+    const get = await (await app.request('/api/config/quota')).text();
+    assert.ok(!get.includes('sk-test-secret'), get.slice(0, 2000));
+    assert.ok(get.includes('[redacted]'));
+    const usage = await (await app.request('/api/usage')).text();
+    assert.ok(!usage.includes('sk-test-secret'));
+
+    const put = await app.request('/api/config/quota', {
+      method: 'PUT',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({
+        reservePercent: 10,
+        accounts: config.quota.accounts.map((a) => ({
+          ...a,
+          failover: undefined,
+        })),
+      }),
+    });
+    const putBody = await put.text();
+    assert.equal(put.status, 200, putBody);
+    assert.ok(!putBody.includes('sk-test-secret'), putBody.slice(0, 2000));
+    assert.ok(putBody.includes('[redacted]'));
+    // The live config keeps the real value.
+    assert.equal(
+      (engine.config.executor as typeof secretExecutor).env.CODEX_API_KEY,
+      'sk-test-secret',
+    );
+  } finally {
+    await fs.rm(dataDir, { recursive: true, force: true });
+  }
 });

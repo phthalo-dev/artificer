@@ -177,12 +177,15 @@ test('acp executor without resume falls back to transcript', async (t) => {
     '__fixtures__',
     'fake-acp-agent.mjs',
   );
-  const executor = new AcpExecutor({
-    type: 'acp',
-    command: process.execPath,
-    args: [fake, scenarioPath],
-    resumes: true,
-  });
+  const executor = new AcpExecutor(
+    {
+      type: 'acp',
+      command: process.execPath,
+      args: [fake, scenarioPath],
+      resumes: true,
+    },
+    { stateDir: path.join(path.dirname(scenarioPath), 'acp') },
+  );
   const result = await runConversationTurn({
     workstream: { id: 'ws-1', goal: 'g', agentSessionId: 'old-session' },
     repoPath: repo,

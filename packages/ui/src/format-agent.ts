@@ -6,6 +6,7 @@ export function agentLabel(executor: ExecutorConfig | undefined): string {
   }
   if (typeof executor === 'object' && executor.type === 'acp') {
     if (executor.agent === 'opencode') return 'OpenCode (ACP)';
+    if (executor.agent === 'codex') return 'Codex (ACP)';
     const base = executor.command?.split(/[\\/]/).pop() || 'agent';
     return `${base} (ACP)`;
   }

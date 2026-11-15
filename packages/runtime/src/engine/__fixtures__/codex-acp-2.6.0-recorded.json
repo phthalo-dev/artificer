@@ -1,0 +1,121 @@
+{
+  "agent": "@agentclientprotocol/codex-acp",
+  "version": "2.6.0",
+  "mode": "read-only",
+  "execPermissionRequests": [
+    {
+      "sessionId": "01a1d6fd-04fa-7fa2-b00b-5812e38c17b4",
+      "toolCall": {
+        "toolCallId": "exec-114d9e9f-0176-4aad-8e67-256f7fcfef50",
+        "title": "printf hi > hello.txt",
+        "rawInput": {
+          "command": "printf hi > hello.txt",
+          "cwd": "{{WS}}"
+        },
+        "kind": "execute",
+        "status": "pending"
+      },
+      "options": [
+        {
+          "optionId": "allow_once",
+          "name": "Yes, proceed",
+          "kind": "allow_once"
+        },
+        {
+          "optionId": "accept_execpolicy_amendment",
+          "name": "Yes, and don't ask again for commands that start with `printf hi > hello.txt`",
+          "kind": "allow_always"
+        },
+        {
+          "optionId": "cancel",
+          "name": "No, and tell Codex what to do differently",
+          "kind": "reject_once"
+        }
+      ]
+    },
+    {
+      "sessionId": "01a1d6fd-04fa-7fa2-b00b-5812e38c17b4",
+      "toolCall": {
+        "toolCallId": "exec-fe8f1350-f326-44ab-bde3-38156257e61f",
+        "title": "rm -rf build",
+        "rawInput": {
+          "command": "rm -rf build",
+          "cwd": "{{WS}}"
+        },
+        "kind": "execute",
+        "status": "pending"
+      },
+      "options": [
+        {
+          "optionId": "allow_once",
+          "name": "Yes, proceed",
+          "kind": "allow_once"
+        },
+        {
+          "optionId": "accept_execpolicy_amendment",
+          "name": "Yes, and don't ask again for commands that start with `rm -rf build`",
+          "kind": "allow_always"
+        },
+        {
+          "optionId": "cancel",
+          "name": "No, and tell Codex what to do differently",
+          "kind": "reject_once"
+        }
+      ]
+    }
+  ],
+  "mcpToolCallUpdate": {
+    "sessionId": "01a1d707-385c-7182-8e55-6b0fe09f33d7",
+    "update": {
+      "sessionUpdate": "tool_call",
+      "toolCallId": "exec-1f8ae0fa-a73e-42c5-9cae-d57d7cf696f1",
+      "kind": "execute",
+      "title": "mcp.artificer-status.report_status",
+      "status": "in_progress",
+      "rawInput": {
+        "server": "artificer-status",
+        "tool": "report_status",
+        "arguments": {
+          "status": "done",
+          "summary": "codex mcp ok"
+        }
+      },
+      "_meta": {
+        "is_mcp_tool_call": true
+      }
+    }
+  },
+  "mcpPermissionRequest": {
+    "sessionId": "01a1d707-385c-7182-8e55-6b0fe09f33d7",
+    "toolCall": {
+      "toolCallId": "exec-1f8ae0fa-a73e-42c5-9cae-d57d7cf696f1",
+      "kind": "execute",
+      "status": "pending"
+    },
+    "_meta": {
+      "is_mcp_tool_approval": true
+    },
+    "options": [
+      {
+        "optionId": "allow_once",
+        "name": "Allow",
+        "kind": "allow_once"
+      },
+      {
+        "optionId": "allow_session",
+        "name": "Allow for this session",
+        "kind": "allow_always"
+      },
+      {
+        "optionId": "allow_always",
+        "name": "Always allow",
+        "kind": "allow_always"
+      },
+      {
+        "optionId": "cancel",
+        "name": "Cancel",
+        "kind": "reject_once"
+      }
+    ]
+  }
+}

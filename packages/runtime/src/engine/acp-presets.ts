@@ -1,3 +1,4 @@
+import os from 'node:os';
 import path from 'node:path';
 import type { AcpExecutorConfig, AcpPresetId } from '../api/types.js';
 
@@ -22,6 +23,16 @@ export const ACP_PRESETS: Record<AcpPresetId, AcpPreset> = {
     permissionEnforcement: 'acp-requests',
     certified: true,
     verifiedVersion: '2.0.32',
+  },
+  codex: {
+    id: 'codex',
+    label: 'Codex',
+    command: 'npx',
+    args: ['-y', '@agentclientprotocol/codex-acp@2.6.0'],
+    resumes: true,
+    permissionEnforcement: 'acp-requests',
+    certified: true,
+    verifiedVersion: '2.6.0',
   },
 };
 
@@ -72,7 +83,68 @@ function opencodeEnv(
   };
 }
 
-export function resolveAcpLaunch(config: AcpExecutorConfig): AcpLaunch {
+const KEY_VARS = ['CODEX_API_KEY', 'OPENAI_API_KEY'] as const;
+
+/** Default directory for Artificer-owned ACP agent state. */
+export function defaultAcpStateDir(): string {
+  return path.join(os.homedir(), '.artificer', 'acp');
+}
+
+/** Artificer-owned paths for a Codex launch under `stateDir`. */
+export function codexPaths(stateDir: string): {
+  home: string;
+  npmrc: string;
+} {
+  return {
+    home: path.join(stateDir, 'codex-home'),
+    npmrc: path.join(stateDir, 'npmrc'),
+  };
+}
+
+function codexEnv(
+  userEnv: Record<string, string> | undefined,
+  stateDir: string,
+): Record<string, string> {
+  // A blank user key var is dropped so it cannot shadow a valid key in the
+  // process env when the two are merged at spawn.
+  const env: Record<string, string> = { ...userEnv };
+  for (const k of KEY_VARS) {
+    if (k in env && env[k].trim() === '') delete env[k];
+  }
+  const has = (k: string): boolean =>
+    (env[k] ?? process.env[k] ?? '').trim() !== '';
+  if (!KEY_VARS.some(has)) {
+    throw new Error(
+      'acp:codex: set CODEX_API_KEY or OPENAI_API_KEY (Codex runs with API-key auth only)',
+    );
+  }
+  // npm reads npm_config_* case-insensitively; drop user variants so the
+  // forced lowercase values below are the only ones.
+  for (const k of Object.keys(env)) {
+    if (/^npm_config_(userconfig|registry)$/i.test(k)) delete env[k];
+  }
+  const paths = codexPaths(stateDir);
+  // Forced after the user env. An Artificer-owned CODEX_HOME keeps the adapter
+  // off a human's ~/.codex ChatGPT login; read-only mode avoids its
+  // auto-approve default. npm config is pinned so a home or workspace .npmrc
+  // cannot redirect the adapter download. The directories and files are
+  // created by AcpExecutor, not here, so validation paths stay free of
+  // filesystem side effects.
+  return {
+    ...env,
+    NO_BROWSER: '1',
+    INITIAL_AGENT_MODE: 'read-only',
+    DEFAULT_AUTH_REQUEST: '{"methodId":"api-key"}',
+    CODEX_HOME: paths.home,
+    npm_config_userconfig: paths.npmrc,
+    npm_config_registry: 'https://registry.npmjs.org/',
+  };
+}
+
+export function resolveAcpLaunch(
+  config: AcpExecutorConfig,
+  ctx?: { stateDir?: string },
+): AcpLaunch {
   if (config.agent && config.command) {
     throw new Error('acp executor: set either agent or command, not both');
   }
@@ -88,7 +160,10 @@ export function resolveAcpLaunch(config: AcpExecutorConfig): AcpLaunch {
       name: `acp:${preset.id}`,
       command: preset.command,
       args: preset.args,
-      env: opencodeEnv(config.env),
+      env:
+        preset.id === 'codex'
+          ? codexEnv(config.env, ctx?.stateDir ?? defaultAcpStateDir())
+          : opencodeEnv(config.env),
       resumes: config.resumes ?? preset.resumes,
       permissionEnforcement: preset.permissionEnforcement,
     };

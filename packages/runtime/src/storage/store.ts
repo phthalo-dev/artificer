@@ -15,6 +15,7 @@ import {
   rankRuns,
   type RunIndexEntry,
 } from './history-search.js';
+import { redactWorkstream } from '../redact.js';
 import { Layout } from './layout.js';
 import { rankMemories, type MemoryIndexEntry } from './memory-search.js';
 import {
@@ -276,7 +277,7 @@ export class Store {
       kind: 'workstream',
       sourceId: workstream.id,
       at: workstream.createdAt,
-      data: { event: 'created', workstream },
+      data: { event: 'created', workstream: redactWorkstream(workstream) },
     });
     return workstream;
   }
@@ -319,7 +320,7 @@ export class Store {
       at: updated.updatedAt,
       data: {
         event: 'updated',
-        patch,
+        patch: redactWorkstream(patch),
         status: updated.status,
         updatedAt: updated.updatedAt,
       },

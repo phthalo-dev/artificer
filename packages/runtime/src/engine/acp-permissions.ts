@@ -1,8 +1,10 @@
+import os from 'node:os';
 import path from 'node:path';
 import type {
   PermissionOption,
   RequestPermissionRequest,
   RequestPermissionResponse,
+  ToolCallLocation,
   ToolKind,
 } from '@agentclientprotocol/sdk';
 import type { RoleName } from '../storage/types.js';
@@ -25,6 +27,16 @@ export interface PermissionContext {
   workspaceDir: string;
   policy: ToolPolicyFile;
   cancelling: boolean;
+  /**
+   * True when the request's own `toolCall.title` was empty, so any title is
+   * filled in from tracking. Such a title is then never used as the command.
+   */
+  titleFromTracking?: boolean;
+  /**
+   * Directories holding Artificer agent state (the executor passes its state
+   * dir). Commands that mention them and writes inside them are denied.
+   */
+  protectedPaths?: string[];
 }
 
 export interface PermissionOutcome {
@@ -57,6 +69,111 @@ function asRecord(value: unknown): Record<string, unknown> {
     : {};
 }
 
+/** The tool call fields the executor tracks from session/update. */
+export interface TrackedPermissionFields {
+  title?: string | null;
+  kind?: ToolKind | null;
+  rawInput?: unknown;
+  locations?: ToolCallLocation[] | null;
+  /** `_meta` of the agent's tool_call / tool_call_update notifications. */
+  _meta?: Record<string, unknown> | null;
+}
+
+function isPlainObject(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === 'object' && !Array.isArray(value);
+}
+
+function isEmpty(value: unknown): boolean {
+  if (value === undefined || value === null || value === '') return true;
+  if (Array.isArray(value)) return value.length === 0;
+  if (typeof value === 'object') return Object.keys(value).length === 0;
+  return false;
+}
+
+/**
+ * Merge the tool call tracked under the request's toolCallId into the
+ * request. Agents such as Codex send detail-free permission requests and put
+ * the title, kind and input on the earlier tool_call update. A field is
+ * copied only when the request's own field is missing, null or empty. When
+ * both rawInputs are objects they are shallow-merged, request keys winning,
+ * so a request that omits `command` is still judged on the tracked one. The
+ * tracked `_meta` is merged under the request's `toolCall._meta` (request
+ * keys winning); the request's top-level `_meta` passes through unchanged.
+ */
+export function fillPermissionRequest(
+  req: RequestPermissionRequest,
+  tracked: TrackedPermissionFields | undefined,
+): RequestPermissionRequest {
+  if (!tracked) return req;
+  const toolCall = { ...req.toolCall };
+  if (isEmpty(toolCall.title) && !isEmpty(tracked.title)) {
+    toolCall.title = tracked.title;
+  }
+  if (isEmpty(toolCall.kind) && !isEmpty(tracked.kind)) {
+    toolCall.kind = tracked.kind;
+  }
+  if (isPlainObject(toolCall.rawInput) && isPlainObject(tracked.rawInput)) {
+    toolCall.rawInput = { ...tracked.rawInput, ...toolCall.rawInput };
+  } else if (isEmpty(toolCall.rawInput) && !isEmpty(tracked.rawInput)) {
+    toolCall.rawInput = tracked.rawInput;
+  }
+  if (isEmpty(toolCall.locations) && !isEmpty(tracked.locations)) {
+    toolCall.locations = tracked.locations;
+  }
+  if (isPlainObject(tracked._meta)) {
+    toolCall._meta = {
+      ...tracked._meta,
+      ...(isPlainObject(toolCall._meta) ? toolCall._meta : {}),
+    };
+  }
+  return { ...req, toolCall };
+}
+
+const STATUS_SERVER = 'artificer-status';
+
+function decideMcp(
+  req: RequestPermissionRequest,
+  ctx: PermissionContext,
+  input: Record<string, unknown>,
+): PermissionOutcome {
+  const { server, tool } = input;
+  if (
+    typeof server !== 'string' ||
+    typeof tool !== 'string' ||
+    server.length === 0 ||
+    tool.length === 0
+  ) {
+    return deny(req, {
+      tool: 'mcp:unknown',
+      approvalKey: '',
+      reason: 'unknown MCP server',
+    });
+  }
+  const approvalKey = `${server}.${tool}`;
+  const name = `mcp:${approvalKey}`;
+  if (server === STATUS_SERVER) return allow(req, { tool: name, approvalKey });
+  return gated(req, ctx, name, approvalKey);
+}
+
+/**
+ * An MCP approval is identified only by the adapter's explicit flag: the
+ * request's `_meta.is_mcp_tool_approval` or the tracked tool call's
+ * `_meta.is_mcp_tool_call`. A request that carries a shell command or is a
+ * write kind is never classified as MCP, so it keeps its normal checks.
+ */
+function isMcpApproval(req: RequestPermissionRequest, kind: ToolKind): boolean {
+  const call = req.toolCall;
+  const flagged =
+    req._meta?.is_mcp_tool_approval === true ||
+    call._meta?.is_mcp_tool_call === true;
+  if (!flagged || WRITE_KINDS.has(kind)) return false;
+  const command = asRecord(call.rawInput).command;
+  return !(
+    (typeof command === 'string' && command.length > 0) ||
+    (Array.isArray(command) && command.length > 0)
+  );
+}
+
 function commandOf(rawInput: unknown, title: string | null | undefined) {
   const command = asRecord(rawInput).command;
   if (typeof command === 'string' && command.length > 0) return command;
@@ -64,6 +181,47 @@ function commandOf(rawInput: unknown, title: string | null | undefined) {
     return command.map(String).join(' ');
   }
   return title ?? '';
+}
+
+function isInside(root: string, target: string): boolean {
+  const rel = path.relative(path.resolve(root), path.resolve(target));
+  return (
+    rel === '' ||
+    !(rel === '..' || rel.startsWith(`..${path.sep}`) || path.isAbsolute(rel))
+  );
+}
+
+/** Spellings of a protected dir a shell command may use. */
+function protectedSpellings(dir: string): string[] {
+  const abs = path.resolve(dir);
+  const out = [abs];
+  const home = os.homedir();
+  if (home && isInside(home, abs) && abs !== home) {
+    const rel = path.relative(home, abs);
+    out.push(`~/${rel}`, `$HOME/${rel}`, `\${HOME}/${rel}`);
+  }
+  return out;
+}
+
+const STATE_REASON = 'touches Artificer agent state';
+
+function commandTouchesState(
+  command: string,
+  rawInput: unknown,
+  workspaceDir: string,
+  dirs: string[],
+): boolean {
+  const cwd = asRecord(rawInput).cwd;
+  if (
+    typeof cwd === 'string' &&
+    cwd.length > 0 &&
+    dirs.some((d) => isInside(d, path.resolve(workspaceDir, cwd)))
+  ) {
+    return true;
+  }
+  return dirs.some((d) =>
+    protectedSpellings(d).some((s) => command.includes(s)),
+  );
 }
 
 function deny(
@@ -131,10 +289,30 @@ export function decidePermission(
     };
   }
 
+  const input = asRecord(call.rawInput);
+  if (isMcpApproval(req, kind)) return decideMcp(req, ctx, input);
+
   if (kind === 'execute') {
-    const command = commandOf(call.rawInput, call.title);
+    // A title filled in from tracking is a display label, never a command.
+    const command = commandOf(
+      call.rawInput,
+      ctx.titleFromTracking ? '' : call.title,
+    );
     const approvalKey = shellApprovalKey(command);
     const tool = 'run_shell';
+    if (command.trim().length === 0) {
+      return deny(req, { tool, approvalKey, reason: 'no command to evaluate' });
+    }
+    if (
+      commandTouchesState(
+        command,
+        call.rawInput,
+        ctx.workspaceDir,
+        ctx.protectedPaths ?? [],
+      )
+    ) {
+      return deny(req, { tool, approvalKey, reason: STATE_REASON });
+    }
     const reviewerWrite = checkReviewerWrite(command, ctx.role as RoleName);
     if (!reviewerWrite.allowed) {
       return deny(req, { tool, approvalKey, reason: reviewerWrite.reason });
@@ -158,7 +336,6 @@ export function decidePermission(
   }
 
   if (kind === 'fetch') {
-    const input = asRecord(call.rawInput);
     const method = String(input.method ?? 'GET').toUpperCase();
     const approvalKey = fetchApprovalKey(method, String(input.url ?? ''));
     const tool = 'fetch_url';
@@ -176,6 +353,17 @@ export function decidePermission(
         approvalKey,
         reason: 'reviewer role is read-only',
       });
+    }
+    if (paths.length === 0) {
+      return deny(req, { tool, approvalKey, reason: 'no path to evaluate' });
+    }
+    const stateWrite = paths.some((p) =>
+      (ctx.protectedPaths ?? []).some((d) =>
+        isInside(d, path.resolve(ctx.workspaceDir, p)),
+      ),
+    );
+    if (stateWrite) {
+      return deny(req, { tool, approvalKey, reason: STATE_REASON });
     }
     const root = path.resolve(ctx.workspaceDir);
     const outside = paths.find((p) => {

@@ -38,6 +38,12 @@ import { serveUI } from './static.js';
 import { resolveUiDistDir } from './ui-dist.js';
 import { mountChannels } from '../channels/mount.js';
 import type { ArtificerChannel, ExecutorConfig } from '../api/types.js';
+import {
+  redactExecutorConfig,
+  redactExecutorsDeep,
+  redactRuntimeEvent,
+  redactWorkstream,
+} from '../redact.js';
 import type { IdentityStore } from '../storage/identity-store.js';
 import {
   loadEffectivePolicy,
@@ -107,7 +113,7 @@ const executorSchema = z.union([
   z
     .object({
       type: z.literal('acp'),
-      agent: z.enum(['opencode']).optional(),
+      agent: z.enum(['opencode', 'codex']).optional(),
       command: z.string().min(1).optional(),
       args: z.array(z.string()).optional(),
       model: z.string().min(1).optional(),
@@ -379,7 +385,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
       const unsubscribe = engine.subscribe((event) => {
         void stream.writeSSE({
           event: event.kind,
-          data: JSON.stringify(event),
+          data: JSON.stringify(redactRuntimeEvent(event)),
         });
       });
       stream.onAbort(() => {
@@ -523,8 +529,10 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
   });
 
   api.get('/config/quota', (c) => {
-    const configured = engine.getConfiguredQuota() ?? null;
-    const effective = engine.getEffectiveQuotaConfig() ?? null;
+    const configured = redactExecutorsDeep(engine.getConfiguredQuota() ?? null);
+    const effective = redactExecutorsDeep(
+      engine.getEffectiveQuotaConfig() ?? null,
+    );
     const catalog = Object.values(MODEL_CATALOG).map((entry) => ({
       id: entry.id,
       provider: PROVIDER_LABEL[entry.npm],
@@ -559,10 +567,10 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     }
     void engine.persistProviderConfig();
     return c.json({
-      configured: engine.getConfiguredQuota() ?? null,
-      effective: engine.getEffectiveQuotaConfig() ?? null,
+      configured: redactExecutorsDeep(engine.getConfiguredQuota() ?? null),
+      effective: redactExecutorsDeep(engine.getEffectiveQuotaConfig() ?? null),
       primaryAccountId: primaryAccountIdFor(engine.config),
-      quota: engine.getQuotaSnapshot() ?? null,
+      quota: redactExecutorsDeep(engine.getQuotaSnapshot() ?? null),
     });
   });
 
@@ -625,7 +633,10 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     if (parsed.data.driver === 'conversation') {
       try {
         const result = await engine.createConversationWorkstream(parsed.data);
-        return c.json(result, 201);
+        return c.json(
+          { ...result, workstream: redactWorkstream(result.workstream) },
+          201,
+        );
       } catch (error) {
         const message = error instanceof Error ? error.message : String(error);
         const status =
@@ -719,7 +730,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
 
   api.get('/workstreams', async (c) => {
     const workstreams = await engine.store.listWorkstreams();
-    return c.json({ workstreams });
+    return c.json({ workstreams: workstreams.map(redactWorkstream) });
   });
 
   api.get('/traces', async (c) => {
@@ -1115,8 +1126,10 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
       },
     };
     return c.json({
-      workstream,
-      resolvedExecutor: workstream.executor ?? engine.config.executor ?? null,
+      workstream: redactWorkstream(workstream),
+      resolvedExecutor: redactExecutorConfig(
+        workstream.executor ?? engine.config.executor ?? null,
+      ),
       tasks,
       reviews,
       plan,
@@ -1204,7 +1217,7 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
       byRoute: groupBy(runs, (r) => r.routeProfileId),
       byWorkstream: groupBy(runs, (r) => r.workstreamId),
       byMessage,
-      quota: engine.getQuotaSnapshot() ?? null,
+      quota: redactExecutorsDeep(engine.getQuotaSnapshot() ?? null),
     });
   });
 
@@ -1221,7 +1234,10 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     }
     const ok = engine.resetQuotaWindow(accountId, windowId, workstreamId);
     if (!ok) return c.json({ error: 'window not found' }, 404);
-    return c.json({ ok: true, quota: engine.getQuotaSnapshot() ?? null });
+    return c.json({
+      ok: true,
+      quota: redactExecutorsDeep(engine.getQuotaSnapshot() ?? null),
+    });
   });
 
   api.get('/messages/:id/cost', async (c) => {
