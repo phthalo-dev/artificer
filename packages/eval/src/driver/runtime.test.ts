@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import childProcess, { type ChildProcess } from 'node:child_process';
 import { EventEmitter } from 'node:events';
 import { PassThrough } from 'node:stream';
-import { test } from 'node:test';
+import { test } from 'vitest';
 
 test('startEvalRuntime spawns an identity-aware runtime in eval mode', async () => {
   const runtime = await import('./runtime.js');

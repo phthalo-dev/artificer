@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { getPreset, isPresetId } from './presets.js';
 
 test('open-weights-economy preset exists with expected tiers', () => {

@@ -10,7 +10,7 @@
     "lint": "vp lint",
     "clean": "vp run -r clean && rm -rf node_modules",
     "type-check": "vp run -r type-check",
-    "test": "vp run -r test",
+    "test": "vp test run",
     "infra:deploy": "pnpm --filter artificer-infrastructure deploy:personal",
     "infra:sync-env": "pnpm --filter artificer-infrastructure sync:runtime-env",
     "link": "cd packages/runtime && npm link && cd ../cli && npm link",

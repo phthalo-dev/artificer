@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { buildPriorWorkContext } from './prior-work-context.js';
 import type { RunRecord } from '../storage/types.js';
 import { emptyUsage } from '../storage/types.js';

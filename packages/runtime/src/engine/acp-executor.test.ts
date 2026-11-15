@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { test, type TestContext } from 'node:test';
+import { test, type TestContext } from 'vitest';
 import { promisify } from 'node:util';
 import type { AcpExecutorConfig } from '../api/types.js';
 import type { RuntimeEvent } from '../context.js';
@@ -91,7 +91,7 @@ async function run(
     scenarioPath,
     JSON.stringify({ steps: [], recordFile, ...scenario }),
   );
-  t.after(async () => {
+  t.onTestFinished(async () => {
     const [first] = await readRecords(recordFile);
     if (first?.pid) {
       try {

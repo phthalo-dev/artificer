@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { extractTitle, htmlToText, truncateText } from './fetch-util.js';
 
 test('extractTitle pulls and decodes the <title>', () => {

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { loadRepos, matchRepo, repoUrlKey } from './repos.js';
 
 test('repoUrlKey rejects schemeless, non-https, and non-git ssh URLs', () => {

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import type { RuntimeClient, RuntimeState } from './client.js';
 import { runWorkstreamTask } from './run-workstream-task.js';
 import type { LoadedEvalTask } from '../types.js';

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import type { RunRecord, ToolInvocation } from '../storage/types.js';
 import {
   lastWorkerReport,

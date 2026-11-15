@@ -175,6 +175,42 @@ export default defineConfig({
   staged: {
     '*.{js,jsx,ts,tsx,json,css,md}': 'vp check --fix',
   },
+  test: {
+    // node:test had no per-test timeout; keep generous limits for the
+    // process-spawning and git-backed suites.
+    // Many suites spawn processes with tight start-up windows; a wide worker
+    // pool starves them. 4 matches GitHub-hosted runners.
+    maxWorkers: 4,
+    testTimeout: 60_000,
+    hookTimeout: 60_000,
+    projects: [
+      {
+        test: {
+          name: 'cli',
+          root: './packages/cli',
+          environment: 'node',
+          include: ['src/**/*.test.ts'],
+        },
+      },
+      {
+        test: {
+          name: 'eval',
+          root: './packages/eval',
+          environment: 'node',
+          include: ['src/**/*.test.ts'],
+        },
+      },
+      {
+        test: {
+          name: 'runtime',
+          root: './packages/runtime',
+          environment: 'node',
+          include: ['src/**/*.test.ts'],
+        },
+      },
+      'packages/ui',
+    ],
+  },
   run: {
     cache: true,
     tasks: {
@@ -185,7 +221,7 @@ export default defineConfig({
           'vp run -r build',
           'vp check',
           'vp run -r type-check',
-          'vp run -r test',
+          'vp test run',
         ],
       },
     },
