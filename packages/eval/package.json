@@ -2,6 +2,11 @@
   "name": "@artificer-ai/eval",
   "version": "0.1.2",
   "description": "Artificer identity eval driver and maintainer bench harness",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/phthalo-dev/artificer.git",
+    "directory": "packages/eval"
+  },
   "type": "module",
   "engines": {
     "node": ">=21"
