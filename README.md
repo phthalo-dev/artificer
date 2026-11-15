@@ -82,6 +82,8 @@ pnpm --filter docs dev   # docs site at http://localhost:4321
 
 For a scaffolded agent project, [Deploying to production](docs/content/docs/guides/deploying-to-production.md) covers Fly.io and plain Docker — the fastest paths to a self-hosted instance ($3–8/month).
 
+The docs site deploys to Netlify from GitHub Actions (production on merges to `main`, a preview comment on pull requests); see `.github/workflows/ci.yml`. Fly.io and AWS deploys are manual and are not run from CI.
+
 `infrastructure/` in this repo is a separate path: an AWS CDK stack the maintainers use for a personal, hibernating EC2 deployment (wakes on message via SQS, ~$3–8/month idle). See [infrastructure/README.md](infrastructure/README.md) if you specifically want the AWS route instead of Fly.io/Docker.
 
 ## Contributing
