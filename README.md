@@ -67,7 +67,7 @@ pnpm dev          # vp run -r dev across packages
 pnpm build        # build all packages
 pnpm lint         # lint all packages
 pnpm type-check   # type-check all packages
-pnpm ci:packages  # what CI runs: type-check, test, and build the publishable packages
+pnpm verify       # what CI runs: build, vp check, type-check, and test
 pnpm --filter docs dev   # docs site at http://localhost:4321
 ```
 
