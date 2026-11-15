@@ -1,5 +1,12 @@
 # @artificer-ai/eval
 
+## 0.1.2
+
+### Patch Changes
+
+- Updated dependencies []:
+  - @artificer-ai/runtime@0.11.1
+
 ## 0.1.1
 
 ### Patch Changes

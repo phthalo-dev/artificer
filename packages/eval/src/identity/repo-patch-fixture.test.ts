@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { gradeGreenfieldPatch } from './grade-greenfield.js';
 import {
   applyIntroduceBugPatch,

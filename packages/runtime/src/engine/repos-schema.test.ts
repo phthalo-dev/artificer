@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
-import { test } from 'node:test';
+import { test } from 'vitest';
 
 test('the config schema requires id, url, and baseBranch on repos', () => {
   const schema = JSON.parse(

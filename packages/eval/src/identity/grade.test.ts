@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import type { RuntimeClient, RuntimeState } from '../driver/client.js';
 import { runMessageTask } from '../driver/run-message-task.js';
 import type { LoadedEvalTask } from '../types.js';

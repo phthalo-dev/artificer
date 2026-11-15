@@ -4,7 +4,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { promisify } from 'node:util';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { loadConfig } from '../config.js';
 import type { ToolContext } from '../context.js';
 import { IdentityGitSync } from '../storage/identity-git-sync.js';

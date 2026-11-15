@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { executorAccountId } from './quota-config-helpers.js';
 
 test('executorAccountId names acp accounts by command basename', () => {

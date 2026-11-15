@@ -19,10 +19,6 @@ export const preBlock = style('workstream-pre-block', {
   fontSize: t.fontSize.sm.var,
 });
 
-export const preBlockSmall = style('workstream-pre-block-sm', {
-  fontSize: t.fontSize.xs.var,
-});
-
 export const clickableRow = style('workstream-clickable-row', {
   cursor: 'pointer',
 });

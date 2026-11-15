@@ -34,7 +34,6 @@ yarn-error.log*
 .vercel
 
 # Turbo
-.turbo
 
 # IDE
 .idea
@@ -74,3 +73,8 @@ docs/research/
 # Astro docs site
 docs/.astro
 
+# Never commit env files or backups of them (templates are allowed)
+.env*
+!.env.example
+!.env.*.example
+!.env.development

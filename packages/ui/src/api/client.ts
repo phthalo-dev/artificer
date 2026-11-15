@@ -91,7 +91,7 @@ export const api = {
   delete: <T>(path: string) => request<T>(path, { method: 'DELETE' }),
 };
 
-export interface ArtifactContentResult {
+interface ArtifactContentResult {
   content: string;
   contentType: string;
   truncated: boolean;

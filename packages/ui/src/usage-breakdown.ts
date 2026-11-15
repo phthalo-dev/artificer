@@ -1,5 +1,15 @@
-import type { RunRecord, UsageSummary } from './api/types';
+import type { RunRecord, TokenUsage, UsageSummary } from './api/types';
 import { costForRun } from './cost';
+
+/** Total tokens across every usage layer (input, output, both caches). */
+export function totalTokens(usage: TokenUsage): number {
+  return (
+    usage.inputTokens +
+    usage.outputTokens +
+    usage.cacheReadInputTokens +
+    usage.cacheCreationInputTokens
+  );
+}
 
 export function summarizeByRoute(
   runs: RunRecord[],

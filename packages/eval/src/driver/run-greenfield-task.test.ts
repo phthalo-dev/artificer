@@ -5,7 +5,7 @@ import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { promisify } from 'node:util';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import type { LoadedEvalTask } from '../types.js';
 import type { RuntimeClient, RuntimeState } from './client.js';
 import { runGreenfieldTask } from './run-greenfield-task.js';

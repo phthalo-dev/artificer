@@ -28,7 +28,7 @@ See [How it works](docs/content/docs/introduction/how-it-works.md) for the full 
 
 ## Project structure
 
-This is a pnpm/Turborepo monorepo:
+This is a pnpm + [Vite+](https://viteplus.dev) monorepo:
 
 ```
 artificer/
@@ -63,11 +63,11 @@ To develop the runtime/CLI/UI packages in this repo (rather than a scaffolded ag
 
 ```bash
 pnpm install
-pnpm dev          # turbo run dev across packages
+pnpm dev          # vp run -r dev across packages
 pnpm build        # build all packages
 pnpm lint         # lint all packages
 pnpm type-check   # type-check all packages
-pnpm ci:packages  # what CI runs: type-check, test, and build the publishable packages
+pnpm verify       # what CI runs: build, vp check, type-check, and test
 pnpm --filter docs dev   # docs site at http://localhost:4321
 ```
 
