@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import type { RuntimeEvent, ToolContext } from '../context.js';
 import type { ToolDef } from '../llm/types.js';
 import { decideApproval, enforceApproval } from './approval.js';

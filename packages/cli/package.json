@@ -2,6 +2,11 @@
   "name": "@artificer-ai/cli",
   "version": "0.11.1",
   "description": "Artificer CLI — init, develop, and run local AI agents",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/phthalo-dev/artificer.git",
+    "directory": "packages/cli"
+  },
   "type": "module",
   "engines": {
     "node": ">=21"
@@ -20,9 +25,7 @@
     "prepublishOnly": "pnpm run build",
     "dev": "tsx src/index.ts",
     "link:global": "pnpm link --global",
-    "type-check": "tsc --noEmit",
-    "test": "node --import tsx --test \"src/**/*.test.ts\"",
-    "lint": "prettier --check \"src/**/*.ts\" \"bin/**/*.js\""
+    "type-check": "tsc --noEmit"
   },
   "publishConfig": {
     "access": "public",
@@ -35,6 +38,7 @@
   },
   "devDependencies": {
     "tsx": "4.21.0",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "catalog:"
   }
 }

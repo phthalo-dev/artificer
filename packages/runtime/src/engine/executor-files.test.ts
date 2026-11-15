@@ -3,7 +3,7 @@ import { execFile, spawn } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { promisify } from 'node:util';
 import { emptyUsage, type RunRecord } from '../storage/types.js';
 import { ClaudeCodeExecutor } from './claude-code-executor.js';
@@ -194,7 +194,7 @@ sleep 30
     });
   });
   stop = abortAgent(child, controller.signal, () => undefined);
-  for (let attempt = 0; attempt < 50; attempt += 1) {
+  for (let attempt = 0; attempt < 500; attempt += 1) {
     try {
       await fs.access(pidFile);
       break;

@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { AcpExecutor } from './acp-executor.js';
 import { runConversationTurn } from './conversation-turn.js';
 import type { WorkerExecutor } from './executor.js';
@@ -159,7 +159,7 @@ test('artifacts are ingested after a failed resume and its retry', async () => {
 test('acp executor without resume falls back to transcript', async (t) => {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-acp-turn-'));
   const repo = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-acp-ws-'));
-  t.after(async () => {
+  t.onTestFinished(async () => {
     await fs.rm(dir, { recursive: true, force: true });
     await fs.rm(repo, { recursive: true, force: true });
   });

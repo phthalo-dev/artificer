@@ -1,8 +1,8 @@
 # Multi-stage production build: compiles the UI and runtime TypeScript,
 # then produces a minimal image with only the compiled output and production deps.
 
-FROM node:22-bookworm-slim AS deps
-RUN npm install -g pnpm@12.4.2
+FROM node:24-bookworm-slim AS deps
+RUN npm install -g pnpm@12.18.0
 WORKDIR /workspace
 
 # Copy workspace manifests first so this layer is cached until deps change
@@ -48,7 +48,10 @@ WORKDIR /app
 COPY --from=builder /workspace/packages/runtime/package.json ./
 COPY --from=builder /workspace/packages/runtime/dist ./dist
 COPY --from=builder /workspace/packages/runtime/ui-dist ./ui-dist
-RUN npm install --omit=dev
+# devDependencies may use pnpm-only protocols (catalog:) that npm cannot parse,
+# and are not installed anyway, so drop them from the manifest first.
+RUN node -e "const fs=require('fs');const p=JSON.parse(fs.readFileSync('package.json','utf8'));delete p.devDependencies;fs.writeFileSync('package.json',JSON.stringify(p,null,2))" \
+    && npm install --omit=dev
 
 RUN mkdir -p /data
 VOLUME ["/data"]

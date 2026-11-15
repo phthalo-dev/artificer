@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { MockLanguageModelV3 } from 'ai/test';
 import type { RuntimeEvent } from '../context.js';
 import type { ToolDef } from './types.js';

@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { getRole } from './roles.js';
 
 test('worker verification guidance keeps throwaway debug scripts out of the repo', () => {

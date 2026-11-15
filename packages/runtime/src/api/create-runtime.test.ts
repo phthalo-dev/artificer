@@ -1,4 +1,4 @@
-import { describe, it, beforeEach, afterEach } from 'node:test';
+import { describe, it, beforeEach, afterEach } from 'vitest';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -125,9 +125,13 @@ describe('createRuntime', () => {
   it('loads and mounts channels from agent/channels/', async () => {
     const channelsDir = path.join(tmpDir, 'agent', 'channels');
     fs.mkdirSync(channelsDir, { recursive: true });
-    fs.symlinkSync(
-      path.join(__dirname, '../discover/fixtures/echo-channel.ts'),
+    // Re-export instead of symlinking: Vite resolves a symlinked module's
+    // relative imports from the link location, not the real path.
+    fs.writeFileSync(
       path.join(channelsDir, 'echo.ts'),
+      `export { default } from ${JSON.stringify(
+        path.join(__dirname, '../discover/fixtures/echo-channel.ts'),
+      )};\n`,
     );
 
     const runtime = await createRuntime({

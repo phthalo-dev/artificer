@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { decidePoll } from './poll.js';
 import type { RuntimeState } from './client.js';
 

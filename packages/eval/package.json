@@ -2,6 +2,11 @@
   "name": "@artificer-ai/eval",
   "version": "0.1.2",
   "description": "Artificer identity eval driver and maintainer bench harness",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/phthalo-dev/artificer.git",
+    "directory": "packages/eval"
+  },
   "type": "module",
   "engines": {
     "node": ">=21"
@@ -19,9 +24,7 @@
   ],
   "scripts": {
     "build": "tsc",
-    "type-check": "tsc --noEmit",
-    "test": "node --import tsx --test \"src/**/*.test.ts\"",
-    "lint": "prettier --check \"src/**/*.ts\""
+    "type-check": "tsc --noEmit"
   },
   "dependencies": {
     "@artificer-ai/runtime": "workspace:*",
@@ -30,7 +33,8 @@
   "devDependencies": {
     "@types/node": "20.19.35",
     "tsx": "4.21.0",
-    "typescript": "5.9.3"
+    "typescript": "5.9.3",
+    "vitest": "catalog:"
   },
   "publishConfig": {
     "access": "public",

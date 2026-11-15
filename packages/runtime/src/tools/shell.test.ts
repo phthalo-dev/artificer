@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import os from 'node:os';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { runShellCommand } from './shell.js';
 
 test('runShellCommand returns stdout for a normal command', async () => {

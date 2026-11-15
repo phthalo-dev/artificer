@@ -2,7 +2,7 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { afterEach, test } from 'node:test';
+import { afterEach, test } from 'vitest';
 import { benchResultsDir, readBenchSuites } from './bench.js';
 
 const originalBenchResultsDir = process.env.BENCH_RESULTS_DIR;
@@ -35,7 +35,7 @@ test('benchResultsDir prefers the explicit maintainer override', () => {
 
 test('benchResultsDir uses an existing eval latest directory', async (t) => {
   const execDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-exec-'));
-  t.after(() => fs.rm(execDir, { recursive: true, force: true }));
+  t.onTestFinished(() => fs.rm(execDir, { recursive: true, force: true }));
   const latestDir = path.join(execDir, 'evals', 'latest');
   await fs.mkdir(latestDir, { recursive: true });
   delete process.env.BENCH_RESULTS_DIR;
@@ -46,7 +46,7 @@ test('benchResultsDir uses an existing eval latest directory', async (t) => {
 
 test('benchResultsDir falls back when the eval latest directory is absent', async (t) => {
   const execDir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-exec-'));
-  t.after(() => fs.rm(execDir, { recursive: true, force: true }));
+  t.onTestFinished(() => fs.rm(execDir, { recursive: true, force: true }));
   delete process.env.BENCH_RESULTS_DIR;
   process.env.ARTIFICER_EXEC_DIR = execDir;
 
@@ -57,7 +57,7 @@ test('readBenchSuites catalogs suites from the agent identity directory', async 
   const identityDir = await fs.mkdtemp(
     path.join(os.tmpdir(), 'artificer-identity-'),
   );
-  t.after(() => fs.rm(identityDir, { recursive: true, force: true }));
+  t.onTestFinished(() => fs.rm(identityDir, { recursive: true, force: true }));
   const suitesDir = path.join(identityDir, 'agent', 'evals', 'suites');
   await fs.mkdir(suitesDir, { recursive: true });
   await fs.writeFile(

@@ -4,43 +4,62 @@ on:
   push:
     branches: [main]
   pull_request:
+  workflow_dispatch:
 
 concurrency:
   group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  # Only supersede PR runs. A newer push to main must never cancel a run that is
+  # about to release.
   cancel-in-progress: ${{ github.event_name == 'pull_request' }}
 
 jobs:
-  packages:
-    name: Lint, type-check, test, build
+  changes:
+    name: Changes
+    runs-on: ubuntu-latest
+    outputs:
+      docker: ${{ steps.filter.outputs.docker }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: dorny/paths-filter@v4
+        id: filter
+        with:
+          filters: |
+            docker:
+              - 'Dockerfile'
+              - 'docker/**'
+              - 'packages/**'
+              - 'pnpm-lock.yaml'
+              - 'package.json'
+              - 'pnpm-workspace.yaml'
+              - '.dockerignore'
+              - '.github/workflows/ci.yml'
+
+  verify:
+    name: Verify
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      - uses: voidzero-dev/setup-vp@v1
         with:
-          node-version: 22
-          cache: pnpm
+          node-version-file: .nvmrc
+          cache: true
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
-
-      - name: CI
-        run: pnpm run ci
+      # Builds every package, then check, type-check and tests.
+      - run: vp run ci
 
   docker:
     name: Build production image
+    needs: changes
+    # Always build on main so a broken image is caught before release; on PRs
+    # only when something the image depends on changed.
+    if: github.event_name != 'pull_request' || needs.changes.outputs.docker == 'true'
     runs-on: ubuntu-latest
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v5
 
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+      - uses: docker/setup-buildx-action@v3
 
       - name: Build image
         uses: docker/build-push-action@v6
@@ -54,7 +73,7 @@ jobs:
 
   release:
     name: Version and publish
-    needs: packages
+    needs: verify
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     concurrency:
       group: artificer-release
@@ -67,43 +86,36 @@ jobs:
     steps:
       # A GitHub App token (not GITHUB_TOKEN) so the version PR and the tags the
       # release pushes trigger workflows.
-      - name: Create GitHub App token
-        uses: actions/create-github-app-token@v3
+      - uses: actions/create-github-app-token@v3
         id: app-token
         with:
           client-id: ${{ secrets.APP_CLIENT_ID }}
           private-key: ${{ secrets.APP_PRIVATE_KEY }}
 
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v5
         with:
           fetch-depth: 0
           token: ${{ steps.app-token.outputs.token }}
 
-      - name: Install pnpm
-        uses: pnpm/action-setup@v4
-
-      # Do not set registry-url here: it writes a placeholder _authToken line
-      # that blocks npm Trusted Publishing (OIDC). The registry lives in .npmrc.
-      - name: Setup Node.js
-        uses: actions/setup-node@v4
+      # Do not set registry-url on setup-vp: it writes a placeholder _authToken
+      # line that blocks npm Trusted Publishing (OIDC). Registry is in .npmrc.
+      - uses: voidzero-dev/setup-vp@v1
         with:
-          node-version: 22
-          cache: pnpm
+          node-version-file: .nvmrc
+          cache: true
 
-      # npm Trusted Publishing (OIDC) requires npm CLI >= 11.5.1. Do not use
-      # npm@latest: npm 12 rejects --git-checks, which pnpm forwards.
-      - name: Update npm for Trusted Publishing support
+      # Trusted Publishing needs npm >= 11.5.1. Do not use npm@latest: npm 12
+      # rejects --git-checks, which pnpm forwards when changeset publish runs
+      # pnpm publish.
+      - name: Use npm compatible with pnpm publish
         run: npm install -g 'npm@^11.5.1'
 
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile --ignore-scripts
-
-      - name: Create release PR or publish to npm
-        uses: changesets/action@v1
+      # `publish-packages` builds runtime, the UI bundle and the CLI, then runs
+      # `changeset publish` (each package's prepublishOnly builds it again).
+      - uses: changesets/action@v1
         with:
-          version: pnpm version-packages
-          publish: pnpm publish-packages
+          version: vp exec changeset version
+          publish: vp run publish-packages
           commit: 'chore: version packages'
           title: 'chore: version packages'
         env:
