@@ -24,6 +24,7 @@
   ],
   "scripts": {
     "build": "tsc",
+    "prepublishOnly": "pnpm run build",
     "type-check": "tsc --noEmit"
   },
   "dependencies": {

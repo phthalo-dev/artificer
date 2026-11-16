@@ -6,7 +6,6 @@ import {
   CodeBlock,
   HStack,
   IconButton,
-  Spinner,
   Stack,
   Surface,
   Text,
@@ -15,9 +14,10 @@ import { useState } from 'react';
 import { useWorkstreamTrace } from '../api/hooks';
 import type { TraceEvent } from '../api/types';
 import { formatTime, relativeTime } from '../format';
+import { eyebrow } from '../styles/shared';
 import { TRACE_KIND_COLORS, traceEventLabel } from '../trace-event-label';
+import { QueryPanel } from './QueryPanel';
 import { ViewRawLink } from './ViewRawLink';
-import { eyebrow } from './Workstream.styles';
 
 /** Var UI badges only have semantic tones, so collapse the categorical hues. */
 const HUE_TONE: Record<
@@ -95,62 +95,59 @@ export function WorkstreamTracePanel({
 }: {
   workstreamId: string;
 }) {
-  const { data, isLoading, error } = useWorkstreamTrace(workstreamId);
-
-  if (isLoading) return <Spinner size="sm" label="Loading trace" />;
-  if (error || !data) {
-    return (
-      <Alert tone="danger" title="Could not load trace">
-        {error instanceof Error ? error.message : 'Trace unavailable'}
-      </Alert>
-    );
-  }
-
-  const { trace, events, hasMore } = data;
+  const query = useWorkstreamTrace(workstreamId);
 
   return (
-    <Stack gap="md">
-      <HStack justify="between" align="start">
-        <Stack gap="xs">
-          <HStack gap="xs">
-            <Text
-              as="span"
-              size="xs"
-              tone="secondary"
-              weight="semibold"
-              className={eyebrow}
-            >
-              Durable trace
-            </Text>
-            {trace.backfilled && <Badge>backfilled</Badge>}
-          </HStack>
-          <Text size="xs" tone="secondary">
-            <Code>{trace.id}</Code> · {trace.eventCount} events · seq{' '}
-            {trace.lastSequence}
-          </Text>
-          <Text size="xs" tone="secondary">
-            Updated {formatTime(trace.updatedAt)}
-          </Text>
-        </Stack>
-        <ViewRawLink data={data} filename={`trace-${trace.id}.json`} />
-      </HStack>
+    <QueryPanel noun="trace" query={query}>
+      {(data) => {
+        const { trace, events, hasMore } = data;
 
-      {events.length === 0 ? (
-        <Alert tone="neutral">No trace events recorded yet.</Alert>
-      ) : (
-        <Stack gap="xs">
-          {events.map((event) => (
-            <TraceEventRow key={event.id} event={event} />
-          ))}
-        </Stack>
-      )}
+        return (
+          <Stack gap="md">
+            <HStack justify="between" align="start">
+              <Stack gap="xs">
+                <HStack gap="xs">
+                  <Text
+                    as="span"
+                    size="xs"
+                    tone="secondary"
+                    weight="semibold"
+                    className={eyebrow}
+                  >
+                    Durable trace
+                  </Text>
+                  {trace.backfilled && <Badge>backfilled</Badge>}
+                </HStack>
+                <Text size="xs" tone="secondary">
+                  <Code>{trace.id}</Code> · {trace.eventCount} events · seq{' '}
+                  {trace.lastSequence}
+                </Text>
+                <Text size="xs" tone="secondary">
+                  Updated {formatTime(trace.updatedAt)}
+                </Text>
+              </Stack>
+              <ViewRawLink data={data} filename={`trace-${trace.id}.json`} />
+            </HStack>
 
-      {hasMore && (
-        <Alert tone="info" title="More events available">
-          Showing the first {events.length} of {trace.eventCount} events. Use
-          the raw export or trace API for the full journal.
-        </Alert>
-      )}
-    </Stack>
+            {events.length === 0 ? (
+              <Alert tone="neutral">No trace events recorded yet.</Alert>
+            ) : (
+              <Stack gap="xs">
+                {events.map((event) => (
+                  <TraceEventRow key={event.id} event={event} />
+                ))}
+              </Stack>
+            )}
+
+            {hasMore && (
+              <Alert tone="info" title="More events available">
+                Showing the first {events.length} of {trace.eventCount} events.
+                Use the raw export or trace API for the full journal.
+              </Alert>
+            )}
+          </Stack>
+        );
+      }}
+    </QueryPanel>
   );
 }

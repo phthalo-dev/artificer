@@ -27,6 +27,28 @@ export class ApiError extends Error {
   }
 }
 
+/**
+ * Pull a human-readable message from a JSON error body, falling back to the
+ * HTTP status text. Object error values are stringified so `ApiError.message`
+ * is always plain text.
+ */
+async function responseErrorDetail(res: Response): Promise<string> {
+  let detail = res.statusText;
+  try {
+    const body = (await res.json()) as {
+      error?: unknown;
+      message?: unknown;
+    } | null;
+    const value = body?.error ?? body?.message;
+    if (value !== undefined) {
+      detail = typeof value === 'string' ? value : JSON.stringify(value);
+    }
+  } catch {
+    // non-JSON error body; keep the status text
+  }
+  return detail;
+}
+
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const key = getApiKey();
   const res = await fetch(`${RUNTIME_URL}${path}`, {
@@ -38,14 +60,7 @@ async function request<T>(path: string, init?: RequestInit): Promise<T> {
     },
   });
   if (!res.ok) {
-    let detail = res.statusText;
-    try {
-      const body = await res.json();
-      detail = body?.error ? JSON.stringify(body.error) : detail;
-    } catch {
-      // non-JSON error body; keep status text
-    }
-    throw new ApiError(detail, res.status);
+    throw new ApiError(await responseErrorDetail(res), res.status);
   }
   return res.json() as Promise<T>;
 }
@@ -63,14 +78,7 @@ export async function sendWork(content: string): Promise<{ queued: boolean }> {
       body: JSON.stringify({ content, source: 'http' }),
     });
     if (!res.ok) {
-      let detail = res.statusText;
-      try {
-        const body = await res.json();
-        detail = body?.error ?? body?.message ?? detail;
-      } catch {
-        // ignore
-      }
-      throw new ApiError(String(detail), res.status);
+      throw new ApiError(await responseErrorDetail(res), res.status);
     }
     return { queued: true };
   }
@@ -111,14 +119,7 @@ export async function fetchArtifactContent(
     },
   );
   if (!res.ok) {
-    let detail = res.statusText;
-    try {
-      const body = await res.json();
-      detail = body?.error ? JSON.stringify(body.error) : detail;
-    } catch {
-      // non-JSON error body
-    }
-    throw new ApiError(detail, res.status);
+    throw new ApiError(await responseErrorDetail(res), res.status);
   }
   const contentType =
     res.headers.get('content-type') ?? 'application/octet-stream';

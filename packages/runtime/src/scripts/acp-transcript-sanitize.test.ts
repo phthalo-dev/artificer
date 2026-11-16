@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import { sanitizeTranscriptPaths } from './acp-transcript-sanitize.js';
 
 test('replaces workspace, parent, and home, longest first', () => {

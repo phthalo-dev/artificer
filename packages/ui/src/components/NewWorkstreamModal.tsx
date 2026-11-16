@@ -7,6 +7,7 @@ import {
   type CreateWorkstreamInput,
 } from '../api/hooks';
 import type { ExecutorOption } from '../api/types';
+import { EXECUTOR_LABELS } from '../format-agent';
 import {
   Button,
   Dialog,
@@ -21,9 +22,17 @@ type AgentChoice = string;
 
 const FALLBACK_EXECUTORS: ExecutorOption[] = [
   { id: 'instance', label: 'Instance default', executor: null },
-  { id: 'llm', label: 'Built-in loop', executor: 'llm' },
-  { id: 'claude-code', label: 'Claude Code', executor: 'claude-code' },
-  { id: 'cursor-agent', label: 'Cursor', executor: 'cursor-agent' },
+  { id: 'llm', label: EXECUTOR_LABELS.llm, executor: 'llm' },
+  {
+    id: 'claude-code',
+    label: EXECUTOR_LABELS['claude-code'],
+    executor: 'claude-code',
+  },
+  {
+    id: 'cursor-agent',
+    label: EXECUTOR_LABELS['cursor-agent'],
+    executor: 'cursor-agent',
+  },
 ];
 
 export function NewWorkstreamModal({

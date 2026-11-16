@@ -2,9 +2,9 @@ import { Card, HStack, Stack, Text } from '@var-ui/react';
 import { tokenLayerColor } from '../styles/palette';
 import type { RunRecord, TokenUsage } from '../api/types';
 import { formatTokens } from '../format';
-import { totalTokens } from '../usage-breakdown';
+import { eyebrow } from '../styles/shared';
+import { totalTokens } from '../utils/usage';
 import {
-  eyebrow,
   legendSwatchMd,
   stackedBar,
   stackedBarEmpty,

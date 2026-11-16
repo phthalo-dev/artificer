@@ -8,8 +8,8 @@ import { execFile, execFileSync } from 'node:child_process';
 import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
-import { test } from 'node:test';
 import { promisify } from 'node:util';
+import { test, type TestContext } from 'vitest';
 import {
   emptyUsage,
   type RunRecord,
@@ -44,11 +44,11 @@ const SKIP_REASON = 'set ARTIFICER_ACP_LIVE=opencode (and install opencode)';
  * permission request, and build/out.txt survives.
  */
 async function denyRmRf(
-  t: { after: (fn: () => Promise<void>) => void },
+  t: TestContext,
   extraFiles: Record<string, string> = {},
 ): Promise<void> {
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-acp-live-'));
-  t.after(() => fs.rm(dir, { recursive: true, force: true }));
+  t.onTestFinished(() => fs.rm(dir, { recursive: true, force: true }));
   const git = (...args: string[]) => exec('git', ['-C', dir, ...args]);
   await git('init', '-q', '-b', 'main');
   await git('config', 'user.email', 't@t.test');

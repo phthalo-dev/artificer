@@ -7,7 +7,6 @@ import {
   Button,
   Code,
   HStack,
-  Spinner,
   Stack,
   Surface,
   Table,
@@ -26,9 +25,12 @@ import type {
   ArtifactVersionSummary,
   WorkstreamArtifact,
 } from '../api/types';
-import { formatTime } from '../format';
+import { formatBytes, formatTime } from '../format';
+import { downloadBlob } from '../utils/dom';
+import { eyebrow } from '../styles/shared';
 import { MarkdownContent } from './MarkdownContent';
-import { clickableRow, eyebrow, preBlock } from './Workstream.styles';
+import { QueryPanel } from './QueryPanel';
+import { clickableRow, preBlock } from './Workstream.styles';
 
 const VERSION_STATE_TONES: Record<ArtifactVersionState, Tone> = {
   draft: 'neutral',
@@ -44,22 +46,6 @@ const APPROVAL_TONES: Record<WorkstreamArtifact['approvalStatus'], Tone> = {
   approved: 'success',
   rejected: 'danger',
 };
-
-function formatBytes(n: number): string {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / (1024 * 1024)).toFixed(1)} MB`;
-}
-
-function downloadText(content: string, filename: string, type: string) {
-  const blob = new Blob([content], { type });
-  const href = URL.createObjectURL(blob);
-  const anchor = document.createElement('a');
-  anchor.href = href;
-  anchor.download = filename;
-  anchor.click();
-  URL.revokeObjectURL(href);
-}
 
 function VersionActions({
   workstreamId,
@@ -161,59 +147,52 @@ function ArtifactPreview({
   artifact: WorkstreamArtifact;
   version: ArtifactVersionSummary;
 }) {
-  const { data, isLoading, error } = useArtifactContent(
-    workstreamId,
-    artifact.key,
-    version.version,
-  );
-
-  if (isLoading) return <Spinner size="sm" label="Loading content" />;
-  if (error || !data) {
-    return (
-      <Alert tone="danger" title="Could not load content">
-        {error instanceof Error ? error.message : 'Content unavailable'}
-      </Alert>
-    );
-  }
-
-  const isMarkdown =
-    data.contentType.includes('markdown') ||
-    artifact.key === 'plan' ||
-    artifact.key === 'report' ||
-    artifact.key === 'receipt';
+  const query = useArtifactContent(workstreamId, artifact.key, version.version);
 
   return (
-    <Stack gap="sm">
-      <HStack justify="between">
-        <Text size="xs" tone="secondary">
-          {data.contentType}
-          {data.truncated ? ' · truncated preview' : ''} ·{' '}
-          {formatBytes(version.byteSize)} · sha256{' '}
-          <Code>{version.sha256.slice(0, 12)}…</Code>
-        </Text>
-        <Button
-          appearance="outline"
-          size="sm"
-          onClick={() =>
-            downloadText(
-              data.content,
-              `${artifact.key}-${version.version}`,
-              data.contentType,
-            )
-          }
-        >
-          <IconDownload size={14} />
-          Download
-        </Button>
-      </HStack>
-      <Surface padding="md">
-        {isMarkdown ? (
-          <MarkdownContent content={data.content} />
-        ) : (
-          <pre className={preBlock}>{data.content}</pre>
-        )}
-      </Surface>
-    </Stack>
+    <QueryPanel noun="content" query={query}>
+      {(data) => {
+        const isMarkdown =
+          data.contentType.includes('markdown') ||
+          artifact.key === 'plan' ||
+          artifact.key === 'report' ||
+          artifact.key === 'receipt';
+
+        return (
+          <Stack gap="sm">
+            <HStack justify="between">
+              <Text size="xs" tone="secondary">
+                {data.contentType}
+                {data.truncated ? ' · truncated preview' : ''} ·{' '}
+                {formatBytes(version.byteSize)} · sha256{' '}
+                <Code>{version.sha256.slice(0, 12)}…</Code>
+              </Text>
+              <Button
+                appearance="outline"
+                size="sm"
+                onClick={() =>
+                  downloadBlob(
+                    data.content,
+                    `${artifact.key}-${version.version}`,
+                    data.contentType,
+                  )
+                }
+              >
+                <IconDownload size={14} />
+                Download
+              </Button>
+            </HStack>
+            <Surface padding="md">
+              {isMarkdown ? (
+                <MarkdownContent content={data.content} />
+              ) : (
+                <pre className={preBlock}>{data.content}</pre>
+              )}
+            </Surface>
+          </Stack>
+        );
+      }}
+    </QueryPanel>
   );
 }
 
@@ -316,97 +295,97 @@ export function WorkstreamArtifactsPanel({
 }: {
   workstreamId: string;
 }) {
-  const {
-    data: artifacts,
-    isLoading,
-    error,
-  } = useWorkstreamArtifacts(workstreamId);
+  const query = useWorkstreamArtifacts(workstreamId);
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
 
-  if (isLoading) return <Spinner size="sm" label="Loading artifacts" />;
-  if (error) {
-    return (
-      <Alert tone="danger" title="Could not load artifacts">
-        {error instanceof Error ? error.message : 'Artifacts unavailable'}
-      </Alert>
-    );
-  }
-
-  const list = artifacts ?? [];
-  const selected = list.find((a) => a.key === selectedKey) ?? list[0] ?? null;
-
   return (
-    <Stack gap="md">
-      <Text size="xs" tone="secondary" weight="semibold" className={eyebrow}>
-        Versioned artifacts
-      </Text>
+    <QueryPanel noun="artifacts" query={query}>
+      {(list) => {
+        const selected =
+          list.find((a) => a.key === selectedKey) ?? list[0] ?? null;
 
-      {list.length === 0 ? (
-        <Alert tone="neutral">
-          No artifacts yet. Agents can publish plans, diffs, reports, and other
-          deliverables as versioned artifacts.
-        </Alert>
-      ) : (
-        <>
-          <Table striped hasHover>
-            <Table.Header>
-              <Table.Row>
-                <Table.Column>Key</Table.Column>
-                <Table.Column>Name</Table.Column>
-                <Table.Column>Current</Table.Column>
-                <Table.Column>Versions</Table.Column>
-                <Table.Column>Approval</Table.Column>
-              </Table.Row>
-            </Table.Header>
-            <Table.Body>
-              {list.map((artifact) => (
-                <Table.Row
-                  key={artifact.key}
-                  className={clickableRow}
-                  selected={selected?.key === artifact.key}
-                  onClick={() => setSelectedKey(artifact.key)}
-                >
-                  <Table.Cell>
-                    <Code>{artifact.key}</Code>
-                  </Table.Cell>
-                  <Table.Cell>
-                    <Text size="sm">{artifact.name}</Text>
-                  </Table.Cell>
-                  <Table.Cell>
-                    <Text size="sm">{artifact.currentVersion ?? '—'}</Text>
-                  </Table.Cell>
-                  <Table.Cell>
-                    <Text size="sm">{artifact.versions.length}</Text>
-                  </Table.Cell>
-                  <Table.Cell>
-                    <Badge tone={APPROVAL_TONES[artifact.approvalStatus]}>
-                      {artifact.approvalStatus.replace(/_/g, ' ')}
-                    </Badge>
-                  </Table.Cell>
-                </Table.Row>
-              ))}
-            </Table.Body>
-          </Table>
+        return (
+          <Stack gap="md">
+            <Text
+              size="xs"
+              tone="secondary"
+              weight="semibold"
+              className={eyebrow}
+            >
+              Versioned artifacts
+            </Text>
 
-          {selected && (
-            <Surface padding="md">
-              <Stack gap="md">
-                <HStack gap="xs">
-                  <Text as="span" weight="semibold">
-                    {selected.name}
-                  </Text>
-                  <Badge>{selected.visibility}</Badge>
-                  {selected.archivedAt && <Badge>archived</Badge>}
-                </HStack>
-                <ArtifactDetail
-                  workstreamId={workstreamId}
-                  artifact={selected}
-                />
-              </Stack>
-            </Surface>
-          )}
-        </>
-      )}
-    </Stack>
+            {list.length === 0 ? (
+              <Alert tone="neutral">
+                No artifacts yet. Agents can publish plans, diffs, reports, and
+                other deliverables as versioned artifacts.
+              </Alert>
+            ) : (
+              <>
+                <Table striped hasHover>
+                  <Table.Header>
+                    <Table.Row>
+                      <Table.Column>Key</Table.Column>
+                      <Table.Column>Name</Table.Column>
+                      <Table.Column>Current</Table.Column>
+                      <Table.Column>Versions</Table.Column>
+                      <Table.Column>Approval</Table.Column>
+                    </Table.Row>
+                  </Table.Header>
+                  <Table.Body>
+                    {list.map((artifact) => (
+                      <Table.Row
+                        key={artifact.key}
+                        className={clickableRow}
+                        selected={selected?.key === artifact.key}
+                        onClick={() => setSelectedKey(artifact.key)}
+                      >
+                        <Table.Cell>
+                          <Code>{artifact.key}</Code>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <Text size="sm">{artifact.name}</Text>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <Text size="sm">
+                            {artifact.currentVersion ?? '—'}
+                          </Text>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <Text size="sm">{artifact.versions.length}</Text>
+                        </Table.Cell>
+                        <Table.Cell>
+                          <Badge tone={APPROVAL_TONES[artifact.approvalStatus]}>
+                            {artifact.approvalStatus.replace(/_/g, ' ')}
+                          </Badge>
+                        </Table.Cell>
+                      </Table.Row>
+                    ))}
+                  </Table.Body>
+                </Table>
+
+                {selected && (
+                  <Surface padding="md">
+                    <Stack gap="md">
+                      <HStack gap="xs">
+                        <Text as="span" weight="semibold">
+                          {selected.name}
+                        </Text>
+                        <Badge>{selected.visibility}</Badge>
+                        {selected.archivedAt && <Badge>archived</Badge>}
+                      </HStack>
+                      <ArtifactDetail
+                        workstreamId={workstreamId}
+                        artifact={selected}
+                      />
+                    </Stack>
+                  </Surface>
+                )}
+              </>
+            )}
+          </Stack>
+        );
+      }}
+    </QueryPanel>
   );
 }

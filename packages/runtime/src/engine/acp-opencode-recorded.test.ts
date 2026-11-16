@@ -3,7 +3,7 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { test } from 'node:test';
+import { test } from 'vitest';
 import type { RequestPermissionRequest } from '@agentclientprotocol/sdk';
 import { emptyUsage, type RunRecord } from '../storage/types.js';
 import { shellApprovalKey } from '../tools/tool-policy.js';
@@ -55,7 +55,7 @@ function optionId(o: ReturnType<typeof decide>): string | undefined {
 
 test('recorded OpenCode requests map onto Artificer policy', async (t) => {
   const { ws, parent } = await workspace();
-  t.after(() => fs.rm(parent, { recursive: true, force: true }));
+  t.onTestFinished(() => fs.rm(parent, { recursive: true, force: true }));
   const [ls, inside, outside, rm] = await loadRequests(ws, parent);
 
   const a = decide(ls!, ws);
@@ -80,7 +80,7 @@ test('recorded OpenCode requests map onto Artificer policy', async (t) => {
 test('rejected permission ending the turn still resolves', async (t) => {
   const { ws, parent } = await workspace();
   const dir = await fs.mkdtemp(path.join(os.tmpdir(), 'artificer-oc-sc-'));
-  t.after(async () => {
+  t.onTestFinished(async () => {
     await fs.rm(parent, { recursive: true, force: true });
     await fs.rm(dir, { recursive: true, force: true });
   });
