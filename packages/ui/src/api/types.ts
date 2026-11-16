@@ -69,6 +69,17 @@ export type ExecutorConfig =
       model?: string;
       timeout?: number;
       mcpConfigPath?: string;
+    }
+  | {
+      type: 'acp';
+      agent?: 'opencode';
+      command?: string;
+      args?: string[];
+      model?: string;
+      env?: Record<string, string>;
+      mode?: string;
+      resumes?: boolean;
+      timeout?: number;
     };
 
 export interface RepoConfig {
@@ -701,4 +712,11 @@ export interface ModelConfig {
   activePresetId: string;
   presets: ModelPresetInfo[];
   catalog: CatalogModel[];
+}
+
+export interface ExecutorOption {
+  id: string;
+  label: string;
+  executor: ExecutorConfig | null;
+  permissionEnforcement?: 'acp-requests' | 'none';
 }

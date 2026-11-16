@@ -25,6 +25,7 @@ import type { RuntimeEvent } from '../context.js';
 import type { RunRecord, ToolInvocation } from '../storage/types.js';
 import type { ToolPolicyFile } from '../tools/tool-policy.js';
 import { decidePermission } from './acp-permissions.js';
+import { resolveAcpLaunch, type AcpLaunch } from './acp-presets.js';
 import type { ExecutorResult, WorkerExecutor } from './executor.js';
 import {
   executorStateDir,
@@ -67,6 +68,25 @@ function readRuntimeVersion(): string {
   } catch {
     return '0.0.0';
   }
+}
+
+function readPromptUsage(response: unknown): {
+  inputTokens: number;
+  outputTokens: number;
+} {
+  const usage: unknown =
+    typeof response === 'object' && response !== null
+      ? (response as { usage?: unknown }).usage
+      : undefined;
+  const read = (key: string): number => {
+    if (typeof usage !== 'object' || usage === null) return 0;
+    const v = (usage as Record<string, unknown>)[key];
+    return typeof v === 'number' && Number.isFinite(v) && v >= 0 ? v : 0;
+  };
+  return {
+    inputTokens: read('inputTokens'),
+    outputTokens: read('outputTokens'),
+  };
 }
 
 function truncate(text: string): string {
@@ -159,9 +179,35 @@ function waitForExit(child: ChildProcess, ms: number): Promise<boolean> {
   });
 }
 
+/** Find the `category: 'model'` select option, reading defensively. */
+function findModelOption(
+  raw: unknown,
+): { id: string; currentValue: unknown; values: string[] } | undefined {
+  if (!Array.isArray(raw)) return undefined;
+  for (const o of raw) {
+    if (!o || typeof o !== 'object') continue;
+    const opt = o as Record<string, unknown>;
+    if (opt.category !== 'model' || typeof opt.id !== 'string') continue;
+    const values: string[] = [];
+    const walk = (items: unknown) => {
+      if (!Array.isArray(items)) return;
+      for (const it of items) {
+        if (!it || typeof it !== 'object') continue;
+        const r = it as Record<string, unknown>;
+        if (typeof r.value === 'string') values.push(r.value);
+        else if (Array.isArray(r.options)) walk(r.options);
+      }
+    };
+    walk(opt.options);
+    return { id: opt.id, currentValue: opt.currentValue, values };
+  }
+  return undefined;
+}
+
 export class AcpExecutor implements WorkerExecutor {
   readonly name: string;
   readonly resumesSession: boolean;
+  private readonly launch: AcpLaunch;
   private readonly mcpServerPath: string;
   private readonly cancelGraceMs: number;
 
@@ -169,8 +215,9 @@ export class AcpExecutor implements WorkerExecutor {
     private readonly config: AcpExecutorConfig,
     opts: { mcpServerPath?: string; cancelGraceMs?: number } = {},
   ) {
-    this.name = 'acp:' + path.basename(config.command);
-    this.resumesSession = config.resumes ?? false;
+    this.launch = resolveAcpLaunch(config);
+    this.name = this.launch.name;
+    this.resumesSession = this.launch.resumes;
     this.mcpServerPath = opts.mcpServerPath ?? MCP_SERVER;
     this.cancelGraceMs = opts.cancelGraceMs ?? CANCEL_GRACE_MS;
   }
@@ -196,7 +243,7 @@ export class AcpExecutor implements WorkerExecutor {
     onToolCall?: (invocation: ToolInvocation) => void;
     emit?: (event: RuntimeEvent) => void;
   }): Promise<ExecutorResult> {
-    const { config, name } = this;
+    const { config, name, launch } = this;
     if (signal?.aborted) throw new Error('cancelled');
     const statusFile = path.join(
       executorStateDir(workspaceDir),
@@ -204,11 +251,11 @@ export class AcpExecutor implements WorkerExecutor {
     );
     fs.rmSync(statusFile, { force: true });
 
-    const child = spawn(config.command, config.args, {
+    const child = spawn(launch.command, launch.args, {
       cwd: workspaceDir,
       detached: true,
       stdio: ['pipe', 'pipe', 'pipe'],
-      env: { ...process.env, ...config.env },
+      env: { ...process.env, ...launch.env },
     });
 
     let stderrTail = '';
@@ -237,7 +284,7 @@ export class AcpExecutor implements WorkerExecutor {
     child.on('error', (err) => {
       failTransport(
         new AcpRunError(
-          `${name} failed to start ${config.command}: ${err.message}`,
+          `${name} failed to start ${launch.command}: ${err.message}`,
         ),
       );
     });
@@ -269,7 +316,11 @@ export class AcpExecutor implements WorkerExecutor {
     let ctxRef: ClientContext | undefined;
     let activeSessionId: string | undefined;
     let session:
-      | Promise<{ sessionId: string; stopReason: StopReason }>
+      | Promise<{
+          sessionId: string;
+          stopReason: StopReason;
+          usage: { inputTokens: number; outputTokens: number };
+        }>
       | undefined;
     /**
      * Abort/timeout path: send session/cancel, give the agent the grace to
@@ -443,7 +494,11 @@ export class AcpExecutor implements WorkerExecutor {
             env: [],
           },
         ];
-        let created: { modes?: SessionModeState | null; sessionId: string };
+        let created: {
+          modes?: SessionModeState | null;
+          configOptions?: unknown;
+          sessionId: string;
+        };
         if (resumeId) {
           const caps = init.agentCapabilities;
           const canResume = Boolean(caps?.sessionCapabilities?.resume);
@@ -472,6 +527,9 @@ export class AcpExecutor implements WorkerExecutor {
                   | null
                   | undefined
               )?.modes,
+              configOptions: (
+                resumed as { configOptions?: unknown } | null | undefined
+              )?.configOptions,
             };
           } catch (err) {
             if (err instanceof RequestError) throw notFound;
@@ -500,6 +558,25 @@ export class AcpExecutor implements WorkerExecutor {
         const sessionId = created.sessionId;
         activeSessionId = sessionId;
 
+        if (config.model) {
+          const option = findModelOption(created.configOptions);
+          if (!option) {
+            throw new AcpRunError(`${name} does not support model selection`);
+          }
+          if (!option.values.includes(config.model)) {
+            throw new AcpRunError(
+              `${name} does not offer model ${config.model}; available: ${option.values.slice(0, 10).join(', ')}`,
+            );
+          }
+          if (config.model !== option.currentValue) {
+            await this.call(ctx, methods.agent.session.setConfigOption, {
+              sessionId,
+              configId: option.id,
+              value: config.model,
+            });
+          }
+        }
+
         if (
           config.mode &&
           created.modes?.availableModes.some((m) => m.id === config.mode)
@@ -515,10 +592,18 @@ export class AcpExecutor implements WorkerExecutor {
           prompt: [{ type: 'text', text: context }],
         });
         promptDone = true;
-        return { sessionId, stopReason: response.stopReason };
+        return {
+          sessionId,
+          stopReason: response.stopReason,
+          usage: readPromptUsage(response),
+        };
       });
 
-      let outcome: { sessionId: string; stopReason: StopReason };
+      let outcome: {
+        sessionId: string;
+        stopReason: StopReason;
+        usage: { inputTokens: number; outputTokens: number };
+      };
       try {
         outcome = await Promise.race([session, transportFailure]);
         await settleStop();
@@ -544,7 +629,9 @@ export class AcpExecutor implements WorkerExecutor {
       }
       promptDone = true;
 
-      if (outcome.stopReason === 'cancelled') throw new Error('cancelled');
+      if (outcome.stopReason === 'cancelled' && cancelling) {
+        throw new Error('cancelled');
+      }
       let resultText = text || '(no output)';
       if (outcome.stopReason !== 'end_turn') {
         resultText += `\n\n[agent stopped: ${outcome.stopReason}]`;
@@ -554,7 +641,7 @@ export class AcpExecutor implements WorkerExecutor {
       return {
         text: resultText,
         sessionId: outcome.sessionId,
-        usage: { inputTokens: 0, outputTokens: 0 },
+        usage: outcome.usage,
         ...readExecutorStatus(statusFile),
       };
     } finally {

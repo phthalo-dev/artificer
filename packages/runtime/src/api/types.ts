@@ -59,10 +59,14 @@ export type ExecutorConfig =
     }
   | AcpExecutorConfig;
 
+export type AcpPresetId = 'opencode';
+
 export interface AcpExecutorConfig {
   type: 'acp';
-  command: string;
-  args: string[];
+  agent?: AcpPresetId;
+  command?: string;
+  args?: string[];
+  model?: string;
   env?: Record<string, string>;
   mode?: string;
   resumes?: boolean;

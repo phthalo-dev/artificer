@@ -38,6 +38,7 @@ export const docsSidebarSections: SidebarSection[] = [
         link: '/docs/guides/custom-cli-executor',
       },
       { text: 'opencode executor', link: '/docs/guides/opencode-executor' },
+      { text: 'ACP executor', link: '/docs/guides/acp-executor' },
       { text: 'Qwen Code executor', link: '/docs/guides/qwen-code-executor' },
       { text: 'Agent evals', link: '/docs/guides/agent-evals' },
       {
@@ -155,6 +156,13 @@ export const docsSearchItems: DocsSearchItem[] = [
     meta: 'Guides',
     group: 'Guides',
     keywords: ['opencode'],
+  },
+  {
+    id: '/docs/guides/acp-executor',
+    title: 'ACP executor',
+    meta: 'Guides',
+    group: 'Guides',
+    keywords: ['acp', 'opencode', 'agent client protocol'],
   },
   {
     id: '/docs/guides/qwen-code-executor',

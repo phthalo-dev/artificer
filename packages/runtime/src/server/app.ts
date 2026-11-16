@@ -19,6 +19,7 @@ import {
 import { runGithubWatchOnce as defaultRunGithubWatchOnce } from '../engine/github-watch-runner.js';
 import type { GithubWatchState } from '../engine/github-watch.js';
 import { loadRepos } from '../engine/repos.js';
+import { ACP_PRESETS, resolveAcpLaunch } from '../engine/acp-presets.js';
 import { type LlmSdkPackage, MODEL_CATALOG } from '../llm/catalog.js';
 import { listPresets } from '../engine/presets.js';
 import { primaryAccountIdFor } from '../engine/quota-config.js';
@@ -36,7 +37,7 @@ import { bearerAuth, sseAuth } from './auth.js';
 import { serveUI } from './static.js';
 import { resolveUiDistDir } from './ui-dist.js';
 import { mountChannels } from '../channels/mount.js';
-import type { ArtificerChannel } from '../api/types.js';
+import type { ArtificerChannel, ExecutorConfig } from '../api/types.js';
 import type { IdentityStore } from '../storage/identity-store.js';
 import {
   loadEffectivePolicy,
@@ -106,14 +107,38 @@ const executorSchema = z.union([
   z
     .object({
       type: z.literal('acp'),
-      command: z.string().min(1),
-      args: z.array(z.string()),
+      agent: z.enum(['opencode']).optional(),
+      command: z.string().min(1).optional(),
+      args: z.array(z.string()).optional(),
+      model: z.string().min(1).optional(),
       env: z.record(z.string()).optional(),
       mode: z.string().min(1).optional(),
       resumes: z.boolean().optional(),
       timeout: z.number().int().positive().optional(),
     })
-    .strict(),
+    .strict()
+    .refine(
+      (v) =>
+        (v.agent !== undefined) !== (v.command !== undefined) &&
+        (v.command === undefined || v.args !== undefined),
+      {
+        message:
+          'acp executor needs exactly one of agent or command (command requires args)',
+      },
+    )
+    .refine((v) => v.agent === undefined || v.args === undefined, {
+      message: 'acp executor: args cannot be overridden for a preset',
+    })
+    .superRefine((v, ctx) => {
+      try {
+        resolveAcpLaunch(v);
+      } catch (err) {
+        ctx.addIssue({
+          code: z.ZodIssueCode.custom,
+          message: err instanceof Error ? err.message : String(err),
+        });
+      }
+    }),
 ]);
 
 const machineWorkstreamSchema = z.object({
@@ -565,6 +590,30 @@ export function createApp(engine: Engine, deps: AppDeps = {}): Hono {
     const loaded = loadRepos(engine.config.repos);
     if (!loaded.ok) return c.json({ error: loaded.error }, 400);
     return c.json({ repos: loaded.repos });
+  });
+
+  api.get('/executors', (c) => {
+    const executors: Array<{
+      id: string;
+      label: string;
+      executor: ExecutorConfig | null;
+      permissionEnforcement?: 'acp-requests' | 'none';
+    }> = [
+      { id: 'instance', label: 'Instance default', executor: null },
+      { id: 'llm', label: 'Built-in loop', executor: 'llm' },
+      { id: 'claude-code', label: 'Claude Code', executor: 'claude-code' },
+      { id: 'cursor-agent', label: 'Cursor', executor: 'cursor-agent' },
+    ];
+    for (const preset of Object.values(ACP_PRESETS)) {
+      if (!preset.certified) continue;
+      executors.push({
+        id: `acp:${preset.id}`,
+        label: `${preset.label} (ACP)`,
+        executor: { type: 'acp', agent: preset.id },
+        permissionEnforcement: preset.permissionEnforcement,
+      });
+    }
+    return c.json({ executors });
   });
 
   api.post('/workstreams', async (c) => {

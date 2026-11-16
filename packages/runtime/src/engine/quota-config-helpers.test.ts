@@ -12,3 +12,10 @@ test('executorAccountId names acp accounts by command basename', () => {
     'acp:gemini',
   );
 });
+
+test('executorAccountId names the opencode preset', () => {
+  assert.equal(
+    executorAccountId({ type: 'acp', agent: 'opencode' }),
+    'acp:opencode',
+  );
+});

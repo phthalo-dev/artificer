@@ -260,6 +260,42 @@ test('conversation create accepts, persists, and validates acp executors', async
         .status,
       400,
     );
+    assert.equal(
+      (
+        await post({
+          type: 'acp',
+          agent: 'opencode',
+          model: 'opencode/x',
+        })
+      ).status,
+      201,
+    );
+    assert.equal(
+      (
+        await post({
+          type: 'acp',
+          agent: 'opencode',
+          command: 'x',
+          args: [],
+        })
+      ).status,
+      400,
+    );
+    assert.equal((await post({ type: 'acp', agent: 'codex' })).status, 400);
+    assert.equal(
+      (await post({ type: 'acp', agent: 'opencode', args: [] })).status,
+      400,
+    );
+    const badConfig = await post({
+      type: 'acp',
+      agent: 'opencode',
+      env: { OPENCODE_CONFIG_CONTENT: '{bad' },
+    });
+    assert.equal(badConfig.status, 400);
+    assert.match(
+      await badConfig.text(),
+      /OPENCODE_CONFIG_CONTENT is not valid JSON/,
+    );
   } finally {
     restore();
   }
@@ -831,4 +867,24 @@ test('conversation chat stays out of the inbox and channel fallback', async () =
   } finally {
     restore();
   }
+});
+
+test('GET /api/executors lists built-ins then certified presets', async () => {
+  const { app } = await buildApp();
+  const res = await app.request('/api/executors');
+  assert.equal(res.status, 200);
+  const body = (await res.json()) as {
+    executors: Array<{
+      id: string;
+      executor: unknown;
+      permissionEnforcement?: string;
+    }>;
+  };
+  assert.deepEqual(
+    body.executors.map((e) => e.id),
+    ['instance', 'llm', 'claude-code', 'cursor-agent', 'acp:opencode'],
+  );
+  const opencode = body.executors[4];
+  assert.deepEqual(opencode.executor, { type: 'acp', agent: 'opencode' });
+  assert.equal(opencode.permissionEnforcement, 'acp-requests');
 });
