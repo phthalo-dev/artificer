@@ -48,7 +48,7 @@ export class ComputeStack extends cdk.Stack {
 
     const container = taskDefinition.addContainer('artificer-web', {
       image: ecs.ContainerImage.fromAsset('../packages/orchestrator', {
-        exclude: ['node_modules', '.turbo', 'dist'],
+        exclude: ['node_modules', 'dist'],
       }),
       environment: {
         NODE_ENV: environment === 'prod' ? 'production' : 'development',

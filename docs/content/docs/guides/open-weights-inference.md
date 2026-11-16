@@ -67,7 +67,7 @@ Set `BASETEN_API_KEY` in your environment (or platform secrets). The `baseten-op
 
 ## Validation checklist
 
-- [x] `pnpm --filter @artificer-ai/runtime test` passes (450/450, 2026-08-09)
+- [x] `vp test run --project runtime` passes (450/450, 2026-08-09)
 - [x] `pnpm --filter @artificer-ai/runtime models` lists new Zen entries (`north-mini-code-free`, `laguna-s-2.1-free`, `kimi-k3`) and Baseten slugs (`thinkingmachines/inkling`, `moonshotai/Kimi-K3`)
 - [ ] Multi-tool smoke test passes for `north-mini-code-free` — see [Manual smoke test](#manual-smoke-test) below
 - [ ] Multi-tool smoke test passes for `laguna-s-2.1-free` — see [Manual smoke test](#manual-smoke-test) below

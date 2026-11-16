@@ -317,9 +317,16 @@ test('check fetches a running service and returns its status/body', async () => 
   });
   const manager = new ServiceManager(store, config);
   await manager.start(ws.id, 'web');
-  // Give the HTTP server a moment to bind before checking it.
-  await new Promise((r) => setTimeout(r, 300));
-  const result = await manager.check(ws.id, 'web');
+  // Poll until the spawned HTTP server has bound; a fixed sleep races under load.
+  let result = await manager.check(ws.id, 'web');
+  for (
+    let i = 0;
+    i < 100 && (result as { status?: unknown }).status !== 200;
+    i++
+  ) {
+    await new Promise((r) => setTimeout(r, 100));
+    result = await manager.check(ws.id, 'web');
+  }
   assert.equal((result as { status: number }).status, 200);
   assert.equal((result as { body: string }).body, 'ok');
   await manager.stop(ws.id, 'web');
