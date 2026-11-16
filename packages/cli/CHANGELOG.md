@@ -1,5 +1,13 @@
 # @artificer-ai/cli
 
+## 0.11.2
+
+### Patch Changes
+
+- Updated dependencies [[`e124a4e`](https://github.com/phthalo-dev/artificer/commit/e124a4efb8e0c87a2ccaeb7939cfb47f8cf4a2d5)]:
+  - @artificer-ai/eval@0.1.3
+  - @artificer-ai/runtime@0.11.2
+
 ## 0.11.1
 
 ### Patch Changes
