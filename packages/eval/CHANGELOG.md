@@ -1,5 +1,14 @@
 # @artificer-ai/eval
 
+## 0.1.3
+
+### Patch Changes
+
+- [#47](https://github.com/phthalo-dev/artificer/pull/47) [`e124a4e`](https://github.com/phthalo-dev/artificer/commit/e124a4efb8e0c87a2ccaeb7939cfb47f8cf4a2d5) Thanks [@dbanksdesign](https://github.com/dbanksdesign)! - Build before publishing so the package includes `dist` (0.1.2 shipped without it).
+
+- Updated dependencies []:
+  - @artificer-ai/runtime@0.11.2
+
 ## 0.1.2
 
 ### Patch Changes
