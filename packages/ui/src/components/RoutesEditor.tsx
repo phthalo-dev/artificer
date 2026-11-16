@@ -22,6 +22,7 @@ import {
 } from '@tabler/icons-react';
 import { useEffect, useMemo, useState } from 'react';
 import { useQuotaConfig, useUpdateQuotaConfig } from '../api/hooks';
+import { EXECUTOR_LABELS } from '../format-agent';
 import type {
   CatalogModel,
   ExecutionRouteConfig,
@@ -40,12 +41,9 @@ import {
 
 const TIERS: ModelTier[] = ['low', 'medium', 'high'];
 
-const EXECUTION_OPTIONS = [
-  { value: 'llm', label: 'LLM (internal loop)' },
-  { value: 'cursor-agent', label: 'Cursor agent' },
-  { value: 'claude-code', label: 'Claude Code' },
-  { value: 'opencode', label: 'opencode' },
-];
+const EXECUTION_OPTIONS = Object.entries(EXECUTOR_LABELS).map(
+  ([value, label]) => ({ value, label }),
+);
 
 type ModelGroup = {
   group: string;

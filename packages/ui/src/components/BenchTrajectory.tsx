@@ -9,13 +9,12 @@ import {
 import { IconChevronDown, IconChevronRight } from '@tabler/icons-react';
 import { useState } from 'react';
 import type { RunNode, RunRecord, ToolInvocation } from '../api/types';
-import { hue, roleColor } from '../styles/palette';
+import { colorForRole } from '../styles/palette';
 import { cx } from '../styles/system';
+import { eyebrow, preWrap } from '../styles/shared';
 import { TokenSpendTimeline } from './TokenSpendTimeline';
 import {
-  eyebrow,
   minWidthZero,
-  preWrap,
   roleDot,
   stepIndex,
   stepTrigger,
@@ -26,10 +25,6 @@ import {
   triggerMeta,
   triggerRow,
 } from './BenchTrajectory.styles';
-
-function colorForRole(role: string): string {
-  return roleColor[role] ?? hue.gray;
-}
 
 function normalizeTree(tree: RunNode[] | null | undefined): RunNode[] {
   return Array.isArray(tree) ? tree : [];

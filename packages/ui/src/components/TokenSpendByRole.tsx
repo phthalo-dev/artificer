@@ -1,18 +1,14 @@
 import { HStack, Stack, Text } from '@var-ui/react';
-import { roleColor, tokenLayerColor } from '../styles/palette';
+import { colorForRole } from '../styles/palette';
 import type { UsageSummary } from '../api/types';
 import { formatCost, formatTokens } from '../format';
-import { totalTokens } from '../usage-breakdown';
+import { eyebrow } from '../styles/shared';
+import { totalTokens } from '../utils/usage';
 import {
-  eyebrow,
   legendSwatchSm,
   roleBarSegment,
   roleBarTrack,
 } from './TokenSpendChart.styles';
-
-function colorForRole(role: string): string {
-  return roleColor[role] ?? tokenLayerColor.gray;
-}
 
 /** Single horizontal bar: token share by role. */
 export function TokenSpendByRole({

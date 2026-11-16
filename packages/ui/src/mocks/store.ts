@@ -9,6 +9,7 @@ import type {
   WorkstreamReceiptResponse,
   WorkstreamTraceResponse,
 } from '../api/types';
+import { emptyUsageSummary } from '../utils/usage';
 import {
   buildUsageOverview,
   mockArtifactContent,
@@ -124,15 +125,7 @@ export class MockStore {
     const tree = detail?.tree ?? [];
     return {
       message,
-      total: detail?.usage.total ?? {
-        inputTokens: 0,
-        outputTokens: 0,
-        cacheCreationInputTokens: 0,
-        cacheReadInputTokens: 0,
-        requests: 0,
-        runs: 0,
-        costUsd: 0,
-      },
+      total: detail?.usage.total ?? emptyUsageSummary(),
       byWorkstream: message.workstreamId
         ? { [message.workstreamId]: detail!.usage.total }
         : {},

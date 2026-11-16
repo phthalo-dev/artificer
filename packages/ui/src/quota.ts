@@ -3,6 +3,7 @@ import type {
   QuotaSnapshot,
   QuotaWindowState,
 } from './api/types';
+import { formatCost } from './format';
 
 export function formatUntil(iso: string): string {
   const ms = new Date(iso).getTime() - Date.now();
@@ -41,10 +42,7 @@ export function formatQuotaUnit(
   unit: QuotaWindowState['config']['unit'],
   value: number,
 ): string {
-  if (unit === 'dollars') {
-    if (value < 0.01) return `$${value.toFixed(4)}`;
-    return `$${value.toFixed(2)}`;
-  }
+  if (unit === 'dollars') return formatCost(value);
   if (unit === 'requests') return `${Math.round(value)} req`;
   return value.toLocaleString();
 }
